@@ -2,8 +2,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // 为选项按钮添加点击事件
   document.getElementById('go-to-options').addEventListener('click', function() {
     // 打开选项页面
-    chrome.runtime.openOptionsPage ? chrome.runtime.openOptionsPage() :
+    if (chrome.runtime.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+    } else {
+      // 如果不支持openOptionsPage方法，则直接创建新标签页
       chrome.tabs.create({url: 'options.html'});
+    }
   });
 
   // 获取当前标签页信息
