@@ -357,9 +357,9 @@ function createLinkGenerator() {
                 <div class="adskip-percentage-label">广告跳过进度: <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
                 <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
                 <div class="adskip-percentage-hints">
-                    <span>快速(1%)</span>
-                    <span>中等(50%)</span>
-                    <span>完整(100%)</span>
+                    <span class="adskip-percentage-preset" data-value="1">快速(1%)</span>
+                    <span class="adskip-percentage-preset" data-value="50">中等(50%)</span>
+                    <span class="adskip-percentage-preset" data-value="100">完整(100%)</span>
                 </div>
             </div>
 
@@ -424,6 +424,30 @@ function createLinkGenerator() {
             }
 
             document.getElementById('adskip-status').textContent = `已更新广告跳过进度为${newValue}%`;
+            document.getElementById('adskip-status').style.display = 'block';
+        });
+
+        // 为百分比预设值添加点击事件
+        const percentagePresets = document.querySelectorAll('.adskip-percentage-preset');
+        percentagePresets.forEach(preset => {
+            preset.addEventListener('click', function() {
+                const presetValue = parseInt(this.getAttribute('data-value'), 10);
+
+                // 更新滑块值和显示值
+                percentageSlider.value = presetValue;
+                percentageValue.textContent = presetValue;
+
+                // 保存设置并应用
+                saveAdSkipPercentage(presetValue);
+
+                // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
+                if (localStorage.getItem('adskip_enabled') !== 'false' && currentAdTimestamps.length > 0) {
+                    setupAdSkipMonitor(currentAdTimestamps);
+                }
+
+                document.getElementById('adskip-status').textContent = `已更新广告跳过进度为${presetValue}%`;
+                document.getElementById('adskip-status').style.display = 'block';
+            });
         });
 
         // 生成链接按钮

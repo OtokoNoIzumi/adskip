@@ -205,6 +205,18 @@ input:checked + .adskip-slider:before {
   margin-top: 5px;
 }
 
+.adskip-percentage-preset {
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.adskip-percentage-preset:hover {
+  background-color: #f0f0f0;
+  color: #FB7299;
+}
+
 .adskip-admin-container {
   margin-top: 15px;
   padding-top: 10px;
