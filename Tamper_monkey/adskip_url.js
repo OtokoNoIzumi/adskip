@@ -295,12 +295,12 @@
                 <p>输入广告时间段（格式: 开始-结束,开始-结束）:</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145" style="width:100%;padding:8px;box-sizing:border-box;margin-bottom:10px;border:1px solid #ddd;border-radius:4px;">
                 <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
-                    <button id="adskip-generate" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">🔗 生成链接</button>
-                    <button id="adskip-apply" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">✅ 应用时间段</button>
+                    <button id="adskip-generate" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">🔗 创建分享链接</button>
+                    <button id="adskip-apply" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">✅ 更新跳过设置</button>
                 </div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:15px;">
-                    <button id="adskip-restore" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">↩️ 还原时间段</button>
-                    <button id="adskip-reset" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">🗑️ 重置设置</button>
+                    <button id="adskip-restore" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">↩️ 还原原始设置</button>
+                    <button id="adskip-reset" style="background:#FB7299;color:white;border:none;padding:10px 12px;border-radius:4px;cursor:pointer;width:48%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.1);">🗑️ 清空记录</button>
                 </div>
                 <div id="adskip-status" style="margin-top:10px;color:#4CAF50;display:none;">设置已应用</div>
                 <div id="adskip-result" style="margin-top:10px;word-break:break-all;"></div>

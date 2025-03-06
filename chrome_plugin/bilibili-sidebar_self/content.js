@@ -364,12 +364,12 @@ function createLinkGenerator() {
             </div>
 
             <div class="adskip-button-row">
-                <button id="adskip-generate" class="adskip-btn">🔗 生成链接</button>
-                <button id="adskip-apply" class="adskip-btn">✅ 应用时间段</button>
+                <button id="adskip-generate" class="adskip-btn">🔗 创建分享链接</button>
+                <button id="adskip-apply" class="adskip-btn">✅ 更新跳过设置</button>
             </div>
             <div class="adskip-button-row">
-                <button id="adskip-restore" class="adskip-btn">↩️ 还原时间段</button>
-                <button id="adskip-reset" class="adskip-btn">🗑️ 重置设置</button>
+                <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
+                <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
             </div>
             <div id="adskip-status" class="adskip-status">设置已应用</div>
             <div id="adskip-result" class="adskip-result"></div>
