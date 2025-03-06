@@ -1,0 +1,3 @@
+[submodule "Module/Common"]
+	path = Module/Common
+	url = https://github.com/OtokoNoIzumi/Project-Common.git
