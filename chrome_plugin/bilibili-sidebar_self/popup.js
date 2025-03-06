@@ -3,13 +3,18 @@ document.addEventListener('DOMContentLoaded', function() {
   const sendButton = document.getElementById('send-button');
   const chatDisplay = document.getElementById('chat-display');
 
-  sendButton.addEventListener('click', function() {
-    const message = messageInput.value;
-    if (message.trim() !== "") {
-      sendMessageToContentScript(message); // 发送消息到 content.js
-      messageInput.value = ""; // 清空输入框
-    }
-  });
+  // 确保元素存在后再添加事件监听器
+  if (sendButton) {
+    sendButton.addEventListener('click', function() {
+      const message = messageInput.value;
+      if (message && message.trim() !== "") {
+        sendMessageToContentScript(message); // 发送消息到 content.js
+        messageInput.value = ""; // 清空输入框
+      }
+    });
+  } else {
+    console.error('元素未找到: 请确认HTML中包含id为message-input、send-button和chat-display的元素');
+  }
 
   // 监听输入框回车事件
   messageInput.addEventListener('keydown', function(event) {

@@ -8,6 +8,7 @@ let lastVideoId = '';             // 上一个视频ID
 let debugMode = false;            // 调试模式开关
 let scriptInitiatedSeek = false;  // 标记是否是脚本引起的seeking
 let isAdminAuthorized = false;    // 管理员认证状态
+let adSkipPercentage = 5;           // 添加广告跳过百分比全局变量，默认为5%
 
 // 日志输出函数
 function logDebug(message, data) {
@@ -137,6 +138,26 @@ function isOverlapping(segment1, segment2) {
     return (segment1.start_time <= segment2.end_time && segment1.end_time >= segment2.start_time);
 }
 
+// 初始化加载已保存的百分比设置
+function loadAdSkipPercentage() {
+    const savedPercentage = localStorage.getItem('adskip_percentage');
+    if (savedPercentage !== null) {
+        adSkipPercentage = parseInt(savedPercentage, 10);
+        logDebug(`已加载广告跳过百分比设置: ${adSkipPercentage}%`);
+    } else {
+        // 首次使用，设置默认值
+        localStorage.setItem('adskip_percentage', adSkipPercentage);
+        logDebug(`已设置默认广告跳过百分比: ${adSkipPercentage}%`);
+    }
+}
+
+// 保存广告跳过百分比设置
+function saveAdSkipPercentage(percentage) {
+    localStorage.setItem('adskip_percentage', percentage);
+    adSkipPercentage = percentage;
+    logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
+}
+
 // 设置广告跳过监控
 function setupAdSkipMonitor(adTimestamps) {
     logDebug('设置广告跳过监控:', adTimestamps);
@@ -214,14 +235,20 @@ function setupAdSkipMonitor(adTimestamps) {
         }
         lastCheckTime = currentTime;
 
-        // 简化的广告检测逻辑：只检测是否在广告开始的1秒内
+        // 更新的广告检测逻辑：使用百分比计算
         for (const ad of currentAdTimestamps) {
-            // 确定广告的"开始区域"：开始时间到min(开始时间+1秒,结束时间)
-            const adStartRange = Math.min(ad.start_time + 1, ad.end_time);
+            // 计算广告时长
+            const adDuration = ad.end_time - ad.start_time;
+
+            // 根据百分比计算跳过点，但至少跳过1秒
+            const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
+
+            // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
+            const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
 
             // 如果在广告开始区域，直接跳到结束
             if (currentTime >= ad.start_time && currentTime < adStartRange) {
-                logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，跳过至${ad.end_time}s`);
+                logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过百分比${adSkipPercentage}%，跳过至${ad.end_time}s`);
 
                 // 标记为脚本操作并跳转
                 scriptInitiatedSeek = true;
@@ -325,6 +352,17 @@ function createLinkGenerator() {
             <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
             <p>输入广告时间段（格式: 开始-结束,开始-结束）:</p>
             <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
+
+            <div class="adskip-percentage-container">
+                <div class="adskip-percentage-label">广告跳过进度: <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
+                <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
+                <div class="adskip-percentage-hints">
+                    <span>快速(1%)</span>
+                    <span>中等(50%)</span>
+                    <span>完整(100%)</span>
+                </div>
+            </div>
+
             <div class="adskip-button-row">
                 <button id="adskip-generate" class="adskip-btn">🔗 生成链接</button>
                 <button id="adskip-apply" class="adskip-btn">✅ 应用时间段</button>
@@ -365,6 +403,27 @@ function createLinkGenerator() {
                     logDebug('已重新启用广告跳过功能');
                 }
             }
+        });
+
+        // 广告跳过百分比滑块逻辑
+        const percentageSlider = document.getElementById('adskip-percentage-slider');
+        const percentageValue = document.getElementById('adskip-percentage-value');
+
+        percentageSlider.addEventListener('input', function() {
+            const newValue = parseInt(this.value, 10);
+            percentageValue.textContent = newValue;
+        });
+
+        percentageSlider.addEventListener('change', function() {
+            const newValue = parseInt(this.value, 10);
+            saveAdSkipPercentage(newValue);
+
+            // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
+            if (localStorage.getItem('adskip_enabled') !== 'false' && currentAdTimestamps.length > 0) {
+                setupAdSkipMonitor(currentAdTimestamps);
+            }
+
+            document.getElementById('adskip-status').textContent = `已更新广告跳过进度为${newValue}%`;
         });
 
         // 生成链接按钮
@@ -791,6 +850,9 @@ async function reinitialize() {
 async function init() {
     // 初始化调试模式
     initDebugMode();
+
+    // 加载广告跳过百分比设置
+    loadAdSkipPercentage();
 
     // 检查管理员状态
     checkAdminStatus();

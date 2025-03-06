@@ -148,6 +148,63 @@ input:checked + .adskip-slider:before {
   word-break: break-all;
 }
 
+/* 广告跳过百分比滑块相关样式 */
+.adskip-percentage-container {
+  margin: 15px 0;
+  padding: 10px;
+  background-color: #f8f8f8;
+  border-radius: 6px;
+}
+
+.adskip-percentage-label {
+  margin-bottom: 10px;
+  font-weight: bold;
+  color: #333;
+}
+
+.adskip-percentage-value {
+  color: #FB7299;
+  font-weight: bold;
+}
+
+.adskip-percentage-slider {
+  width: 100%;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #ddd;
+  outline: none;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.adskip-percentage-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #FB7299;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.adskip-percentage-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #FB7299;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.adskip-percentage-hints {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
 .adskip-admin-container {
   margin-top: 15px;
   padding-top: 10px;
