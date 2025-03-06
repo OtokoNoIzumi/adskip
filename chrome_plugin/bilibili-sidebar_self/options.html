@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bilibili 广告跳过工具 - 选项</title>
+  <style>
+    body {
+      font-family: 'Microsoft YaHei', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      margin-right: 15px;
+    }
+
+    h1 {
+      color: #FB7299;
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .section {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #333;
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #FB7299;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .range-value {
+      display: inline-block;
+      margin-left: 10px;
+      min-width: 30px;
+    }
+
+    button {
+      background-color: #FB7299;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 15px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+
+    button:hover {
+      background-color: #e05c83;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+      background-color: #f0f0f0;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background-color: #e8f4e8;
+      color: #2c7d2c;
+    }
+
+    .status.error {
+      display: block;
+      background-color: #fde8e8;
+      color: #c53030;
+    }
+
+    .preset-buttons {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .preset-button {
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .preset-button:hover {
+      background-color: #e6e6e6;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="icons/icon48.png" alt="Logo" class="logo">
+    <h1>Bilibili 广告跳过工具 - 全局设置</h1>
+  </div>
+
+  <div class="section">
+    <h2>功能设置</h2>
+
+    <div class="form-group">
+      <label for="enable-adskip">启用广告跳过功能</label>
+      <label class="switch">
+        <input type="checkbox" id="enable-adskip" checked>
+        <span class="slider"></span>
+      </label>
+      <p>关闭后插件将不会自动跳过广告内容</p>
+    </div>
+
+    <div class="form-group">
+      <label for="debug-mode">调试模式</label>
+      <label class="switch">
+        <input type="checkbox" id="debug-mode">
+        <span class="slider"></span>
+      </label>
+      <p>启用后将在控制台输出详细日志信息</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>广告跳过设置</h2>
+
+    <div class="form-group">
+      <label for="skip-percentage">广告跳过百分比: <span id="percentage-value" class="range-value">5</span>%</label>
+      <input type="range" id="skip-percentage" min="1" max="100" value="5">
+      <div class="preset-buttons">
+        <button class="preset-button" data-value="1">快速(1%)</button>
+        <button class="preset-button" data-value="50">中等(50%)</button>
+        <button class="preset-button" data-value="100">完整(100%)</button>
+      </div>
+      <p>控制广告跳过的位置百分比，较低的值会在广告开始处快速跳过，较高的值会在广告结束处跳过</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>数据管理</h2>
+    <div class="form-group">
+      <button id="reset-data">重置所有数据</button>
+      <p>清空所有保存的广告跳过时间段和设置</p>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>
