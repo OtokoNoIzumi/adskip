@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bilibili 广告跳过工具</title>
+  <style>
+    body {
+      font-family: 'Microsoft YaHei', sans-serif;
+      width: 320px;
+      padding: 15px;
+      margin: 0;
+      background-color: #f9f9f9;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .logo {
+      width: 36px;
+      height: 36px;
+      margin-right: 10px;
+    }
+
+    h1 {
+      color: #FB7299;
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .description {
+      color: #666;
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .feature-list {
+      list-style-type: none;
+      padding-left: 5px;
+      margin-bottom: 20px;
+    }
+
+    .feature-list li {
+      margin-bottom: 8px;
+      position: relative;
+      padding-left: 20px;
+      font-size: 14px;
+    }
+
+    .feature-list li::before {
+      content: "✓";
+      color: #FB7299;
+      position: absolute;
+      left: 0;
+      font-weight: bold;
+    }
+
+    .button {
+      background-color: #FB7299;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 15px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .button:hover {
+      background-color: #e05c83;
+    }
+
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #999;
+      text-align: center;
+    }
+
+    .instructions {
+      background-color: #fff;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 15px;
+      font-size: 13px;
+    }
+
+    .instructions h2 {
+      margin-top: 0;
+      font-size: 15px;
+      color: #333;
+    }
+
+    .instructions p {
+      margin: 5px 0;
+    }
+
+    .format {
+      background-color: #f5f5f5;
+      padding: 5px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="icons/icon48.png" alt="Logo" class="logo">
+    <h1>Bilibili 广告跳过工具</h1>
+  </div>
+
+  <div class="description">
+    自动跳过哔哩哔哩视频中的广告内容，支持通过URL参数共享广告时间段。
+  </div>
+
+  <div class="instructions">
+    <h2>使用说明</h2>
+    <p>1. 访问B站视频页面时，会在右上角显示"⏩ 广告跳过"按钮</p>
+    <p>2. 点击按钮设置广告时间段，格式: <span class="format">开始-结束,开始-结束</span></p>
+    <p>3. 例如: <span class="format">61-87,120-145</span> 表示跳过61秒到87秒和120秒到145秒的广告</p>
+  </div>
+
+  <ul class="feature-list">
+    <li>自动记住每个视频的广告时间段</li>
+    <li>支持通过URL分享广告跳过设置</li>
+    <li>适用于所有B站视频页面</li>
+    <li>界面简洁，不影响正常使用</li>
+  </ul>
+
+  <button id="go-to-options" class="button">打开选项页面</button>
+
+  <div class="footer">
+    版本 1.0 | 作者: Izumi屈源
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
