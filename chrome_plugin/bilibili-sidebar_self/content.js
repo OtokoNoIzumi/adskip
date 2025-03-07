@@ -373,26 +373,26 @@ function createLinkGenerator() {
                     </label>
                 </div>
                 <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
-                <p>输入广告时间段（格式: 开始-结束,开始-结束）:</p>
+                <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
 
                 <div class="adskip-percentage-container">
-                    <div class="adskip-percentage-label">广告跳过进度: <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
+                    <div class="adskip-percentage-label">广告跳过触发范围：前 <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
                     <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
                     <div class="adskip-percentage-hints">
-                        <span class="adskip-percentage-preset" data-value="1">快速(1%)</span>
-                        <span class="adskip-percentage-preset" data-value="50">中等(50%)</span>
-                        <span class="adskip-percentage-preset" data-value="100">完整(100%)</span>
+                        <span class="adskip-percentage-preset" data-value="1">仅起始(1%)</span>
+                        <span class="adskip-percentage-preset" data-value="50">前半段(50%)</span>
+                        <span class="adskip-percentage-preset" data-value="100">全程(100%)</span>
                     </div>
                 </div>
 
                 <div class="adskip-button-row">
-                    <button id="adskip-generate" class="adskip-btn">🔗 生成链接</button>
-                    <button id="adskip-apply" class="adskip-btn">✅ 应用时间段</button>
+                    <button id="adskip-generate" class="adskip-btn">🔗 创建分享链接</button>
+                    <button id="adskip-apply" class="adskip-btn">✅ 更新跳过设置</button>
                 </div>
                 <div class="adskip-button-row">
-                    <button id="adskip-restore" class="adskip-btn">↩️ 还原时间段</button>
-                    <button id="adskip-reset" class="adskip-btn">🗑️ 重置设置</button>
+                    <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
+                    <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
                 </div>
                 <div id="adskip-status" class="adskip-status">设置已应用</div>
                 <div id="adskip-result" class="adskip-result"></div>
