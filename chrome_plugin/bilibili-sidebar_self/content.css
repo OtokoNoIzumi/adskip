@@ -437,3 +437,20 @@ input:checked + .adskip-slider:before {
 .adskip-goto-btn:hover {
     background-color: #2980b9;
 }
+
+/* 警告按钮样式 */
+.adskip-warn-btn {
+    background-color: #f39c12;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    margin: 0 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.adskip-warn-btn:hover {
+    background-color: #d35400;
+}

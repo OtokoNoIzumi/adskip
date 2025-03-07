@@ -565,16 +565,23 @@ function createLinkGenerator() {
                 });
             }
 
-            // 重置按钮
+            // 重置按钮 - 仅清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                if (confirm('确定要重置所有设置吗？此操作将清空所有保存的广告跳过数据！')) {
-                    // 获取并删除所有adskip_开头的存储键
+                if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会修改其他设置。')) {
+                    // 只获取视频ID相关的存储键
                     chrome.storage.local.get(null, function(items) {
                         const allKeys = Object.keys(items);
-                        const adskipKeys = allKeys.filter(key => key.startsWith('adskip_') && key !== 'adskip_debug_mode');
+                        // 过滤出只与视频ID相关的键，排除所有设置键
+                        const videoKeys = allKeys.filter(key =>
+                            key.startsWith('adskip_') &&
+                            key !== 'adskip_debug_mode' &&
+                            key !== 'adskip_enabled' &&
+                            key !== 'adskip_percentage' &&
+                            key !== 'adskip_admin_authorized'
+                        );
 
-                        if (adskipKeys.length > 0) {
-                            chrome.storage.local.remove(adskipKeys, function() {
+                        if (videoKeys.length > 0) {
+                            chrome.storage.local.remove(videoKeys, function() {
                                 // 清空当前设置
                                 currentAdTimestamps = [];
                                 urlAdTimestamps = [];
@@ -588,10 +595,13 @@ function createLinkGenerator() {
                                 // 更新输入框
                                 document.getElementById('adskip-input').value = '';
                                 document.getElementById('adskip-status').style.display = 'block';
-                                document.getElementById('adskip-status').innerText = '已重置所有设置';
+                                document.getElementById('adskip-status').innerText = '已清空所有视频广告数据';
 
-                                logDebug('已重置所有设置');
+                                logDebug('已清空所有视频广告数据');
                             });
+                        } else {
+                            document.getElementById('adskip-status').style.display = 'block';
+                            document.getElementById('adskip-status').innerText = '没有已保存的视频广告数据';
                         }
                     });
                 }
@@ -722,6 +732,7 @@ function showAdminPanel() {
             <div class="adskip-admin-footer">
                 <button id="adskip-clear-all" class="adskip-danger-btn">清除所有数据</button>
                 <button id="adskip-export" class="adskip-info-btn">导出数据</button>
+                <button id="adskip-logout" class="adskip-warn-btn">退出登录</button>
             </div>
         `;
 
@@ -766,16 +777,87 @@ function showAdminPanel() {
             });
         });
 
-        document.getElementById('adskip-clear-all').addEventListener('click', function() {
-            if (confirm('确定要删除所有保存的广告跳过数据吗？此操作不可撤销！')) {
-                const keysToRemove = adskipKeys.filter(key => key !== 'adskip_debug_mode');
+        // 退出登录按钮点击事件
+        document.getElementById('adskip-logout').addEventListener('click', function() {
+            if (confirm('确定要退出管理员登录状态吗？')) {
+                // 移除管理员授权状态
+                chrome.storage.local.remove('adskip_admin_authorized', function() {
+                    isAdminAuthorized = false;
+                    logDebug('已退出管理员登录状态');
 
-                if (keysToRemove.length > 0) {
-                    chrome.storage.local.remove(keysToRemove, function() {
-                        logDebug('已清除所有保存的广告跳过数据');
-                        adminPanel.remove();
-                    });
-                }
+                    // 关闭管理员面板
+                    adminPanel.remove();
+
+                    // 刷新主面板
+                    const mainPanel = document.getElementById('adskip-panel');
+                    if (mainPanel) {
+                        mainPanel.remove();
+                        createLinkGenerator();
+                        document.getElementById('adskip-button').click();
+                    }
+                });
+            }
+        });
+
+        // 修改清除所有数据按钮的功能
+        document.getElementById('adskip-clear-all').addEventListener('click', function() {
+            // 使用更详细的对话框让用户选择要清除的内容
+            const clearOptions = confirm(
+                '请选择清除内容的范围：\n\n' +
+                '【确定】清除所有数据（包括视频数据、功能设置、调试模式设置）\n' +
+                '【取消】仅清除视频数据和基本设置（保留调试模式和管理员状态）'
+            );
+
+            if (clearOptions) {
+                // 全面清除：保留管理员状态，但清除包括调试模式在内的所有设置
+                chrome.storage.local.get(null, function(items) {
+                    const allKeys = Object.keys(items);
+                    // 只保留管理员登录状态
+                    const keysToRemove = allKeys.filter(key =>
+                        key !== 'adskip_admin_authorized'
+                    );
+
+                    if (keysToRemove.length > 0) {
+                        chrome.storage.local.remove(keysToRemove, function() {
+                            // 设置默认值
+                            chrome.storage.local.set({
+                                'adskip_enabled': true,
+                                'adskip_percentage': 5,
+                                'adskip_debug_mode': false  // 重置调试模式为关闭
+                            }, function() {
+                                // 更新全局变量
+                                debugMode = false;
+                                updateDebugModeToggle();
+
+                                adminPanel.remove();
+                                alert('已执行全面清除：所有数据和设置都已重置（保留管理员状态）');
+                            });
+                        });
+                    }
+                });
+            } else {
+                // 基本清除：保留调试模式和管理员状态
+                chrome.storage.local.get(null, function(items) {
+                    const allKeys = Object.keys(items);
+                    // 保留调试模式和管理员状态
+                    const keysToRemove = allKeys.filter(key =>
+                        key !== 'adskip_debug_mode' &&
+                        key !== 'adskip_admin_authorized'
+                    );
+
+                    if (keysToRemove.length > 0) {
+                        chrome.storage.local.remove(keysToRemove, function() {
+                            // 设置默认值，但不修改调试模式
+                            chrome.storage.local.set({
+                                'adskip_enabled': true,
+                                'adskip_percentage': 5
+                            }, function() {
+                                adminPanel.remove();
+                                alert('已执行基本清除：视频数据和基本设置已重置（保留调试模式和管理员状态）');
+                            });
+                        });
+                    }
+                });
             }
         });
 
