@@ -198,17 +198,19 @@
   </div>
 
   <div class="section">
-    <h2>广告跳过设置</h2>
+    <h2>广告跳过策略</h2>
 
     <div class="form-group">
-      <label for="skip-percentage">广告跳过百分比: <span id="percentage-value" class="range-value">5</span>%</label>
+      <label for="skip-percentage">触发窗口：前 <span id="percentage-value" class="range-value">5</span>%</label>
       <input type="range" id="skip-percentage" min="1" max="100" value="5">
       <div class="preset-buttons">
-        <button class="preset-button" data-value="1">快速(1%)</button>
-        <button class="preset-button" data-value="50">中等(50%)</button>
-        <button class="preset-button" data-value="100">完整(100%)</button>
+        <button class="preset-button" data-value="1">仅起始时跳过(1%)</button>
+        <button class="preset-button" data-value="50">前半段跳过(50%)</button>
+        <button class="preset-button" data-value="100">全程都跳过(100%)</button>
       </div>
-      <p>控制广告跳过的位置百分比，较低的值会在广告开始处快速跳过，较高的值会在广告结束处跳过</p>
+      <p>设置在广告时段的哪个阶段会触发自动跳过：
+        <br>• <strong>前[X]%</strong> 时间段内进入将自动跳至广告结尾
+        <br>• 如果想回看广告，就要把值设置低一些</p>
     </div>
   </div>
 

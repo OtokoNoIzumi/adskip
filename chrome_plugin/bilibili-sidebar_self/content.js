@@ -138,24 +138,34 @@ function isOverlapping(segment1, segment2) {
     return (segment1.start_time <= segment2.end_time && segment1.end_time >= segment2.start_time);
 }
 
-// 初始化加载已保存的百分比设置
+// 加载广告跳过百分比设置
 function loadAdSkipPercentage() {
-    const savedPercentage = localStorage.getItem('adskip_percentage');
-    if (savedPercentage !== null) {
-        adSkipPercentage = parseInt(savedPercentage, 10);
-        logDebug(`已加载广告跳过百分比设置: ${adSkipPercentage}%`);
-    } else {
-        // 首次使用，设置默认值
-        localStorage.setItem('adskip_percentage', adSkipPercentage);
-        logDebug(`已设置默认广告跳过百分比: ${adSkipPercentage}%`);
-    }
+    chrome.storage.local.get('adskip_percentage', function(result) {
+        if (result.adskip_percentage !== undefined) {
+            adSkipPercentage = result.adskip_percentage;
+            logDebug(`加载广告跳过百分比设置: ${adSkipPercentage}%`);
+        } else {
+            // 如果没有保存的设置，默认为5%
+            adSkipPercentage = 5;
+            // 保存默认设置
+            chrome.storage.local.set({'adskip_percentage': adSkipPercentage});
+            logDebug(`设置默认广告跳过百分比: ${adSkipPercentage}%`);
+        }
+    });
 }
 
 // 保存广告跳过百分比设置
 function saveAdSkipPercentage(percentage) {
-    localStorage.setItem('adskip_percentage', percentage);
-    adSkipPercentage = percentage;
-    logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
+    // 转为整数确保一致性
+    percentage = parseInt(percentage, 10);
+
+    // 检查是否实际发生了变化
+    if (adSkipPercentage !== percentage) {
+        chrome.storage.local.set({'adskip_percentage': percentage}, function() {
+            adSkipPercentage = percentage;
+            logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
+        });
+    }
 }
 
 // 设置广告跳过监控
@@ -202,61 +212,64 @@ function setupAdSkipMonitor(adTimestamps) {
     // 核心检查函数 - 简化逻辑
     function checkAndSkip() {
         // 检查是否启用广告跳过功能
-        if (localStorage.getItem('adskip_enabled') === 'false') {
-            return; // 如果功能被禁用，直接返回
-        }
-
-        // 查找视频播放器
-        if (!videoPlayer) {
-            videoPlayer = findVideoPlayer();
-            if (!videoPlayer) {
+        chrome.storage.local.get('adskip_enabled', function(result) {
+            if (result.adskip_enabled === false) {
+                logDebug('广告跳过功能已禁用，不设置监视器');
                 return;
             }
-            setupEventListener();
-        }
 
-        if (videoPlayer.paused || videoPlayer.ended) return;
-
-        const currentTime = videoPlayer.currentTime;
-
-        // 检查视频ID是否变化
-        const newVideoId = getCurrentVideoId();
-        if (newVideoId !== currentVideoId && newVideoId !== '') {
-            logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
-            lastVideoId = currentVideoId;
-            currentVideoId = newVideoId;
-            reinitialize();
-            return;
-        }
-
-        // 记录时间跳跃情况，但不再使用userInteracted标志
-        if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
-            logDebug(`检测到大幅时间跳跃: ${lastCheckTime} -> ${currentTime}`);
-        }
-        lastCheckTime = currentTime;
-
-        // 更新的广告检测逻辑：使用百分比计算
-        for (const ad of currentAdTimestamps) {
-            // 计算广告时长
-            const adDuration = ad.end_time - ad.start_time;
-
-            // 根据百分比计算跳过点，但至少跳过1秒
-            const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
-
-            // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
-            const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
-
-            // 如果在广告开始区域，直接跳到结束
-            if (currentTime >= ad.start_time && currentTime < adStartRange) {
-                logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过百分比${adSkipPercentage}%，跳过至${ad.end_time}s`);
-
-                // 标记为脚本操作并跳转
-                scriptInitiatedSeek = true;
-                videoPlayer.currentTime = ad.end_time;
-                logDebug(`已跳过广告: ${ad.start_time}s-${ad.end_time}s`);
-                break;
+            // 查找视频播放器
+            if (!videoPlayer) {
+                videoPlayer = findVideoPlayer();
+                if (!videoPlayer) {
+                    return;
+                }
+                setupEventListener();
             }
-        }
+
+            if (videoPlayer.paused || videoPlayer.ended) return;
+
+            const currentTime = videoPlayer.currentTime;
+
+            // 检查视频ID是否变化
+            const newVideoId = getCurrentVideoId();
+            if (newVideoId !== currentVideoId && newVideoId !== '') {
+                logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
+                lastVideoId = currentVideoId;
+                currentVideoId = newVideoId;
+                reinitialize();
+                return;
+            }
+
+            // 记录时间跳跃情况，但不再使用userInteracted标志
+            if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
+                logDebug(`检测到大幅时间跳跃: ${lastCheckTime} -> ${currentTime}`);
+            }
+            lastCheckTime = currentTime;
+
+            // 更新的广告检测逻辑：使用百分比计算
+            for (const ad of currentAdTimestamps) {
+                // 计算广告时长
+                const adDuration = ad.end_time - ad.start_time;
+
+                // 根据百分比计算跳过点，但至少跳过1秒
+                const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
+
+                // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
+                const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
+
+                // 如果在广告开始区域，直接跳到结束
+                if (currentTime >= ad.start_time && currentTime < adStartRange) {
+                    logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time}s`);
+
+                    // 标记为脚本操作并跳转
+                    scriptInitiatedSeek = true;
+                    videoPlayer.currentTime = ad.end_time;
+                    logDebug(`已跳过广告: ${ad.start_time}s-${ad.end_time}s`);
+                    break;
+                }
+            }
+        });
     }
 
     // 清除旧监控
@@ -338,239 +351,245 @@ function createLinkGenerator() {
         const currentTimeString = timestampsToString(currentAdTimestamps);
 
         // 检查是否启用广告跳过功能
-        const isEnabled = localStorage.getItem('adskip_enabled') !== 'false';
+        chrome.storage.local.get('adskip_enabled', function(result) {
+            const isEnabled = result.adskip_enabled !== false;
 
-        // 面板内容
-        panel.innerHTML = `
-            <div class="adskip-panel-header">
-                <h3 class="adskip-title">广告跳过 - 时间设置</h3>
-                <label class="adskip-switch">
-                    <input type="checkbox" id="adskip-toggle" ${isEnabled ? 'checked' : ''}>
-                    <span class="adskip-slider"></span>
-                </label>
-            </div>
-            <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
-            <p>输入广告时间段（格式: 开始-结束,开始-结束）:</p>
-            <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
-
-            <div class="adskip-percentage-container">
-                <div class="adskip-percentage-label">广告跳过进度: <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
-                <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
-                <div class="adskip-percentage-hints">
-                    <span class="adskip-percentage-preset" data-value="1">快速(1%)</span>
-                    <span class="adskip-percentage-preset" data-value="50">中等(50%)</span>
-                    <span class="adskip-percentage-preset" data-value="100">完整(100%)</span>
+            // 面板内容
+            panel.innerHTML = `
+                <div class="adskip-panel-header">
+                    <h3 class="adskip-title">广告跳过 - 时间设置</h3>
+                    <label class="adskip-switch">
+                        <input type="checkbox" id="adskip-toggle" ${isEnabled ? 'checked' : ''}>
+                        <span class="adskip-slider"></span>
+                    </label>
                 </div>
-            </div>
+                <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
+                <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
+                <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
 
-            <div class="adskip-button-row">
-                <button id="adskip-generate" class="adskip-btn">🔗 创建分享链接</button>
-                <button id="adskip-apply" class="adskip-btn">✅ 更新跳过设置</button>
-            </div>
-            <div class="adskip-button-row">
-                <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
-                <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
-            </div>
-            <div id="adskip-status" class="adskip-status">设置已应用</div>
-            <div id="adskip-result" class="adskip-result"></div>
-            ${checkAdminStatus() ? `
-            <div class="adskip-admin-container">
-                <button id="adskip-admin" class="adskip-admin-btn">🔧 管理员设置</button>
-            </div>
-            ` : `
-            <div class="adskip-admin-container">
-                <button id="adskip-login" class="adskip-admin-btn">🔑 管理员登录</button>
-            </div>
-            `}
-        `;
+                <div class="adskip-percentage-container">
+                    <div class="adskip-percentage-label">广告跳过触发范围：前 <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
+                    <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
+                    <div class="adskip-percentage-hints">
+                        <span class="adskip-percentage-preset" data-value="1">仅起始(1%)</span>
+                        <span class="adskip-percentage-preset" data-value="50">前半段(50%)</span>
+                        <span class="adskip-percentage-preset" data-value="100">全程(100%)</span>
+                    </div>
+                </div>
 
-        document.body.appendChild(panel);
+                <div class="adskip-button-row">
+                    <button id="adskip-generate" class="adskip-btn">🔗 创建分享链接</button>
+                    <button id="adskip-apply" class="adskip-btn">✅ 更新跳过设置</button>
+                </div>
+                <div class="adskip-button-row">
+                    <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
+                    <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
+                </div>
+                <div id="adskip-status" class="adskip-status">设置已应用</div>
+                <div id="adskip-result" class="adskip-result"></div>
+                ${checkAdminStatus() ? `
+                <div class="adskip-admin-container">
+                    <button id="adskip-admin" class="adskip-admin-btn">🔧 管理员设置</button>
+                </div>
+                ` : `
+                <div class="adskip-admin-container">
+                    <button id="adskip-login" class="adskip-admin-btn">🔑 管理员登录</button>
+                </div>
+                `}
+            `;
 
-        // 开关逻辑
-        document.getElementById('adskip-toggle').addEventListener('change', function() {
-            const isEnabled = this.checked;
-            localStorage.setItem('adskip_enabled', isEnabled ? 'true' : 'false');
+            // 开关逻辑
+            document.getElementById('adskip-toggle').addEventListener('change', function() {
+                const isEnabled = this.checked;
+                chrome.storage.local.set({'adskip_enabled': isEnabled}, function() {
+                    // 如果禁用，清除当前的监控
+                    if (!isEnabled && window.adSkipCheckInterval) {
+                        clearInterval(window.adSkipCheckInterval);
+                        window.adSkipCheckInterval = null;
+                        logDebug('已临时禁用广告跳过功能');
+                    } else if (isEnabled) {
+                        // 重新启用监控
+                        if (currentAdTimestamps.length > 0) {
+                            setupAdSkipMonitor(currentAdTimestamps);
+                            logDebug('已重新启用广告跳过功能');
+                        }
+                    }
+                });
+            });
 
-            // 如果禁用，清除当前的监控
-            if (!isEnabled && window.adSkipCheckInterval) {
-                clearInterval(window.adSkipCheckInterval);
-                window.adSkipCheckInterval = null;
-                logDebug('已临时禁用广告跳过功能');
-            } else if (isEnabled) {
-                // 重新启用监控
-                if (currentAdTimestamps.length > 0) {
-                    setupAdSkipMonitor(currentAdTimestamps);
-                    logDebug('已重新启用广告跳过功能');
-                }
-            }
-        });
+            // 广告跳过百分比滑块逻辑
+            const percentageSlider = document.getElementById('adskip-percentage-slider');
+            const percentageValue = document.getElementById('adskip-percentage-value');
 
-        // 广告跳过百分比滑块逻辑
-        const percentageSlider = document.getElementById('adskip-percentage-slider');
-        const percentageValue = document.getElementById('adskip-percentage-value');
+            percentageSlider.addEventListener('input', function() {
+                const newValue = parseInt(this.value, 10);
+                percentageValue.textContent = newValue;
+            });
 
-        percentageSlider.addEventListener('input', function() {
-            const newValue = parseInt(this.value, 10);
-            percentageValue.textContent = newValue;
-        });
-
-        percentageSlider.addEventListener('change', function() {
-            const newValue = parseInt(this.value, 10);
-            saveAdSkipPercentage(newValue);
-
-            // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
-            if (localStorage.getItem('adskip_enabled') !== 'false' && currentAdTimestamps.length > 0) {
-                setupAdSkipMonitor(currentAdTimestamps);
-            }
-
-            document.getElementById('adskip-status').textContent = `已更新广告跳过进度为${newValue}%`;
-            document.getElementById('adskip-status').style.display = 'block';
-        });
-
-        // 为百分比预设值添加点击事件
-        const percentagePresets = document.querySelectorAll('.adskip-percentage-preset');
-        percentagePresets.forEach(preset => {
-            preset.addEventListener('click', function() {
-                const presetValue = parseInt(this.getAttribute('data-value'), 10);
-
-                // 更新滑块值和显示值
-                percentageSlider.value = presetValue;
-                percentageValue.textContent = presetValue;
-
-                // 保存设置并应用
-                saveAdSkipPercentage(presetValue);
+            percentageSlider.addEventListener('change', function() {
+                const newValue = parseInt(this.value, 10);
+                saveAdSkipPercentage(newValue);
 
                 // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
-                if (localStorage.getItem('adskip_enabled') !== 'false' && currentAdTimestamps.length > 0) {
-                    setupAdSkipMonitor(currentAdTimestamps);
+                chrome.storage.local.get('adskip_enabled', function(result) {
+                    if (result.adskip_enabled !== false && currentAdTimestamps.length > 0) {
+                        setupAdSkipMonitor(currentAdTimestamps);
+                    }
+
+                    document.getElementById('adskip-status').textContent = `已更新广告跳过范围为：前${newValue}%`;
+                    document.getElementById('adskip-status').style.display = 'block';
+                });
+            });
+
+            // 为百分比预设值添加点击事件
+            const percentagePresets = document.querySelectorAll('.adskip-percentage-preset');
+            percentagePresets.forEach(preset => {
+                preset.addEventListener('click', function() {
+                    const presetValue = parseInt(this.getAttribute('data-value'), 10);
+
+                    // 更新滑块值和显示值
+                    percentageSlider.value = presetValue;
+                    percentageValue.textContent = presetValue;
+
+                    // 保存设置并应用
+                    saveAdSkipPercentage(presetValue);
+
+                    // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
+                    chrome.storage.local.get('adskip_enabled', function(result) {
+                        if (result.adskip_enabled !== false && currentAdTimestamps.length > 0) {
+                            setupAdSkipMonitor(currentAdTimestamps);
+                        }
+
+                        document.getElementById('adskip-status').textContent = `已更新广告跳过范围为：前${presetValue}%`;
+                        document.getElementById('adskip-status').style.display = 'block';
+                    });
+                });
+            });
+
+            // 生成链接按钮
+            document.getElementById('adskip-generate').addEventListener('click', function() {
+                const input = document.getElementById('adskip-input').value.trim();
+                if (!input) {
+                    alert('请输入有效的时间段');
+                    return;
                 }
 
-                document.getElementById('adskip-status').textContent = `已更新广告跳过进度为${presetValue}%`;
-                document.getElementById('adskip-status').style.display = 'block';
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('adskip', input);
+
+                const resultDiv = document.getElementById('adskip-result');
+                resultDiv.innerHTML = `
+                    <p>广告跳过链接:</p>
+                    <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
+                `;
             });
-        });
 
-        // 生成链接按钮
-        document.getElementById('adskip-generate').addEventListener('click', function() {
-            const input = document.getElementById('adskip-input').value.trim();
-            if (!input) {
-                alert('请输入有效的时间段');
-                return;
-            }
+            // 立即应用按钮
+            document.getElementById('adskip-apply').addEventListener('click', function() {
+                const input = document.getElementById('adskip-input').value.trim();
+                if (!input) {
+                    // 如果输入为空，则清空时间段
+                    setupAdSkipMonitor([]);
+                    document.getElementById('adskip-status').style.display = 'block';
+                    document.getElementById('adskip-status').innerText = '设置已应用: 已清空所有时间段';
+                    return;
+                }
 
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('adskip', input);
+                try {
+                    const adTimestamps = input.split(',').map(segment => {
+                        const [start, end] = segment.split('-').map(Number);
+                        if (isNaN(start) || isNaN(end) || start >= end) {
+                            throw new Error('时间格式无效');
+                        }
+                        return {
+                            start_time: start,
+                            end_time: end,
+                            description: `手动指定的广告 (${start}s-${end}s)`
+                        };
+                    });
 
-            const resultDiv = document.getElementById('adskip-result');
-            resultDiv.innerHTML = `
-                <p>广告跳过链接:</p>
-                <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
-            `;
-        });
-
-        // 立即应用按钮
-        document.getElementById('adskip-apply').addEventListener('click', function() {
-            const input = document.getElementById('adskip-input').value.trim();
-            if (!input) {
-                // 如果输入为空，则清空时间段
-                setupAdSkipMonitor([]);
-                document.getElementById('adskip-status').style.display = 'block';
-                document.getElementById('adskip-status').innerText = '设置已应用: 已清空所有时间段';
-                return;
-            }
-
-            try {
-                const adTimestamps = input.split(',').map(segment => {
-                    const [start, end] = segment.split('-').map(Number);
-                    if (isNaN(start) || isNaN(end) || start >= end) {
-                        throw new Error('时间格式无效');
-                    }
-                    return {
-                        start_time: start,
-                        end_time: end,
-                        description: `手动指定的广告 (${start}s-${end}s)`
-                    };
-                });
-
-                setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
-                document.getElementById('adskip-status').style.display = 'block';
-                document.getElementById('adskip-status').innerText = '设置已应用: ' + input;
-            } catch (e) {
-                alert('格式错误，请使用正确的格式：开始-结束,开始-结束');
-            }
-        });
-
-        // 还原按钮
-        document.getElementById('adskip-restore').addEventListener('click', function() {
-            // 如果有URL参数，使用URL中的值
-            if (urlAdTimestamps.length > 0) {
-                setupAdSkipMonitor(urlAdTimestamps);
-                document.getElementById('adskip-input').value = timestampsToString(urlAdTimestamps);
-                document.getElementById('adskip-status').style.display = 'block';
-                document.getElementById('adskip-status').innerText = '已还原为URL中的设置';
-            } else {
-                // 否则清空
-                setupAdSkipMonitor([]);
-                document.getElementById('adskip-input').value = '';
-                document.getElementById('adskip-status').style.display = 'block';
-                document.getElementById('adskip-status').innerText = '已还原（清空所有设置）';
-            }
-        });
-
-        // 管理员设置按钮
-        if (checkAdminStatus()) {
-            document.getElementById('adskip-admin').addEventListener('click', function() {
-                showAdminPanel();
+                    setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
+                    document.getElementById('adskip-status').style.display = 'block';
+                    document.getElementById('adskip-status').innerText = '设置已应用: ' + input;
+                } catch (e) {
+                    alert('格式错误，请使用正确的格式：开始-结束,开始-结束');
+                }
             });
-        } else {
-            // 添加管理员登录功能
-            document.getElementById('adskip-login').addEventListener('click', function() {
-                const apiKey = prompt('请输入管理员API密钥:');
-                if (!apiKey) return;
 
-                if (verifyAdminAccess(apiKey)) {
-                    alert('验证成功，已获得管理员权限');
-                    // 重新加载面板以显示管理员选项
-                    document.getElementById('adskip-panel').remove();
-                    createLinkGenerator();
-                    document.getElementById('adskip-button').click();
+            // 还原按钮
+            document.getElementById('adskip-restore').addEventListener('click', function() {
+                // 如果有URL参数，使用URL中的值
+                if (urlAdTimestamps.length > 0) {
+                    setupAdSkipMonitor(urlAdTimestamps);
+                    document.getElementById('adskip-input').value = timestampsToString(urlAdTimestamps);
+                    document.getElementById('adskip-status').style.display = 'block';
+                    document.getElementById('adskip-status').innerText = '已还原为URL中的设置';
                 } else {
-                    alert('API密钥无效');
+                    // 否则清空
+                    setupAdSkipMonitor([]);
+                    document.getElementById('adskip-input').value = '';
+                    document.getElementById('adskip-status').style.display = 'block';
+                    document.getElementById('adskip-status').innerText = '已还原（清空所有设置）';
                 }
             });
-        }
 
-        // 重置按钮
-        document.getElementById('adskip-reset').addEventListener('click', function() {
-            if (confirm('确定要重置所有设置吗？此操作将清空所有保存的广告跳过数据！')) {
-                // 获取并删除所有adskip_开头的存储键
-                chrome.storage.local.get(null, function(items) {
-                    const allKeys = Object.keys(items);
-                    const adskipKeys = allKeys.filter(key => key.startsWith('adskip_') && key !== 'adskip_debug_mode');
+            // 管理员设置按钮
+            if (checkAdminStatus()) {
+                document.getElementById('adskip-admin').addEventListener('click', function() {
+                    showAdminPanel();
+                });
+            } else {
+                // 添加管理员登录功能
+                document.getElementById('adskip-login').addEventListener('click', function() {
+                    const apiKey = prompt('请输入管理员API密钥:');
+                    if (!apiKey) return;
 
-                    if (adskipKeys.length > 0) {
-                        chrome.storage.local.remove(adskipKeys, function() {
-                            // 清空当前设置
-                            currentAdTimestamps = [];
-                            urlAdTimestamps = [];
-
-                            // 清除现有的监控
-                            if (window.adSkipCheckInterval) {
-                                clearInterval(window.adSkipCheckInterval);
-                                window.adSkipCheckInterval = null;
-                            }
-
-                            // 更新输入框
-                            document.getElementById('adskip-input').value = '';
-                            document.getElementById('adskip-status').style.display = 'block';
-                            document.getElementById('adskip-status').innerText = '已重置所有设置';
-
-                            logDebug('已重置所有设置');
-                        });
+                    if (verifyAdminAccess(apiKey)) {
+                        alert('验证成功，已获得管理员权限');
+                        // 重新加载面板以显示管理员选项
+                        document.getElementById('adskip-panel').remove();
+                        createLinkGenerator();
+                        document.getElementById('adskip-button').click();
+                    } else {
+                        alert('API密钥无效');
                     }
                 });
             }
+
+            // 重置按钮
+            document.getElementById('adskip-reset').addEventListener('click', function() {
+                if (confirm('确定要重置所有设置吗？此操作将清空所有保存的广告跳过数据！')) {
+                    // 获取并删除所有adskip_开头的存储键
+                    chrome.storage.local.get(null, function(items) {
+                        const allKeys = Object.keys(items);
+                        const adskipKeys = allKeys.filter(key => key.startsWith('adskip_') && key !== 'adskip_debug_mode');
+
+                        if (adskipKeys.length > 0) {
+                            chrome.storage.local.remove(adskipKeys, function() {
+                                // 清空当前设置
+                                currentAdTimestamps = [];
+                                urlAdTimestamps = [];
+
+                                // 清除现有的监控
+                                if (window.adSkipCheckInterval) {
+                                    clearInterval(window.adSkipCheckInterval);
+                                    window.adSkipCheckInterval = null;
+                                }
+
+                                // 更新输入框
+                                document.getElementById('adskip-input').value = '';
+                                document.getElementById('adskip-status').style.display = 'block';
+                                document.getElementById('adskip-status').innerText = '已重置所有设置';
+
+                                logDebug('已重置所有设置');
+                            });
+                        }
+                    });
+                }
+            });
         });
+
+        document.body.appendChild(panel);
     });
 
     document.body.appendChild(button);
@@ -875,16 +894,94 @@ async function init() {
     // 初始化调试模式
     initDebugMode();
 
-    // 加载广告跳过百分比设置
-    loadAdSkipPercentage();
+    // 确保默认设置存在
+    chrome.storage.local.get(['adskip_enabled', 'adskip_percentage', 'adskip_debug_mode'], function(result) {
+        // 设置默认值（如果不存在）
+        const defaults = {};
+
+        if (result.adskip_enabled === undefined) {
+            defaults.adskip_enabled = true;
+            logDebug('初始化默认功能开关状态: 已启用');
+        }
+
+        if (result.adskip_percentage === undefined) {
+            defaults.adskip_percentage = 5;
+            logDebug('初始化默认广告跳过百分比: 5%');
+        }
+
+        // 如果有需要设置的默认值，则一次性保存
+        if (Object.keys(defaults).length > 0) {
+            chrome.storage.local.set(defaults);
+        }
+
+        // 更新全局变量
+        if (result.adskip_percentage !== undefined) {
+            adSkipPercentage = result.adskip_percentage;
+        } else if (defaults.adskip_percentage !== undefined) {
+            adSkipPercentage = defaults.adskip_percentage;
+        }
+    });
+
+    // 添加storage变化监听器
+    chrome.storage.onChanged.addListener(function(changes, namespace) {
+        if (namespace === 'local') {
+            // 检查广告跳过百分比是否变化
+            if (changes.adskip_percentage) {
+                const newPercentage = changes.adskip_percentage.newValue;
+                // 只有当值真正变化时才执行操作
+                if (adSkipPercentage !== newPercentage) {
+                    adSkipPercentage = newPercentage;
+                    logDebug(`检测到广告跳过百分比设置变化: ${adSkipPercentage}%`);
+
+                    // 更新界面上的值（如果面板打开的话）
+                    const percentageSlider = document.getElementById('adskip-percentage-slider');
+                    const percentageValue = document.getElementById('adskip-percentage-value');
+                    if (percentageSlider && percentageValue) {
+                        // 防止触发change事件
+                        if (parseInt(percentageSlider.value) !== adSkipPercentage) {
+                            percentageSlider.value = adSkipPercentage;
+                        }
+                        if (percentageValue.textContent != adSkipPercentage) {
+                            percentageValue.textContent = adSkipPercentage;
+                        }
+                    }
+
+                    // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
+                    chrome.storage.local.get('adskip_enabled', function(result) {
+                        const isEnabled = result.adskip_enabled !== false;
+                        if (isEnabled && currentAdTimestamps.length > 0) {
+                            setupAdSkipMonitor(currentAdTimestamps);
+                        }
+                    });
+                }
+            }
+
+            // 检查功能开关状态是否变化
+            if (changes.adskip_enabled) {
+                const isEnabled = changes.adskip_enabled.newValue;
+                logDebug(`检测到功能开关状态变化: ${isEnabled ? '已启用' : '已禁用'}`);
+
+                // 更新界面上的开关状态（如果面板打开的话）
+                const toggleSwitch = document.getElementById('adskip-toggle');
+                if (toggleSwitch && toggleSwitch.checked !== isEnabled) {
+                    toggleSwitch.checked = isEnabled;
+                }
+
+                // 如果功能被禁用，清除当前的监控
+                if (!isEnabled && window.adSkipCheckInterval) {
+                    clearInterval(window.adSkipCheckInterval);
+                    window.adSkipCheckInterval = null;
+                    logDebug('已禁用广告跳过功能，清除监控');
+                } else if (isEnabled && currentAdTimestamps.length > 0) {
+                    // 如果功能被启用且有广告时间段，则重新应用设置
+                    setupAdSkipMonitor(currentAdTimestamps);
+                }
+            }
+        }
+    });
 
     // 检查管理员状态
     checkAdminStatus();
-
-    // 初始化功能开关状态（默认为开启）
-    if (localStorage.getItem('adskip_enabled') === null) {
-        localStorage.setItem('adskip_enabled', 'true');
-    }
 
     // 获取当前视频ID
     currentVideoId = getCurrentVideoId();

@@ -23,9 +23,10 @@ document.addEventListener('DOMContentLoaded', function() {
         let videoId = match ? match[1] : '';
 
         if (videoId) {
-          // 查询这个视频是否有保存的广告时间段
-          chrome.storage.local.get(`adskip_${videoId}`, function(result) {
+          // 查询这个视频是否有保存的广告时间段以及功能启用状态
+          chrome.storage.local.get([`adskip_${videoId}`, 'adskip_enabled'], function(result) {
             const savedData = result[`adskip_${videoId}`];
+            const isEnabled = result.adskip_enabled !== false;
 
             // 如果有，则在界面上显示
             if (savedData) {
@@ -40,7 +41,7 @@ document.addEventListener('DOMContentLoaded', function() {
                   <h2>当前视频设置</h2>
                   <p>视频ID: ${videoId}</p>
                   <p>广告时间段: <span class="format">${timeString}</span></p>
-                  <p>功能状态: <span class="format">${localStorage.getItem('adskip_enabled') === 'false' ? '已禁用' : '已启用'}</span></p>
+                  <p>功能状态: <span class="format">${isEnabled ? '已启用' : '已禁用'}</span></p>
                 `;
 
                 // 插入到按钮前面
