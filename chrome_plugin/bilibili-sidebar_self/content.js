@@ -10,6 +10,12 @@ let scriptInitiatedSeek = false;  // 标记是否是脚本引起的seeking
 let isAdminAuthorized = false;    // 管理员认证状态
 let adSkipPercentage = 5;           // 添加广告跳过百分比全局变量，默认为5%
 let extensionAvailable = true;    // 标记扩展上下文是否可用
+let cachedVideoPlayer = null;     // 缓存视频播放器元素
+let lastPlayerCheck = 0;          // 上次查找播放器的时间
+
+// 缓存进度条容器
+let cachedProgressBar = null;
+let lastProgressBarCheck = 0;
 
 // 日志输出函数
 function logDebug(message, data) {
@@ -280,6 +286,9 @@ function setupAdSkipMonitor(adTimestamps) {
     } catch (e) {
         console.error("设置广告监控失败:", e);
     }
+
+    // 标记进度条上的广告位点
+    markAdPositionsOnProgressBar();
 }
 
 // 验证管理员身份
@@ -1111,35 +1120,27 @@ function checkAndSkip() {
             }
 
             // 以下是检查和跳过广告的实际逻辑
-            let videoPlayer = null;
             let lastCheckTime = 0;
 
             // 查找视频播放器
+            const videoPlayer = findVideoPlayer();
+
             if (!videoPlayer) {
-                videoPlayer = document.querySelector('#bilibili-player video') ||
-                              document.querySelector('.bpx-player-video-area video') ||
-                              document.querySelector('video');
+                return;
+            }
 
-                if (!videoPlayer) {
-                    return;
-                }
-
-                // 设置seeking事件监听
-                if (videoPlayer) {
-                    // 避免重复添加事件
-                    videoPlayer.removeEventListener('seeking', function(e) {
+            // 设置seeking事件监听
+            if (videoPlayer) {
+                // 使用命名函数，避免重复添加匿名事件监听器
+                if (!videoPlayer._adskipSeekingHandler) {
+                    videoPlayer._adskipSeekingHandler = function(e) {
                         if (scriptInitiatedSeek) {
                             logDebug("这是脚本引起的seeking事件，忽略");
                             scriptInitiatedSeek = false;
                         }
-                    });
+                    };
 
-                    videoPlayer.addEventListener('seeking', function(e) {
-                        if (scriptInitiatedSeek) {
-                            logDebug("这是脚本引起的seeking事件，忽略");
-                            scriptInitiatedSeek = false;
-                        }
-                    });
+                    videoPlayer.addEventListener('seeking', videoPlayer._adskipSeekingHandler);
                 }
             }
 
@@ -1199,6 +1200,191 @@ function checkAndSkip() {
             console.error("Bilibili广告跳过插件错误:", e);
         }
     }
+}
+
+// 标记视频进度条上的广告位点
+function markAdPositionsOnProgressBar() {
+    logDebug('标记视频进度条上的广告位点');
+
+    // 先移除旧的标记
+    document.querySelectorAll('.adskip-marker-container').forEach(function(marker) {
+        marker.remove();
+    });
+
+    // 如果没有广告时间戳，则不标记
+    if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
+        logDebug('没有广告时间戳，不标记进度条');
+        return;
+    }
+
+    // 找到视频元素
+    const videoPlayer = findVideoPlayer();
+
+    if (!videoPlayer || !videoPlayer.duration) {
+        logDebug('未找到视频播放器或视频时长不可用，稍后重试标记');
+        // 如果视频播放器不可用或时长不可用，稍后再试
+        setTimeout(markAdPositionsOnProgressBar, 1000);
+        return;
+    }
+
+    // 找到进度条容器
+    const progressBarContainer = findProgressBar();
+
+    if (!progressBarContainer) {
+        logDebug('未找到进度条容器，稍后重试标记');
+        // 如果进度条不可用，稍后再试
+        setTimeout(markAdPositionsOnProgressBar, 1000);
+        return;
+    }
+
+    // 创建标记容器
+    const markerContainer = document.createElement('div');
+    markerContainer.className = 'adskip-marker-container';
+    progressBarContainer.appendChild(markerContainer);
+
+    // 获取视频总时长
+    const videoDuration = videoPlayer.duration;
+
+    // 为每个广告段创建标记
+    currentAdTimestamps.forEach(function(ad, index) {
+        // 计算位置百分比
+        const startPercent = (ad.start_time / videoDuration) * 100;
+        const endPercent = (ad.end_time / videoDuration) * 100;
+        const width = endPercent - startPercent;
+
+        // 创建广告区间标记元素
+        const marker = document.createElement('div');
+        marker.className = 'adskip-marker';
+        marker.style.left = `${startPercent}%`;
+        marker.style.width = `${width}%`;
+        marker.setAttribute('data-index', index);
+        markerContainer.appendChild(marker);
+
+        // 创建提示元素
+        const tooltip = document.createElement('div');
+        tooltip.className = 'adskip-marker-tooltip';
+        tooltip.style.left = `${startPercent + (width / 2)}%`;
+        tooltip.textContent = `广告: ${Number.isInteger(ad.start_time) ? ad.start_time : ad.start_time.toFixed(1)}s - ${Number.isInteger(ad.end_time) ? ad.end_time : ad.end_time.toFixed(1)}s`;
+        markerContainer.appendChild(tooltip);
+
+        // 为标记添加事件监听
+        marker.addEventListener('mouseenter', function() {
+            tooltip.style.opacity = '1';
+        });
+
+        marker.addEventListener('mouseleave', function() {
+            tooltip.style.opacity = '0';
+        });
+
+        // 如果启用了百分比跳过，显示跳过区域
+        if (adSkipPercentage > 0) {
+            // 计算跳过区域
+            const adDuration = ad.end_time - ad.start_time;
+            const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
+            const skipEndPercent = (Math.min(ad.start_time + skipDuration, ad.end_time) / videoDuration) * 100;
+            const skipWidth = skipEndPercent - startPercent;
+
+            // 创建跳过区域标记
+            const skipMarker = document.createElement('div');
+            skipMarker.className = 'adskip-skip-marker';
+            skipMarker.style.left = `${startPercent}%`;
+            skipMarker.style.width = `${skipWidth}%`;
+            skipMarker.setAttribute('data-index', `skip-${index}`);
+            markerContainer.appendChild(skipMarker);
+        }
+    });
+
+    logDebug(`已标记 ${currentAdTimestamps.length} 个广告位点`);
+}
+
+// 监听视频播放器变化并更新标记
+function setupAdMarkerMonitor() {
+    // 清除旧监听器
+    if (window.adMarkerInterval) {
+        clearInterval(window.adMarkerInterval);
+        window.adMarkerInterval = null;
+    }
+
+    // 定期检查进度条和更新标记
+    window.adMarkerInterval = setInterval(function() {
+        // 检查视频播放器和进度条是否存在
+        const videoPlayer = findVideoPlayer();
+        const progressBar = findProgressBar();
+
+        if (videoPlayer && progressBar) {
+            // 检查是否需要更新标记
+            const markerContainer = document.querySelector('.adskip-marker-container');
+            const needUpdate = !markerContainer || markerContainer.getAttribute('data-updated') !== timestampsToString(currentAdTimestamps);
+
+            if (needUpdate) {
+                logDebug('广告时间戳变化或进度条更新，重新标记进度条');
+                markAdPositionsOnProgressBar();
+
+                // 标记容器已更新
+                const updatedContainer = document.querySelector('.adskip-marker-container');
+                if (updatedContainer) {
+                    updatedContainer.setAttribute('data-updated', timestampsToString(currentAdTimestamps));
+                }
+            }
+        }
+    }, 2000);
+
+    // 视频加载事件，确保获取准确的视频时长
+    function setupVideoEvents() {
+        const videoPlayer = findVideoPlayer();
+
+        if (videoPlayer) {
+            videoPlayer.removeEventListener('loadedmetadata', markAdPositionsOnProgressBar);
+            videoPlayer.addEventListener('loadedmetadata', markAdPositionsOnProgressBar);
+
+            videoPlayer.removeEventListener('durationchange', markAdPositionsOnProgressBar);
+            videoPlayer.addEventListener('durationchange', markAdPositionsOnProgressBar);
+        } else {
+            // 如果找不到视频播放器，稍后再试
+            setTimeout(setupVideoEvents, 1000);
+        }
+    }
+
+    setupVideoEvents();
+}
+
+// 查找视频播放器元素，优化性能
+function findVideoPlayer() {
+    // 如果缓存的播放器仍存在于DOM中且未过期，直接使用缓存
+    const now = Date.now();
+    if (cachedVideoPlayer && document.contains(cachedVideoPlayer) && now - lastPlayerCheck < 5000) {
+        return cachedVideoPlayer;
+    }
+
+    // 重新查找播放器
+    const player = document.querySelector('#bilibili-player video') ||
+                   document.querySelector('.bpx-player-video-area video') ||
+                   document.querySelector('video');
+
+    // 更新缓存和时间戳
+    cachedVideoPlayer = player;
+    lastPlayerCheck = now;
+
+    return player;
+}
+
+// 查找进度条容器，优化性能
+function findProgressBar() {
+    // 如果缓存的进度条仍存在于DOM中且未过期，直接使用缓存
+    const now = Date.now();
+    if (cachedProgressBar && document.contains(cachedProgressBar) && now - lastProgressBarCheck < 5000) {
+        return cachedProgressBar;
+    }
+
+    // 重新查找进度条
+    const progressBar = document.querySelector('.bpx-player-progress-wrap') ||
+                        document.querySelector('.bilibili-player-video-progress-wrap');
+
+    // 更新缓存和时间戳
+    cachedProgressBar = progressBar;
+    lastProgressBarCheck = now;
+
+    return progressBar;
 }
 
 // 主函数
@@ -1375,6 +1561,9 @@ async function init() {
 
     // 设置URL变化监控
     setupUrlChangeMonitor();
+
+    // 设置广告标记监控
+    setupAdMarkerMonitor();
 
     logDebug('初始化完成');
 }
