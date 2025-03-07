@@ -22,14 +22,25 @@ function logDebug(message, data) {
     }
 }
 
-// 初始化调试开关
+// 初始化调试模式
 function initDebugMode() {
     chrome.storage.local.get('adskip_debug_mode', (result) => {
         debugMode = result.adskip_debug_mode || false;
         if (debugMode) {
             console.log('--==--LOG: 调试模式已启用');
         }
+
+        // 更新所有页面的调试模式开关状态
+        updateDebugModeToggle();
     });
+}
+
+// 更新调试模式开关UI状态，保持所有地方的开关状态一致
+function updateDebugModeToggle() {
+    const adminDebugToggle = document.getElementById('adskip-debug-mode');
+    if (adminDebugToggle) {
+        adminDebugToggle.checked = debugMode;
+    }
 }
 
 // 获取当前视频ID (BV或AV)
@@ -693,18 +704,20 @@ function showAdminPanel() {
         adminPanel.id = 'adskip-admin-panel';
         adminPanel.className = 'adskip-admin-panel';
 
-        // 管理员面板内容
+        // 视频列表HTML生成，调整显示顺序
         let videoListHTML = '';
         if (videoData.length > 0) {
             videoData.forEach((item, index) => {
                 videoListHTML += `
                     <div class="adskip-video-item">
+                        <div class="adskip-video-title" title="${item.videoTitle}">
+                            ${item.videoTitle}
+                        </div>
+                        <div class="adskip-video-uploader">UP主: ${item.uploader}</div>
                         <div class="adskip-video-header">
-                            <span class="adskip-video-id">${item.videoId}</span>
+                            <span class="adskip-video-id">ID: ${item.videoId}</span>
                             <button class="adskip-delete-btn" data-index="${index}">🗑️ 删除</button>
                         </div>
-                        <div class="adskip-video-title">标题: ${item.videoTitle}</div>
-                        <div class="adskip-video-uploader">UP主: ${item.uploader}</div>
                         <div class="adskip-video-time">广告时间: ${item.timeString}</div>
                     </div>
                 `;
@@ -736,7 +749,7 @@ function showAdminPanel() {
 
             <div class="adskip-video-list-section">
                 <h4>已保存的视频广告数据 (${videoData.length})</h4>
-                <div id="adskip-video-list">
+                <div id="adskip-video-list" class="${videoData.length > 3 ? 'scrollable' : ''}">
                     ${videoListHTML}
                 </div>
             </div>
@@ -767,6 +780,7 @@ function showAdminPanel() {
                     chrome.storage.local.set({'adskip_debug_mode': newDebugMode}, function() {
                         debugMode = newDebugMode; // 更新全局变量
                         logDebug(`调试模式已${newDebugMode ? '启用' : '禁用'}`);
+                        updateDebugModeToggle();
                     });
                 }
             });
@@ -1133,6 +1147,16 @@ async function init() {
                 } else if (isEnabled && currentAdTimestamps.length > 0) {
                     // 如果功能被启用且有广告时间段，则重新应用设置
                     setupAdSkipMonitor(currentAdTimestamps);
+                }
+            }
+
+            // 检查调试模式是否变化
+            if (changes.adskip_debug_mode !== undefined) {
+                const newDebugMode = changes.adskip_debug_mode.newValue;
+                if (debugMode !== newDebugMode) {
+                    debugMode = newDebugMode;
+                    logDebug(`检测到调试模式变化: ${debugMode ? '已启用' : '已禁用'}`);
+                    updateDebugModeToggle();
                 }
             }
         }

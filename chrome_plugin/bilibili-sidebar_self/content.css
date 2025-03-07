@@ -91,7 +91,7 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-video-id {
-  margin-bottom: 5px;
+  font-family: monospace;
   font-size: 12px;
   color: #666;
 }
@@ -305,27 +305,24 @@ input:checked + .adskip-slider:before {
   margin-bottom: 6px;
 }
 
-.adskip-video-id {
-  font-family: monospace;
+.adskip-video-title {
+  font-size: 15px;
   font-weight: bold;
   color: #333;
-  font-size: 13px;
-}
-
-.adskip-video-title {
-  font-size: 14px;
-  color: #333;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   word-break: break-all;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+  max-width: 100%;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(251, 114, 153, 0.2);
 }
 
 .adskip-video-uploader {
-  font-size: 12px;
+  font-size: 13px;
   color: #666;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .adskip-video-time {
@@ -372,4 +369,43 @@ input:checked + .adskip-slider:before {
   padding: 8px 15px;
   border-radius: 4px;
   cursor: pointer;
+}
+
+/* 视频列表区域样式改进 */
+.adskip-video-list-section {
+    margin-bottom: 15px;
+}
+
+#adskip-video-list {
+    max-height: 300px; /* 限制高度 */
+    overflow-y: auto;  /* 添加垂直滚动条 */
+    padding-right: 5px;
+    margin-top: 10px;
+    border-radius: 6px;
+}
+
+/* 当视频超过3个时应用滚动设计 */
+#adskip-video-list.scrollable {
+    border: 1px solid rgba(251, 114, 153, 0.1);
+    background-color: rgba(251, 251, 251, 0.5);
+    padding: 5px;
+}
+
+/* 美化滚动条 */
+#adskip-video-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+#adskip-video-list::-webkit-scrollbar-track {
+    background: rgba(251, 114, 153, 0.05);
+    border-radius: 6px;
+}
+
+#adskip-video-list::-webkit-scrollbar-thumb {
+    background: rgba(251, 114, 153, 0.3);
+    border-radius: 6px;
+}
+
+#adskip-video-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(251, 114, 153, 0.5);
 }
