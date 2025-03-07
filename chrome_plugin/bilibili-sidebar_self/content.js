@@ -564,23 +564,22 @@ function createLinkGenerator() {
                     }
                 });
             }
-
             // 重置按钮 - 仅清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会修改其他设置。')) {
-                    // 只获取视频ID相关的存储键
-                    chrome.storage.local.get(null, function(items) {
-                        const allKeys = Object.keys(items);
-                        // 过滤出只与视频ID相关的键，排除所有设置键
-                        const videoKeys = allKeys.filter(key =>
-                            key.startsWith('adskip_') &&
-                            key !== 'adskip_debug_mode' &&
-                            key !== 'adskip_enabled' &&
-                            key !== 'adskip_percentage' &&
-                            key !== 'adskip_admin_authorized'
-                        );
+                // 只获取视频ID相关的存储键
+                chrome.storage.local.get(null, function(items) {
+                    const allKeys = Object.keys(items);
+                    // 过滤出只与视频ID相关的键，排除所有设置键
+                    const videoKeys = allKeys.filter(key =>
+                        key.startsWith('adskip_') &&
+                        key !== 'adskip_debug_mode' &&
+                        key !== 'adskip_enabled' &&
+                        key !== 'adskip_percentage' &&
+                        key !== 'adskip_admin_authorized'
+                    );
 
-                        if (videoKeys.length > 0) {
+                    if (videoKeys.length > 0) {
+                        if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会修改其他设置。')) {
                             chrome.storage.local.remove(videoKeys, function() {
                                 // 清空当前设置
                                 currentAdTimestamps = [];
@@ -599,12 +598,12 @@ function createLinkGenerator() {
 
                                 logDebug('已清空所有视频广告数据');
                             });
-                        } else {
-                            document.getElementById('adskip-status').style.display = 'block';
-                            document.getElementById('adskip-status').innerText = '没有已保存的视频广告数据';
                         }
-                    });
-                }
+                    } else {
+                        document.getElementById('adskip-status').style.display = 'block';
+                        document.getElementById('adskip-status').innerText = '没有已保存的视频广告数据';
+                    }
+                });
             });
         });
 
