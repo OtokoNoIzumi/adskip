@@ -9,6 +9,7 @@ let debugMode = false;            // 调试模式开关
 let scriptInitiatedSeek = false;  // 标记是否是脚本引起的seeking
 let isAdminAuthorized = false;    // 管理员认证状态
 let adSkipPercentage = 5;           // 添加广告跳过百分比全局变量，默认为5%
+let extensionAvailable = true;    // 标记扩展上下文是否可用
 
 // 日志输出函数
 function logDebug(message, data) {
@@ -116,21 +117,49 @@ function loadAdTimestampsForVideo(videoId) {
 
 // 保存指定视频ID的广告时间戳
 function saveAdTimestampsForVideo(videoId, timestamps) {
-    if (!videoId) {
-        logDebug('视频ID为空，无法保存广告时间段');
-        return;
+    if (!videoId || !Array.isArray(timestamps) || timestamps.length === 0) {
+        return Promise.reject(new Error('无效的参数'));
     }
 
-    try {
-        const dataString = JSON.stringify(timestamps);
-        const data = {};
-        data[`adskip_${videoId}`] = dataString;
-        chrome.storage.local.set(data, () => {
-            logDebug(`成功保存视频 ${videoId} 的广告时间段:`, timestamps);
-        });
-    } catch (e) {
-        console.error(`--==--LOG: 保存视频 ${videoId} 广告数据失败:`, e);
+    // 获取视频标题和UP主信息
+    function getVideoInfo() {
+        try {
+            // 从页面中提取视频标题
+            const titleElement = document.querySelector('.video-title, .tit, h1.title');
+            const title = titleElement ? titleElement.textContent.trim() : '未知视频';
+
+            // 从页面中提取UP主名称
+            const upElement = document.querySelector('.up-name, .name .username, a.up-name');
+            const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
+
+            return { title, uploader };
+        } catch (e) {
+            logDebug('提取视频信息失败', e);
+            return { title: '未知视频', uploader: '未知UP主' };
+        }
     }
+
+    const videoInfo = getVideoInfo();
+
+    // 构建存储数据结构
+    const timestampsWithInfo = timestamps.map(ts => ({
+        ...ts,
+        _videoTitle: videoInfo.title,
+        _uploader: videoInfo.uploader
+    }));
+
+    const jsonData = JSON.stringify(timestampsWithInfo);
+
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({ [`adskip_${videoId}`]: jsonData }, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+            } else {
+                logDebug(`已保存视频 ${videoId} 的广告时间段:`, timestamps);
+                resolve(timestamps);
+            }
+        });
+    });
 }
 
 // 判断两个时间段是否重叠
@@ -156,15 +185,27 @@ function loadAdSkipPercentage() {
 
 // 保存广告跳过百分比设置
 function saveAdSkipPercentage(percentage) {
+    // 检查扩展上下文是否可用
+    if (!extensionAvailable && !checkExtensionContext()) {
+        return;
+    }
+
     // 转为整数确保一致性
     percentage = parseInt(percentage, 10);
 
     // 检查是否实际发生了变化
     if (adSkipPercentage !== percentage) {
-        chrome.storage.local.set({'adskip_percentage': percentage}, function() {
-            adSkipPercentage = percentage;
-            logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
-        });
+        try {
+            chrome.storage.local.set({'adskip_percentage': percentage}, function() {
+                if (!extensionAvailable) return;
+                adSkipPercentage = percentage;
+                logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
+            });
+        } catch(e) {
+            // 扩展上下文可能已失效
+            extensionAvailable = false;
+            console.log("Bilibili广告跳过插件：无法保存设置，扩展上下文已失效");
+        }
     }
 }
 
@@ -606,21 +647,43 @@ function showAdminPanel() {
     // 获取所有保存的数据
     chrome.storage.local.get(null, function(items) {
         const allKeys = Object.keys(items);
-        const adskipKeys = allKeys.filter(key => key.startsWith('adskip_'));
+        // 只处理以adskip_开头且不是特殊配置项的键
+        const adskipKeys = allKeys.filter(key =>
+            key.startsWith('adskip_') &&
+            key !== 'adskip_debug_mode' &&
+            key !== 'adskip_enabled' &&
+            key !== 'adskip_percentage'
+        );
         const videoData = [];
 
         for (const key of adskipKeys) {
-            if (key === 'adskip_debug_mode') continue;
-
             try {
                 const videoId = key.replace('adskip_', '');
                 const data = items[key];
                 const timestamps = JSON.parse(data);
-                videoData.push({
-                    videoId,
-                    timestamps,
-                    timeString: timestampsToString(timestamps)
-                });
+
+                // 确保timestamps是数组
+                if (Array.isArray(timestamps)) {
+                    // 提取视频标题和UP主信息（如果有）
+                    let videoTitle = '未知视频';
+                    let uploader = '未知UP主';
+
+                    // 尝试从第一个时间戳中获取信息
+                    if (timestamps.length > 0) {
+                        videoTitle = timestamps[0]._videoTitle || '未知视频';
+                        uploader = timestamps[0]._uploader || '未知UP主';
+                    }
+
+                    videoData.push({
+                        videoId,
+                        timestamps,
+                        timeString: timestampsToString(timestamps),
+                        videoTitle,
+                        uploader
+                    });
+                } else {
+                    console.error(`--==--LOG: 数据格式错误: ${key}, 预期数组但收到:`, typeof timestamps);
+                }
             } catch (e) {
                 console.error(`--==--LOG: 解析存储数据失败: ${key}`, e);
             }
@@ -640,7 +703,9 @@ function showAdminPanel() {
                             <span class="adskip-video-id">${item.videoId}</span>
                             <button class="adskip-delete-btn" data-index="${index}">🗑️ 删除</button>
                         </div>
-                        <div class="adskip-video-time">${item.timeString}</div>
+                        <div class="adskip-video-title">标题: ${item.videoTitle}</div>
+                        <div class="adskip-video-uploader">UP主: ${item.uploader}</div>
+                        <div class="adskip-video-time">广告时间: ${item.timeString}</div>
                     </div>
                 `;
             });
@@ -689,10 +754,21 @@ function showAdminPanel() {
             adminPanel.remove();
         });
 
+        // 管理员界面中的调试模式事件绑定
         document.getElementById('adskip-debug-mode').addEventListener('change', function() {
-            debugMode = this.checked;
-            chrome.storage.local.set({'adskip_debug_mode': debugMode}, function() {
-                logDebug(`调试模式已${debugMode ? '启用' : '禁用'}`);
+            const newDebugMode = this.checked;
+
+            // 使用与options.js相同的方式处理
+            chrome.storage.local.get('adskip_debug_mode', function(result) {
+                const currentDebugMode = result.adskip_debug_mode || false;
+
+                // 只有当状态确实变化时才设置
+                if (currentDebugMode !== newDebugMode) {
+                    chrome.storage.local.set({'adskip_debug_mode': newDebugMode}, function() {
+                        debugMode = newDebugMode; // 更新全局变量
+                        logDebug(`调试模式已${newDebugMode ? '启用' : '禁用'}`);
+                    });
+                }
             });
         });
 
@@ -889,41 +965,117 @@ async function reinitialize() {
     });
 }
 
+// 捕获扩展上下文失效
+function checkExtensionContext() {
+    try {
+        // 尝试访问扩展API
+        chrome.runtime.getURL('');
+        return true;
+    } catch (e) {
+        // 扩展上下文已失效
+        extensionAvailable = false;
+
+        // 清理任何活跃的定时器
+        if (window.adSkipCheckInterval) {
+            clearInterval(window.adSkipCheckInterval);
+            window.adSkipCheckInterval = null;
+        }
+
+        // 移除UI元素（如果存在）
+        const button = document.getElementById('adskip-button');
+        if (button) button.remove();
+
+        const panel = document.getElementById('adskip-panel');
+        if (panel) panel.remove();
+
+        console.log("Bilibili广告跳过插件：扩展已重新加载，请刷新页面以重新启用功能");
+        return false;
+    }
+}
+
+// 在所有chrome API调用前检查扩展上下文
+function safeApiCall(callback) {
+    if (!extensionAvailable && !checkExtensionContext()) {
+        return false;
+    }
+    try {
+        callback();
+        return true;
+    } catch (e) {
+        if (e.message.includes('Extension context invalidated')) {
+            extensionAvailable = false;
+            console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
+        } else {
+            console.error("Bilibili广告跳过插件错误:", e);
+        }
+        return false;
+    }
+}
+
 // 主函数
 async function init() {
+    // 初始化检查扩展上下文
+    if (!checkExtensionContext()) {
+        return; // 扩展上下文已失效，不再继续初始化
+    }
+
     // 初始化调试模式
     initDebugMode();
 
     // 确保默认设置存在
-    chrome.storage.local.get(['adskip_enabled', 'adskip_percentage', 'adskip_debug_mode'], function(result) {
-        // 设置默认值（如果不存在）
-        const defaults = {};
+    try {
+        chrome.storage.local.get(['adskip_enabled', 'adskip_percentage', 'adskip_debug_mode'], function(result) {
+            if (!extensionAvailable && !checkExtensionContext()) return;
 
-        if (result.adskip_enabled === undefined) {
-            defaults.adskip_enabled = true;
-            logDebug('初始化默认功能开关状态: 已启用');
+            // 设置默认值（如果不存在）
+            const defaults = {};
+
+            if (result.adskip_enabled === undefined) {
+                defaults.adskip_enabled = true;
+                logDebug('初始化默认功能开关状态: 已启用');
+            }
+
+            if (result.adskip_percentage === undefined) {
+                defaults.adskip_percentage = 5;
+                logDebug('初始化默认广告跳过百分比: 5%');
+            }
+
+            // 如果有需要设置的默认值，则一次性保存
+            if (Object.keys(defaults).length > 0 && extensionAvailable) {
+                try {
+                    chrome.storage.local.set(defaults);
+                } catch(e) {
+                    // 忽略错误，可能是扩展上下文已失效
+                    extensionAvailable = false;
+                }
+            }
+
+            // 更新全局变量
+            if (result.adskip_percentage !== undefined) {
+                adSkipPercentage = result.adskip_percentage;
+            } else if (defaults.adskip_percentage !== undefined) {
+                adSkipPercentage = defaults.adskip_percentage;
+            }
+        });
+    } catch(e) {
+        // 扩展上下文可能已失效
+        extensionAvailable = false;
+        console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
+        return;
+    }
+
+    // 添加storage变化监听器，并在扩展上下文失效时自我清理
+    let storageListener = function(changes, namespace) {
+        if (!extensionAvailable && !checkExtensionContext()) {
+            try {
+                // 尝试移除自身
+                chrome.storage.onChanged.removeListener(storageListener);
+            } catch(e) {
+                // 忽略错误
+            }
+            return;
         }
 
-        if (result.adskip_percentage === undefined) {
-            defaults.adskip_percentage = 5;
-            logDebug('初始化默认广告跳过百分比: 5%');
-        }
-
-        // 如果有需要设置的默认值，则一次性保存
-        if (Object.keys(defaults).length > 0) {
-            chrome.storage.local.set(defaults);
-        }
-
-        // 更新全局变量
-        if (result.adskip_percentage !== undefined) {
-            adSkipPercentage = result.adskip_percentage;
-        } else if (defaults.adskip_percentage !== undefined) {
-            adSkipPercentage = defaults.adskip_percentage;
-        }
-    });
-
-    // 添加storage变化监听器
-    chrome.storage.onChanged.addListener(function(changes, namespace) {
         if (namespace === 'local') {
             // 检查广告跳过百分比是否变化
             if (changes.adskip_percentage) {
@@ -947,12 +1099,18 @@ async function init() {
                     }
 
                     // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
-                    chrome.storage.local.get('adskip_enabled', function(result) {
-                        const isEnabled = result.adskip_enabled !== false;
-                        if (isEnabled && currentAdTimestamps.length > 0) {
-                            setupAdSkipMonitor(currentAdTimestamps);
-                        }
-                    });
+                    try {
+                        if (!extensionAvailable) return;
+                        chrome.storage.local.get('adskip_enabled', function(result) {
+                            if (!extensionAvailable) return;
+                            const isEnabled = result.adskip_enabled !== false;
+                            if (isEnabled && currentAdTimestamps.length > 0) {
+                                setupAdSkipMonitor(currentAdTimestamps);
+                            }
+                        });
+                    } catch(e) {
+                        extensionAvailable = false;
+                    }
                 }
             }
 
@@ -978,7 +1136,14 @@ async function init() {
                 }
             }
         }
-    });
+    };
+
+    try {
+        chrome.storage.onChanged.addListener(storageListener);
+    } catch(e) {
+        extensionAvailable = false;
+        return;
+    }
 
     // 检查管理员状态
     checkAdminStatus();
