@@ -354,11 +354,13 @@ function verifyAdminAccess(apiKey) {
 
     const inputHash = simpleHash(apiKey);
     const isValid = (inputHash === validKeyHash);
-    // console.log(`验证管理员身份: ${inputHash}`);
+
     if (isValid) {
-        // 将授权状态保存在sessionStorage中，这样刷新页面后还能保持授权
-        // 但关闭浏览器后会清除（临时性）
-        sessionStorage.setItem('adskip_admin_authorized', 'true');
+        // 将授权状态保存在chrome.storage.local中，这样在不同标签页间也能保持授权
+        chrome.storage.local.set({'adskip_admin_authorized': true}, function() {
+            isAdminAuthorized = true;
+            logDebug('管理员授权已保存到存储中');
+        });
         isAdminAuthorized = true;
         return true;
     }
@@ -367,14 +369,19 @@ function verifyAdminAccess(apiKey) {
 }
 
 // 检查管理员权限
-function checkAdminStatus() {
-    // 从sessionStorage中获取授权状态
-    const savedAuth = sessionStorage.getItem('adskip_admin_authorized');
-    if (savedAuth === 'true') {
-        isAdminAuthorized = true;
-        return true;
-    }
-    return false;
+async function checkAdminStatus() {
+    return new Promise((resolve) => {
+        // 从chrome.storage.local中获取授权状态
+        chrome.storage.local.get('adskip_admin_authorized', function(result) {
+            if (result.adskip_admin_authorized === true) {
+                isAdminAuthorized = true;
+                resolve(true);
+            } else {
+                isAdminAuthorized = false;
+                resolve(false);
+            }
+        });
+    });
 }
 
 // 创建链接生成器UI
@@ -386,7 +393,7 @@ function createLinkGenerator() {
     button.className = 'adskip-button';
 
     // 点击展开操作面板
-    button.addEventListener('click', function() {
+    button.addEventListener('click', async function() {
         if (document.getElementById('adskip-panel')) {
             document.getElementById('adskip-panel').remove();
             return;
@@ -402,6 +409,9 @@ function createLinkGenerator() {
         // 获取当前生效的时间段字符串
         const currentTimeString = timestampsToString(currentAdTimestamps);
 
+        // 异步检查管理员状态
+        const isAdmin = await checkAdminStatus();
+
         // 检查是否启用广告跳过功能
         chrome.storage.local.get('adskip_enabled', function(result) {
             const isEnabled = result.adskip_enabled !== false;
@@ -416,30 +426,30 @@ function createLinkGenerator() {
                     </label>
                 </div>
                 <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
-                <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
+                <p>输入广告时间段（格式: 开始-结束,开始-结束）:</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
 
                 <div class="adskip-percentage-container">
-                    <div class="adskip-percentage-label">广告跳过触发范围：前 <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
+                    <div class="adskip-percentage-label">广告跳过进度: <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
                     <input type="range" id="adskip-percentage-slider" min="1" max="100" value="${adSkipPercentage}" class="adskip-percentage-slider">
                     <div class="adskip-percentage-hints">
-                        <span class="adskip-percentage-preset" data-value="1">仅起始(1%)</span>
-                        <span class="adskip-percentage-preset" data-value="50">前半段(50%)</span>
-                        <span class="adskip-percentage-preset" data-value="100">全程(100%)</span>
+                        <span class="adskip-percentage-preset" data-value="1">快速(1%)</span>
+                        <span class="adskip-percentage-preset" data-value="50">中等(50%)</span>
+                        <span class="adskip-percentage-preset" data-value="100">完整(100%)</span>
                     </div>
                 </div>
 
                 <div class="adskip-button-row">
-                    <button id="adskip-generate" class="adskip-btn">🔗 创建分享链接</button>
-                    <button id="adskip-apply" class="adskip-btn">✅ 更新跳过设置</button>
+                    <button id="adskip-generate" class="adskip-btn">🔗 生成链接</button>
+                    <button id="adskip-apply" class="adskip-btn">✅ 应用时间段</button>
                 </div>
                 <div class="adskip-button-row">
-                    <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
-                    <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
+                    <button id="adskip-restore" class="adskip-btn">↩️ 还原时间段</button>
+                    <button id="adskip-reset" class="adskip-btn">🗑️ 重置设置</button>
                 </div>
                 <div id="adskip-status" class="adskip-status">设置已应用</div>
                 <div id="adskip-result" class="adskip-result"></div>
-                ${checkAdminStatus() ? `
+                ${isAdmin ? `
                 <div class="adskip-admin-container">
                     <button id="adskip-admin" class="adskip-admin-btn">🔧 管理员设置</button>
                 </div>
@@ -586,7 +596,7 @@ function createLinkGenerator() {
             });
 
             // 管理员设置按钮
-            if (checkAdminStatus()) {
+            if (isAdmin) {
                 document.getElementById('adskip-admin').addEventListener('click', function() {
                     showAdminPanel();
                 });
@@ -658,13 +668,15 @@ function showAdminPanel() {
     // 获取所有保存的数据
     chrome.storage.local.get(null, function(items) {
         const allKeys = Object.keys(items);
-        // 只处理以adskip_开头且不是特殊配置项的键
+        // 只处理以adskip_开头且是视频ID的键，排除所有特殊配置项
         const adskipKeys = allKeys.filter(key =>
             key.startsWith('adskip_') &&
             key !== 'adskip_debug_mode' &&
             key !== 'adskip_enabled' &&
-            key !== 'adskip_percentage'
+            key !== 'adskip_percentage' &&
+            key !== 'adskip_admin_authorized'
         );
+
         const videoData = [];
 
         for (const key of adskipKeys) {
@@ -704,10 +716,13 @@ function showAdminPanel() {
         adminPanel.id = 'adskip-admin-panel';
         adminPanel.className = 'adskip-admin-panel';
 
-        // 视频列表HTML生成，调整显示顺序
+        // 视频列表HTML生成，调整显示顺序并添加跳转按钮
         let videoListHTML = '';
         if (videoData.length > 0) {
             videoData.forEach((item, index) => {
+                // 构建带广告时间参数的视频链接
+                const videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
+
                 videoListHTML += `
                     <div class="adskip-video-item">
                         <div class="adskip-video-title" title="${item.videoTitle}">
@@ -716,7 +731,10 @@ function showAdminPanel() {
                         <div class="adskip-video-uploader">UP主: ${item.uploader}</div>
                         <div class="adskip-video-header">
                             <span class="adskip-video-id">ID: ${item.videoId}</span>
-                            <button class="adskip-delete-btn" data-index="${index}">🗑️ 删除</button>
+                            <div class="adskip-action-buttons">
+                                <button class="adskip-goto-btn" data-url="${videoLink}" title="跳转到视频">🔗 跳转</button>
+                                <button class="adskip-delete-btn" data-index="${index}" title="删除这条广告跳过设置记录">🗑️ 删除</button>
+                            </div>
                         </div>
                         <div class="adskip-video-time">广告时间: ${item.timeString}</div>
                     </div>
@@ -761,6 +779,21 @@ function showAdminPanel() {
         `;
 
         document.body.appendChild(adminPanel);
+
+        // 绑定跳转按钮点击事件
+        const gotoButtons = document.querySelectorAll('.adskip-goto-btn');
+        gotoButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const url = this.getAttribute('data-url');
+                if (url) {
+                    // 在content script中，使用window.open而不是chrome.tabs.create
+                    window.open(url, '_blank');
+
+                    // 关闭管理员面板
+                    adminPanel.remove();
+                }
+            });
+        });
 
         // 事件绑定
         document.getElementById('adskip-admin-close').addEventListener('click', function() {
@@ -1169,8 +1202,8 @@ async function init() {
         return;
     }
 
-    // 检查管理员状态
-    checkAdminStatus();
+    // 检查管理员状态 (异步)
+    await checkAdminStatus();
 
     // 获取当前视频ID
     currentVideoId = getCurrentVideoId();

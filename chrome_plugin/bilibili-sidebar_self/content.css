@@ -302,43 +302,49 @@ input:checked + .adskip-slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .adskip-video-title {
   font-size: 15px;
   font-weight: bold;
   color: #333;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   word-break: break-all;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
   max-width: 100%;
-  padding-bottom: 4px;
+  padding-bottom: 2px;
   border-bottom: 1px dashed rgba(251, 114, 153, 0.2);
 }
 
 .adskip-video-uploader {
   font-size: 13px;
   color: #666;
-  margin-bottom: 8px;
+  margin-bottom: 3px;
 }
 
 .adskip-video-time {
   font-size: 12px;
   color: #666;
   font-family: monospace;
-  margin-top: 5px;
+  margin-top: 2px;
 }
 
 .adskip-delete-btn {
-  background: #d9534f;
+  background-color: #e74c3c;
   color: white;
   border: none;
-  padding: 4px 8px;
   border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
   cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.adskip-delete-btn:hover {
+  background-color: #c0392b;
 }
 
 .adskip-no-data {
@@ -408,4 +414,26 @@ input:checked + .adskip-slider:before {
 
 #adskip-video-list::-webkit-scrollbar-thumb:hover {
     background: rgba(251, 114, 153, 0.5);
+}
+
+/* 按钮容器样式 */
+.adskip-action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+/* 跳转按钮样式 */
+.adskip-goto-btn {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.adskip-goto-btn:hover {
+    background-color: #2980b9;
 }

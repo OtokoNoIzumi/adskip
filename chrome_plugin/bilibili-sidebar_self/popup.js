@@ -59,19 +59,17 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
-
-  // 尝试显示管理员状态
-  const isAdmin = sessionStorage.getItem('adskip_admin_authorized') === 'true';
-  if (isAdmin) {
-    const adminInfo = document.createElement('div');
-    adminInfo.className = 'instructions';
-    adminInfo.innerHTML = `
-      <h2>管理员状态</h2>
-      <p>当前已登录为管理员</p>
-      <p>会话有效期至浏览器关闭</p>
-    `;
-
-    // 插入到页面中
-    document.querySelector('.feature-list').insertAdjacentElement('afterend', adminInfo);
-  }
+  // 显示管理员状态
+  chrome.storage.local.get('adskip_admin_authorized', function(result) {
+    const isAdmin = result.adskip_admin_authorized === true;
+    if (isAdmin) {
+      const adminInfo = document.createElement('div');
+      adminInfo.className = 'instructions';
+      adminInfo.innerHTML = `
+        <h2>管理员状态</h2>
+        <p>已登录为管理员</p>
+      `;
+      document.querySelector('.feature-list').insertAdjacentElement('afterend', adminInfo);
+    }
+  });
 });
