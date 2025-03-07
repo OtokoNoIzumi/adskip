@@ -223,116 +223,63 @@ function saveAdSkipPercentage(percentage) {
 // 设置广告跳过监控
 function setupAdSkipMonitor(adTimestamps) {
     logDebug('设置广告跳过监控:', adTimestamps);
-    currentAdTimestamps = adTimestamps; // 更新当前生效的时间段
+
+    if (!adTimestamps || !Array.isArray(adTimestamps) || adTimestamps.length === 0) {
+        logDebug('无效的广告时间段，不设置监控');
+        return;
+    }
+
+    // 更新当前生效的时间段
+    currentAdTimestamps = adTimestamps;
 
     // 保存到本地存储
     if (currentVideoId) {
         saveAdTimestampsForVideo(currentVideoId, adTimestamps);
     }
 
-    let videoPlayer = null;
-    let lastCheckTime = 0;
-
-    function findVideoPlayer() {
-        const player = document.querySelector('#bilibili-player video') ||
-                      document.querySelector('.bpx-player-video-area video');
-        if (player && player !== videoPlayer) {
-            logDebug('找到新的视频播放器元素');
-        }
-        return player;
-    }
-
-    // 设置事件监听
-    function setupEventListener() {
-        if (!videoPlayer) return;
-
-        // 避免重复添加事件
-        videoPlayer.removeEventListener('seeking', onSeeking);
-        videoPlayer.addEventListener('seeking', onSeeking);
-
-        logDebug('视频事件监听已设置');
-    }
-
-    // 处理seeking事件，只记录是否是脚本操作
-    function onSeeking() {
-        if (scriptInitiatedSeek) {
-            logDebug("这是脚本引起的seeking事件，忽略");
-            scriptInitiatedSeek = false;
-        }
-    }
-
-    // 核心检查函数 - 简化逻辑
-    function checkAndSkip() {
-        // 检查是否启用广告跳过功能
-        chrome.storage.local.get('adskip_enabled', function(result) {
-            if (result.adskip_enabled === false) {
-                logDebug('广告跳过功能已禁用，不设置监视器');
-                return;
-            }
-
-            // 查找视频播放器
-            if (!videoPlayer) {
-                videoPlayer = findVideoPlayer();
-                if (!videoPlayer) {
-                    return;
-                }
-                setupEventListener();
-            }
-
-            if (videoPlayer.paused || videoPlayer.ended) return;
-
-            const currentTime = videoPlayer.currentTime;
-
-            // 检查视频ID是否变化
-            const newVideoId = getCurrentVideoId();
-            if (newVideoId !== currentVideoId && newVideoId !== '') {
-                logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
-                lastVideoId = currentVideoId;
-                currentVideoId = newVideoId;
-                reinitialize();
-                return;
-            }
-
-            // 记录时间跳跃情况，但不再使用userInteracted标志
-            if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
-                logDebug(`检测到大幅时间跳跃: ${lastCheckTime} -> ${currentTime}`);
-            }
-            lastCheckTime = currentTime;
-
-            // 更新的广告检测逻辑：使用百分比计算
-            for (const ad of currentAdTimestamps) {
-                // 计算广告时长
-                const adDuration = ad.end_time - ad.start_time;
-
-                // 根据百分比计算跳过点，但至少跳过1秒
-                const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
-
-                // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
-                const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
-
-                // 如果在广告开始区域，直接跳到结束
-                if (currentTime >= ad.start_time && currentTime < adStartRange) {
-                    logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time}s`);
-
-                    // 标记为脚本操作并跳转
-                    scriptInitiatedSeek = true;
-                    videoPlayer.currentTime = ad.end_time;
-                    logDebug(`已跳过广告: ${ad.start_time}s-${ad.end_time}s`);
-                    break;
-                }
-            }
-        });
-    }
-
     // 清除旧监控
     if (window.adSkipCheckInterval) {
         clearInterval(window.adSkipCheckInterval);
         logDebug('清除旧的广告监控定时器');
+        window.adSkipCheckInterval = null;
     }
 
-    // 设置新监控
-    window.adSkipCheckInterval = setInterval(checkAndSkip, 500);
-    logDebug('设置新的广告监控定时器');
+    // 添加window unload事件监听，确保在页面卸载时清理资源
+    window.addEventListener('unload', function() {
+        if (window.adSkipCheckInterval) {
+            clearInterval(window.adSkipCheckInterval);
+            window.adSkipCheckInterval = null;
+        }
+    });
+
+    // 设置新监控，使用try-catch包装以处理可能的错误
+    try {
+        window.adSkipCheckInterval = setInterval(function() {
+            // 先检查扩展上下文是否仍然有效
+            if (!extensionAvailable && !checkExtensionContext()) {
+                clearInterval(window.adSkipCheckInterval);
+                window.adSkipCheckInterval = null;
+                return;
+            }
+
+            try {
+                checkAndSkip();
+            } catch (e) {
+                // 捕获checkAndSkip中可能出现的错误
+                if (e.message && e.message.includes('Extension context invalidated')) {
+                    extensionAvailable = false;
+                    clearInterval(window.adSkipCheckInterval);
+                    window.adSkipCheckInterval = null;
+                    console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
+                } else {
+                    console.error("广告跳过检查出错:", e);
+                }
+            }
+        }, 500);
+        logDebug('设置新的广告监控定时器');
+    } catch (e) {
+        console.error("设置广告监控失败:", e);
+    }
 }
 
 // 验证管理员身份
@@ -1056,6 +1003,120 @@ function safeApiCall(callback) {
             console.error("Bilibili广告跳过插件错误:", e);
         }
         return false;
+    }
+}
+
+// 核心检查函数 - 简化逻辑
+function checkAndSkip() {
+    // 检查扩展上下文是否有效
+    if (!extensionAvailable && !checkExtensionContext()) {
+        // 如果扩展上下文已失效，停止所有操作
+        if (window.adSkipCheckInterval) {
+            clearInterval(window.adSkipCheckInterval);
+            window.adSkipCheckInterval = null;
+        }
+        return;
+    }
+
+    // 检查是否启用广告跳过功能
+    try {
+        chrome.storage.local.get('adskip_enabled', function(result) {
+            // 再次检查扩展上下文是否有效
+            if (!extensionAvailable) return;
+
+            if (result.adskip_enabled === false) {
+                logDebug('广告跳过功能已禁用，不执行检查');
+                return;
+            }
+
+            // 以下是检查和跳过广告的实际逻辑
+            let videoPlayer = null;
+            let lastCheckTime = 0;
+
+            // 查找视频播放器
+            if (!videoPlayer) {
+                videoPlayer = document.querySelector('#bilibili-player video') ||
+                              document.querySelector('.bpx-player-video-area video') ||
+                              document.querySelector('video');
+
+                if (!videoPlayer) {
+                    return;
+                }
+
+                // 设置seeking事件监听
+                if (videoPlayer) {
+                    // 避免重复添加事件
+                    videoPlayer.removeEventListener('seeking', function(e) {
+                        if (scriptInitiatedSeek) {
+                            logDebug("这是脚本引起的seeking事件，忽略");
+                            scriptInitiatedSeek = false;
+                        }
+                    });
+
+                    videoPlayer.addEventListener('seeking', function(e) {
+                        if (scriptInitiatedSeek) {
+                            logDebug("这是脚本引起的seeking事件，忽略");
+                            scriptInitiatedSeek = false;
+                        }
+                    });
+                }
+            }
+
+            if (videoPlayer.paused || videoPlayer.ended) return;
+
+            const currentTime = videoPlayer.currentTime;
+
+            // 检查视频ID是否变化
+            const newVideoId = getCurrentVideoId();
+            if (newVideoId !== currentVideoId && newVideoId !== '') {
+                logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
+                lastVideoId = currentVideoId;
+                currentVideoId = newVideoId;
+                reinitialize();
+                return;
+            }
+
+            // 记录时间跳跃情况
+            if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
+                logDebug(`检测到大幅时间跳跃: ${lastCheckTime} -> ${currentTime}`);
+            }
+            lastCheckTime = currentTime;
+
+            // 广告检测逻辑：使用百分比计算
+            for (const ad of currentAdTimestamps) {
+                // 计算广告时长
+                const adDuration = ad.end_time - ad.start_time;
+
+                // 根据百分比计算跳过点，但至少跳过1秒
+                const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
+
+                // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
+                const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
+
+                // 如果在广告开始区域，直接跳到结束
+                if (currentTime >= ad.start_time && currentTime < adStartRange) {
+                    logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time}s`);
+
+                    // 标记为脚本操作并跳转
+                    scriptInitiatedSeek = true;
+                    videoPlayer.currentTime = ad.end_time;
+                    logDebug(`已跳过广告: ${ad.start_time}s-${ad.end_time}s`);
+                    break;
+                }
+            }
+        });
+    } catch(e) {
+        // 捕获任何可能的错误
+        if (e.message && e.message.includes('Extension context invalidated')) {
+            extensionAvailable = false;
+            if (window.adSkipCheckInterval) {
+                clearInterval(window.adSkipCheckInterval);
+                window.adSkipCheckInterval = null;
+            }
+            console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
+        } else {
+            console.error("Bilibili广告跳过插件错误:", e);
+        }
     }
 }
 
