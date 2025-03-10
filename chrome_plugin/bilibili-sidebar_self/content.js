@@ -49,9 +49,18 @@ function updateDebugModeToggle() {
     }
 }
 
-// 获取当前视频ID (BV或AV)
+// 获取当前视频ID (BV或AV或EP)
 function getCurrentVideoId() {
     const pathname = window.location.pathname;
+
+    // 检查是否是番剧页面
+    const epMatch = pathname.match(/\/bangumi\/play\/(ep[\d]+)/);
+    if (epMatch && epMatch[1]) {
+        logDebug(`从番剧路径中提取到EP ID: ${epMatch[1]}`);
+        return epMatch[1]; // 返回EP ID
+    }
+
+    // 检查是否是普通视频页面
     const bvMatch = pathname.match(/\/video\/(BV[\w]+)/);
     if (bvMatch && bvMatch[1]) {
         logDebug(`从路径中提取到BV ID: ${bvMatch[1]}`);
@@ -64,6 +73,19 @@ function getCurrentVideoId() {
     if (avid) {
         logDebug(`从URL参数中提取到AV ID: av${avid}`);
         return 'av' + avid;
+    }
+
+    // 如果没有找到EP/BV/AV ID，尝试从URL中提取番剧ss_id或ep_id
+    const ssid = urlParams.get('ss_id');
+    if (ssid) {
+        logDebug(`从URL参数中提取到番剧SS ID: ss${ssid}`);
+        return 'ss' + ssid;
+    }
+
+    const epid = urlParams.get('ep_id');
+    if (epid) {
+        logDebug(`从URL参数中提取到番剧EP ID: ep${epid}`);
+        return 'ep' + epid;
     }
 
     logDebug('无法提取视频ID');
@@ -1359,6 +1381,8 @@ function findVideoPlayer() {
     // 重新查找播放器
     const player = document.querySelector('#bilibili-player video') ||
                    document.querySelector('.bpx-player-video-area video') ||
+                   document.querySelector('.bpx-player video') ||  // 番剧播放器
+                   document.querySelector('.bilibili-player-video video') || // 额外检查番剧播放器
                    document.querySelector('video');
 
     // 更新缓存和时间戳
@@ -1378,7 +1402,9 @@ function findProgressBar() {
 
     // 重新查找进度条
     const progressBar = document.querySelector('.bpx-player-progress-wrap') ||
-                        document.querySelector('.bilibili-player-video-progress-wrap');
+                        document.querySelector('.bilibili-player-video-progress-wrap') ||
+                        document.querySelector('.squirtle-progress') || // 番剧进度条
+                        document.querySelector('.bpx-player-progress'); // 番剧新版进度条
 
     // 更新缓存和时间戳
     cachedProgressBar = progressBar;
