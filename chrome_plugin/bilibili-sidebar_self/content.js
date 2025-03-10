@@ -708,7 +708,14 @@ function showAdminPanel() {
         if (videoData.length > 0) {
             videoData.forEach((item, index) => {
                 // 构建带广告时间参数的视频链接
-                const videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
+                let videoLink;
+                if (item.videoId.startsWith('ep')) {
+                    // 番剧链接格式
+                    videoLink = `https://www.bilibili.com/bangumi/play/${item.videoId}?adskip=${item.timeString}`;
+                } else {
+                    // 普通视频链接格式
+                    videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
+                }
 
                 videoListHTML += `
                     <div class="adskip-video-item">
