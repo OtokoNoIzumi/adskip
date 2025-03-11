@@ -298,13 +298,6 @@ input:checked + .adskip-slider:before {
   border: 1px solid rgba(251, 114, 153, 0.2);
 }
 
-.adskip-video-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 3px;
-}
-
 .adskip-video-title {
   font-size: 15px;
   font-weight: bold;
@@ -319,17 +312,29 @@ input:checked + .adskip-slider:before {
   border-bottom: 1px dashed rgba(251, 114, 153, 0.2);
 }
 
-.adskip-video-uploader {
-  font-size: 13px;
+.adskip-video-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
   color: #666;
-  margin-bottom: 3px;
+  margin-bottom: 5px;
+}
+
+.adskip-video-info span {
+  white-space: nowrap;
+}
+
+.adskip-video-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 3px;
 }
 
 .adskip-video-time {
   font-size: 12px;
   color: #666;
-  font-family: monospace;
-  margin-top: 2px;
 }
 
 .adskip-delete-btn {
@@ -420,6 +425,7 @@ input:checked + .adskip-slider:before {
 .adskip-action-buttons {
     display: flex;
     gap: 5px;
+    align-items: center;
 }
 
 /* 跳转按钮样式 */

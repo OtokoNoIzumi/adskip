@@ -120,9 +120,45 @@ function parseAdSkipParam() {
     }
 }
 
-// 将时间戳数组转换为字符串格式
+// 将时间戳数组转换为字符串格式 (用于URL参数)
 function timestampsToString(timestamps) {
     return timestamps.map(ad => `${ad.start_time}-${ad.end_time}`).join(',');
+}
+
+// 格式化单个时间段为可读格式
+function formatSingleTimestamp(startTime, endTime) {
+    // 对输入时间取整
+    const roundedStartTime = Math.round(startTime);
+    const roundedEndTime = Math.round(endTime);
+
+    // 格式化开始时间
+    const startHours = Math.floor(roundedStartTime / 3600);
+    const startMinutes = Math.floor((roundedStartTime % 3600) / 60);
+    const startSeconds = roundedStartTime % 60;
+
+    // 格式化结束时间
+    const endHours = Math.floor(roundedEndTime / 3600);
+    const endMinutes = Math.floor((roundedEndTime % 3600) / 60);
+    const endSeconds = roundedEndTime % 60;
+
+    // 构建格式化字符串，如果小时为0则不显示
+    let startFormatted = startHours > 0
+        ? `${startHours}:${startMinutes.toString().padStart(2, '0')}:${startSeconds.toString().padStart(2, '0')}`
+        : `${startMinutes}:${startSeconds.toString().padStart(2, '0')}`;
+
+    let endFormatted = endHours > 0
+        ? `${endHours}:${endMinutes.toString().padStart(2, '0')}:${endSeconds.toString().padStart(2, '0')}`
+        : `${endMinutes}:${endSeconds.toString().padStart(2, '0')}`;
+
+    return `${startFormatted}-${endFormatted}`;
+}
+
+// 将时间戳数组转换为可读的时间格式 (用于UI显示)
+function formatTimestampsForDisplay(timestamps) {
+    if (!timestamps || !timestamps.length) return '无';
+
+    // 将每个时间段格式化为 hh:mm:ss 或 mm:ss 格式
+    return timestamps.map(ad => formatSingleTimestamp(ad.start_time, ad.end_time)).join(', ');
 }
 
 // 加载指定视频ID的广告时间戳
@@ -145,7 +181,10 @@ function loadAdTimestampsForVideo(videoId) {
 
                 const parsed = JSON.parse(savedData);
                 logDebug(`成功加载视频 ${videoId} 的广告时间段:`, parsed);
-                resolve(parsed);
+
+                // 新的数据格式：直接获取timestamps数组
+                const timestamps = parsed.timestamps || [];
+                resolve(timestamps);
             });
         } catch (e) {
             console.error(`--==--LOG: 加载视频 ${videoId} 广告数据失败:`, e);
@@ -187,7 +226,13 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
         _uploader: videoInfo.uploader
     }));
 
-    const jsonData = JSON.stringify(timestampsWithInfo);
+    // 添加保存时间戳
+    const saveData = {
+        timestamps: timestampsWithInfo,
+        savedAt: Date.now() // 添加时间戳记录保存时间
+    };
+
+    const jsonData = JSON.stringify(saveData);
 
     return new Promise((resolve, reject) => {
         chrome.storage.local.set({ [`adskip_${videoId}`]: jsonData }, function() {
@@ -670,34 +715,37 @@ function showAdminPanel() {
             try {
                 const videoId = key.replace('adskip_', '');
                 const data = items[key];
-                const timestamps = JSON.parse(data);
+                const parsedData = JSON.parse(data);
+
+                // 使用新的数据格式
+                const timestamps = parsedData.timestamps || [];
+                const savedAt = parsedData.savedAt || Date.now();
 
                 // 确保timestamps是数组
-                if (Array.isArray(timestamps)) {
-                    // 提取视频标题和UP主信息（如果有）
-                    let videoTitle = '未知视频';
-                    let uploader = '未知UP主';
-
-                    // 尝试从第一个时间戳中获取信息
-                    if (timestamps.length > 0) {
-                        videoTitle = timestamps[0]._videoTitle || '未知视频';
-                        uploader = timestamps[0]._uploader || '未知UP主';
-                    }
+                if (Array.isArray(timestamps) && timestamps.length > 0) {
+                    // 提取视频标题和UP主信息
+                    const videoTitle = timestamps[0]._videoTitle || '未知视频';
+                    const uploader = timestamps[0]._uploader || '未知UP主';
 
                     videoData.push({
                         videoId,
                         timestamps,
-                        timeString: timestampsToString(timestamps),
+                        timeString: timestampsToString(timestamps), // 用于URL参数
+                        displayTime: formatTimestampsForDisplay(timestamps), // 用于UI显示
                         videoTitle,
-                        uploader
+                        uploader,
+                        savedAt
                     });
                 } else {
-                    console.error(`--==--LOG: 数据格式错误: ${key}, 预期数组但收到:`, typeof timestamps);
+                    console.error(`--==--LOG: 数据格式错误或空数据: ${key}`);
                 }
             } catch (e) {
                 console.error(`--==--LOG: 解析存储数据失败: ${key}`, e);
             }
         }
+
+        // 按保存时间排序，最新的在前面
+        videoData.sort((a, b) => b.savedAt - a.savedAt);
 
         const adminPanel = document.createElement('div');
         adminPanel.id = 'adskip-admin-panel';
@@ -717,20 +765,27 @@ function showAdminPanel() {
                     videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
                 }
 
+                // 格式化保存时间
+                const savedDate = new Date(item.savedAt);
+                const formattedDate = `${savedDate.getFullYear()}-${(savedDate.getMonth()+1).toString().padStart(2, '0')}-${savedDate.getDate().toString().padStart(2, '0')} ${savedDate.getHours().toString().padStart(2, '0')}:${savedDate.getMinutes().toString().padStart(2, '0')}`;
+
                 videoListHTML += `
                     <div class="adskip-video-item">
                         <div class="adskip-video-title" title="${item.videoTitle}">
                             ${item.videoTitle}
                         </div>
-                        <div class="adskip-video-uploader">UP主: ${item.uploader}</div>
-                        <div class="adskip-video-header">
-                            <span class="adskip-video-id">ID: ${item.videoId}</span>
+                        <div class="adskip-video-info">
+                            <span>UP主: ${item.uploader}</span>
+                            <span>ID: ${item.videoId}</span>
+                            <span>保存: ${formattedDate}</span>
+                        </div>
+                        <div class="adskip-video-footer">
+                            <span class="adskip-video-time">广告时间: ${item.displayTime}</span>
                             <div class="adskip-action-buttons">
                                 <button class="adskip-goto-btn" data-url="${videoLink}" title="跳转到视频">🔗 跳转</button>
                                 <button class="adskip-delete-btn" data-index="${index}" title="删除这条广告跳过设置记录">🗑️ 删除</button>
                             </div>
                         </div>
-                        <div class="adskip-video-time">广告时间: ${item.timeString}</div>
                     </div>
                 `;
             });
@@ -1293,7 +1348,7 @@ function markAdPositionsOnProgressBar() {
         const tooltip = document.createElement('div');
         tooltip.className = 'adskip-marker-tooltip';
         tooltip.style.left = `${startPercent + (width / 2)}%`;
-        tooltip.textContent = `广告: ${Number.isInteger(ad.start_time) ? ad.start_time : ad.start_time.toFixed(1)}s - ${Number.isInteger(ad.end_time) ? ad.end_time : ad.end_time.toFixed(1)}s`;
+        tooltip.textContent = `广告: ${formatSingleTimestamp(ad.start_time, ad.end_time)}`;
         markerContainer.appendChild(tooltip);
 
         // 为标记添加事件监听
