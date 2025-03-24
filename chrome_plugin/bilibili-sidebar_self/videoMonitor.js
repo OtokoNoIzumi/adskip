@@ -9,6 +9,11 @@
 let lastKnownPlaybackTime = 0;
 let lastPlaybackTimeUpdate = 0;
 
+// 添加全局变量用于缓存白名单状态
+let _lastUploaderName = '';
+let _lastWhitelistStatus = false;
+let _lastGlobalSkipStatus = true;
+
 // 添加全局函数，用于获取当前播放时间（优先使用缓存的时间）
 function getCurrentRealPlaybackTime() {
     const now = Date.now();
@@ -137,13 +142,44 @@ function checkAndSkip() {
 
     // 检查是否启用广告跳过功能
     try {
-        chrome.storage.local.get('adskip_enabled', function(result) {
+        chrome.storage.local.get('adskip_enabled', async function(result) {
             // 再次检查扩展上下文是否有效
             if (!extensionAvailable) return;
 
             if (result.adskip_enabled === false) {
                 adskipUtils.logDebug('广告跳过功能已禁用，不执行检查');
                 return;
+            }
+
+            // 获取当前视频的UP主信息
+            const { uploader } = await adskipStorage.getCurrentVideoUploader();
+
+            // 检查UP主是否在白名单中
+            const isUploaderWhitelisted = await adskipStorage.checkUploaderInWhitelist(uploader);
+            const globalSkipEnabled = result.adskip_enabled !== false;
+
+            // 检查白名单状态是否有变化，只有变化时才输出日志
+            const statusChanged =
+                uploader !== _lastUploaderName ||
+                isUploaderWhitelisted !== _lastWhitelistStatus ||
+                globalSkipEnabled !== _lastGlobalSkipStatus;
+
+            // 更新上次状态缓存
+            _lastUploaderName = uploader;
+            _lastWhitelistStatus = isUploaderWhitelisted;
+            _lastGlobalSkipStatus = globalSkipEnabled;
+
+            if (isUploaderWhitelisted) {
+                // 只在状态变化时输出日志
+                if (statusChanged) {
+                    adskipUtils.logDebug(`UP主"${uploader}"在白名单中且启用状态，不执行自动跳过 (手动模式：${!globalSkipEnabled ? '是' : '否'})`);
+                }
+                return;
+            }
+
+            // 只在状态变化时输出日志
+            if (statusChanged) {
+                adskipUtils.logDebug(`当前视频UP主："${uploader}", 白名单状态：${isUploaderWhitelisted ? '启用' : '未启用/不在白名单'}, 全局跳过：${globalSkipEnabled ? '开启' : '关闭'}`);
             }
 
             // 以下是检查和跳过广告的实际逻辑
@@ -312,7 +348,7 @@ function markAdPositionsOnProgressBar() {
         });
 
         // 添加点击事件 - 实现手动跳过功能
-        marker.addEventListener('click', function(e) {
+        marker.addEventListener('click', async function(e) {
             // 阻止事件冒泡，以防触发进度条的点击事件
             e.stopPropagation();
             e.preventDefault(); // 添加阻止默认行为
@@ -337,8 +373,14 @@ function markAdPositionsOnProgressBar() {
             const clickTimePosition = adStartTime + (adDuration * clickRatio);
 
             // 检查全局是否关闭了广告跳过
-            chrome.storage.local.get('adskip_enabled', function(result) {
+            chrome.storage.local.get('adskip_enabled', async function(result) {
                 const globalSkipEnabled = result.adskip_enabled !== false;
+
+                // 获取当前UP主信息
+                const { uploader } = await adskipStorage.getCurrentVideoUploader();
+
+                // 检查UP主是否在白名单中
+                const isUploaderWhitelisted = await adskipStorage.checkUploaderInWhitelist(uploader);
 
                 // 检查当前播放器时间 - 用于比较验证
                 const currentVideoTime = videoPlayer.currentTime;
@@ -350,18 +392,18 @@ function markAdPositionsOnProgressBar() {
                 const isClickAheadOfPlayback = clickTimePosition > currentPlaybackTime;
 
                 // 记录详细的调试信息，同时记录实时播放器时间和缓存时间的差异
-                adskipUtils.logDebug(`点击处理 - 缓存时间: ${currentPlaybackTime.toFixed(2)}s, 实时时间: ${currentVideoTime.toFixed(2)}s, 差异: ${(currentVideoTime - currentPlaybackTime).toFixed(2)}s, 广告范围: ${adStartTime.toFixed(2)}s-${adEndTime.toFixed(2)}s, 点击位置时间: ${clickTimePosition.toFixed(2)}s`);
+                adskipUtils.logDebug(`点击处理 - 缓存时间: ${currentPlaybackTime.toFixed(2)}s, 实时时间: ${currentVideoTime.toFixed(2)}s, 差异: ${(currentVideoTime - currentPlaybackTime).toFixed(2)}s, 广告范围: ${adStartTime.toFixed(2)}s-${adEndTime.toFixed(2)}s, 点击位置时间: ${clickTimePosition.toFixed(2)}s, UP主: ${uploader}, 白名单状态: ${isUploaderWhitelisted ? '是' : '否'}`);
 
-                // 满足所有条件时才执行跳过：
-                // 1. 全局跳过功能关闭
-                // 2. 当前播放位置在广告范围内
+                // 满足条件时执行跳过：
+                // 1. 全局跳过关闭或UP主在白名单中，且
+                // 2. 当前播放位置在广告范围内，且
                 // 3. 点击位置在当前播放进度之后
-                if (!globalSkipEnabled && isInAdRange && isClickAheadOfPlayback) {
+                if (((!globalSkipEnabled) || (globalSkipEnabled && isUploaderWhitelisted)) && isInAdRange && isClickAheadOfPlayback) {
                     adskipUtils.logDebug(`手动跳过广告: ${adStartTime.toFixed(2)}s-${adEndTime.toFixed(2)}s (点击位置: ${clickTimePosition.toFixed(2)}s)，跳转前时间: ${currentPlaybackTime.toFixed(2)}s`);
                     scriptInitiatedSeek = true;
                     videoPlayer.currentTime = adEndTime;
-                } else if (globalSkipEnabled) {
-                    // 如果全局跳过功能开启，告知用户
+                } else if (globalSkipEnabled && !isUploaderWhitelisted) {
+                    // 如果全局跳过功能开启且UP主不在白名单中，告知用户
                     adskipUtils.logDebug('全局广告跳过已启用，无需手动跳过');
                     // 可以在这里添加一个临时提示
                 } else if (!isInAdRange) {
@@ -584,6 +626,97 @@ async function reinitialize() {
         }
     });
 }
+
+// 添加存储变更监听器
+chrome.storage.onChanged.addListener(function(changes, namespace) {
+    if (namespace !== 'local') return;
+
+    // 监听广告跳过功能开关变化
+    if (changes.adskip_enabled !== undefined) {
+        const isEnabled = changes.adskip_enabled.newValue !== false;
+        adskipUtils.logDebug(`广告跳过功能状态已更新: ${isEnabled ? '启用' : '禁用'}`);
+
+        // 如果禁用，清除当前的监控
+        if (!isEnabled && window.adSkipCheckInterval) {
+            clearInterval(window.adSkipCheckInterval);
+            window.adSkipCheckInterval = null;
+        } else if (isEnabled && currentAdTimestamps.length > 0) {
+            // 重新启用监控
+            setupAdSkipMonitor(currentAdTimestamps);
+        }
+    }
+
+    // 监听调试模式变化
+    if (changes.adskip_debug_mode !== undefined) {
+        debugMode = changes.adskip_debug_mode.newValue || false;
+        adskipUtils.logDebug(`调试模式状态已更新: ${debugMode ? '启用' : '禁用'}`);
+    }
+
+    // 监听广告跳过百分比变化
+    if (changes.adskip_percentage !== undefined) {
+        adSkipPercentage = changes.adskip_percentage.newValue;
+        adskipUtils.logDebug(`广告跳过百分比已更新: ${adSkipPercentage}%`);
+
+        // 如果已启用自动跳过且有广告时间段，重新应用设置
+        chrome.storage.local.get('adskip_enabled', function(result) {
+            if (result.adskip_enabled !== false && currentAdTimestamps.length > 0) {
+                setupAdSkipMonitor(currentAdTimestamps);
+            }
+        });
+    }
+
+    // 监听白名单变化
+    if (changes.adskip_uploader_whitelist !== undefined) {
+        adskipUtils.logDebug('白名单已更新，重新检查当前视频UP主状态');
+
+        // 重新检查当前视频UP主是否在白名单中
+        (async function() {
+            const { uploader } = await adskipStorage.getCurrentVideoUploader();
+            const isUploaderWhitelisted = await adskipStorage.checkUploaderInWhitelist(uploader);
+            adskipUtils.logDebug(`白名单更新后检查: UP主 "${uploader}" 白名单状态: ${isUploaderWhitelisted ? '在白名单中' : '不在白名单中'}`);
+
+            // 更新已打开面板中的UI元素（如果面板已打开）
+            const panel = document.getElementById('adskip-panel');
+            if (panel) {
+                // 更新开关状态
+                const whitelistToggle = document.getElementById('adskip-whitelist-toggle');
+                if (whitelistToggle) {
+                    whitelistToggle.checked = isUploaderWhitelisted;
+                }
+
+                // 更新模式描述
+                chrome.storage.local.get('adskip_enabled', function(result) {
+                    const globalSkipEnabled = result.adskip_enabled !== false;
+                    const toggleDesc = document.querySelector('.adskip-toggle-desc');
+
+                    if (toggleDesc) {
+                        if (!globalSkipEnabled) {
+                            toggleDesc.textContent = '⏸️ 手动模式，可以点击广告区域手动跳过';
+                        } else if (isUploaderWhitelisted) {
+                            toggleDesc.textContent = '🔹 白名单已启用，仅手动跳过';
+                        } else {
+                            toggleDesc.textContent = '✅ 自动跳过已启用';
+                        }
+                    }
+                });
+
+                // 使用动画效果提示状态已更新
+                const statusElement = document.getElementById('adskip-status');
+                if (statusElement) {
+                    statusElement.style.display = 'block';
+                    statusElement.innerText = `白名单状态已更新`;
+                    statusElement.style.opacity = '0';
+                    statusElement.style.transition = 'opacity 0.3s ease-in-out';
+                    setTimeout(() => {
+                        statusElement.style.opacity = '1';
+                        // 3秒后淡出
+                        setTimeout(() => { statusElement.style.opacity = '0'; }, 3000);
+                    }, 50);
+                }
+            }
+        })();
+    }
+});
 
 // 导出模块函数
 window.adskipVideoMonitor = {

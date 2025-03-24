@@ -241,7 +241,466 @@ function updateDebugModeToggle() {
     if (adminDebugToggle) {
         adminDebugToggle.checked = debugMode;
     }
+
+    // 同时更新选项页面中的调试模式开关
+    const optionsDebugToggle = document.getElementById('debug-mode');
+    if (optionsDebugToggle) {
+        optionsDebugToggle.checked = debugMode;
+    }
 }
+
+// 添加一个变量用于缓存上次白名单状态的哈希
+let lastWhitelistHash = '';
+
+/**
+ * 加载UP主白名单列表
+ * @returns {Promise<Array>} UP主白名单数组
+ */
+function loadUploaderWhitelist() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get('adskip_uploader_whitelist', (result) => {
+            if (result.adskip_uploader_whitelist) {
+                try {
+                    const whitelist = JSON.parse(result.adskip_uploader_whitelist);
+
+                    // 计算当前白名单的哈希值（简单方法：长度+第一项名称）
+                    const simpleHash = `${whitelist.length}_${whitelist.length > 0 ? (typeof whitelist[0] === 'string' ? whitelist[0] : whitelist[0]?.name || '') : ''}`;
+
+                    // 只有当白名单内容变化时才输出日志
+                    if (simpleHash !== lastWhitelistHash) {
+                        adskipUtils.logDebug('已加载UP主白名单', whitelist);
+                        lastWhitelistHash = simpleHash;
+                    }
+
+                    resolve(whitelist);
+                } catch (e) {
+                    console.error('解析UP主白名单失败', e);
+                    resolve([]);
+                }
+            } else {
+                // 同样使用节流，避免反复输出"未找到白名单"
+                if (lastWhitelistHash !== 'empty') {
+                    adskipUtils.logDebug('未找到UP主白名单，返回空列表');
+                    lastWhitelistHash = 'empty';
+                }
+                resolve([]);
+            }
+        });
+    });
+}
+
+/**
+ * 保存UP主白名单列表
+ * @param {Array} whitelist UP主白名单数组
+ * @returns {Promise<Array>} 保存的白名单数组
+ */
+function saveUploaderWhitelist(whitelist) {
+    return new Promise((resolve, reject) => {
+        if (!Array.isArray(whitelist)) {
+            reject(new Error('白名单必须是数组'));
+            return;
+        }
+
+        // 确保白名单中的项目格式统一
+        const formattedWhitelist = whitelist.map(item => {
+            if (typeof item === 'string') {
+                return {
+                    name: item,
+                    addedAt: item.addedAt || Date.now(),
+                    enabled: item.enabled !== undefined ? item.enabled : true
+                };
+            }
+            return {
+                ...item,
+                addedAt: item.addedAt || Date.now(),
+                enabled: item.enabled !== undefined ? item.enabled : true
+            };
+        });
+
+        chrome.storage.local.set({ 'adskip_uploader_whitelist': JSON.stringify(formattedWhitelist) }, () => {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+            } else {
+                adskipUtils.logDebug('已保存UP主白名单', formattedWhitelist);
+                resolve(formattedWhitelist);
+            }
+        });
+    });
+}
+
+/**
+ * 检查UP主是否在白名单中
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<boolean>} 是否在白名单中且启用
+ */
+async function checkUploaderInWhitelist(uploaderName) {
+    if (!uploaderName) return false;
+
+    const whitelist = await loadUploaderWhitelist();
+    const match = whitelist.find(item =>
+        (typeof item === 'string' && item === uploaderName) ||
+        (item.name === uploaderName && item.enabled !== false)
+    );
+
+    return !!match;
+}
+
+/**
+ * 将UP主添加到白名单 - 完善事件发送机制
+ * @param {string} uploader UP主名称
+ */
+async function addUploaderToWhitelist(uploader) {
+    if (!uploader) return Promise.reject(new Error('UP主名称不能为空'));
+
+    try {
+        const whitelist = await loadUploaderWhitelist();
+        // 检查是否已存在
+        const existingIndex = whitelist.findIndex(item =>
+            (typeof item === 'string' && item === uploader) ||
+            (typeof item === 'object' && item.name === uploader)
+        );
+
+        if (existingIndex >= 0) {
+            // 如果已存在但可能被禁用，确保启用
+            if (typeof whitelist[existingIndex] === 'object') {
+                whitelist[existingIndex].enabled = true;
+            }
+            // 已存在且为字符串形式或已启用，无需修改
+        } else {
+            // 添加新条目，使用完整对象格式
+            whitelist.push({
+                name: uploader,
+                addedAt: Date.now(),
+                enabled: true
+            });
+        }
+
+        // 保存更新后的白名单
+        await new Promise((resolve, reject) => {
+            chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                } else {
+                    // 确保此更改触发事件
+                    // Chrome 会自动处理，但这里显式记录一下以确保
+                    adskipUtils.logDebug(`已将UP主 "${uploader}" 添加到白名单并触发事件`);
+                    resolve();
+                }
+            });
+        });
+
+        return whitelist;
+    } catch (error) {
+        console.error('添加UP主到白名单失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 禁用白名单中的UP主 - 确保触发事件
+ * @param {string} uploader UP主名称
+ */
+async function disableUploaderInWhitelist(uploader) {
+    if (!uploader) return Promise.reject(new Error('UP主名称不能为空'));
+
+    try {
+        const whitelist = await loadUploaderWhitelist();
+        let modified = false;
+
+        // 查找并禁用
+        for (let i = 0; i < whitelist.length; i++) {
+            const item = whitelist[i];
+            if ((typeof item === 'string' && item === uploader) ||
+                (typeof item === 'object' && item.name === uploader)) {
+                // 转换为对象形式并禁用
+                if (typeof item === 'string') {
+                    whitelist[i] = {
+                        name: uploader,
+                        addedAt: Date.now(),
+                        enabled: false
+                    };
+                } else {
+                    whitelist[i].enabled = false;
+                }
+                modified = true;
+                break;
+            }
+        }
+
+        if (modified) {
+            // 保存更新后的白名单并确保触发事件
+            await new Promise((resolve, reject) => {
+                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                    } else {
+                        adskipUtils.logDebug(`已禁用白名单中的UP主 "${uploader}" 并触发事件`);
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        return whitelist;
+    } catch (error) {
+        console.error('禁用白名单UP主失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 启用白名单中的UP主 - 确保触发事件
+ * @param {string} uploader UP主名称
+ */
+async function enableUploaderInWhitelist(uploader) {
+    if (!uploader) return Promise.reject(new Error('UP主名称不能为空'));
+
+    try {
+        const whitelist = await loadUploaderWhitelist();
+        let modified = false;
+
+        // 查找并启用
+        for (let i = 0; i < whitelist.length; i++) {
+            const item = whitelist[i];
+            if ((typeof item === 'string' && item === uploader) ||
+                (typeof item === 'object' && item.name === uploader)) {
+                // 如果是字符串形式，已默认启用
+                if (typeof item === 'object') {
+                    whitelist[i].enabled = true;
+                    modified = true;
+                }
+                break;
+            }
+        }
+
+        if (modified) {
+            // 保存更新后的白名单并确保触发事件
+            await new Promise((resolve, reject) => {
+                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                    } else {
+                        adskipUtils.logDebug(`已启用白名单中的UP主 "${uploader}" 并触发事件`);
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        return whitelist;
+    } catch (error) {
+        console.error('启用白名单UP主失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 从白名单移除UP主 - 确保触发事件
+ * @param {string} uploader UP主名称
+ */
+async function removeUploaderFromWhitelist(uploader) {
+    if (!uploader) return Promise.reject(new Error('UP主名称不能为空'));
+
+    try {
+        const whitelist = await loadUploaderWhitelist();
+        const initialLength = whitelist.length;
+
+        // 过滤掉要移除的UP主
+        const newWhitelist = whitelist.filter(item =>
+            !(typeof item === 'string' && item === uploader) &&
+            !(typeof item === 'object' && item.name === uploader)
+        );
+
+        if (newWhitelist.length < initialLength) {
+            // 保存更新后的白名单并确保触发事件
+            await new Promise((resolve, reject) => {
+                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(newWhitelist)}, function() {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                    } else {
+                        adskipUtils.logDebug(`已从白名单移除UP主 "${uploader}" 并触发事件`);
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        return newWhitelist;
+    } catch (error) {
+        console.error('从白名单移除UP主失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 批量导入UP主白名单
+ * @param {string} whitelistText 以逗号或换行分隔的UP主名称列表
+ * @returns {Promise<Array>} 更新后的白名单
+ */
+async function importUploaderWhitelist(whitelistText) {
+    if (!whitelistText) {
+        return Promise.reject(new Error('导入内容不能为空'));
+    }
+
+    // 分割文本为UP主名称数组（支持逗号或换行分隔）
+    const uploaderNames = whitelistText
+        .split(/[,\n]/)
+        .map(name => name.trim())
+        .filter(name => name.length > 0);
+
+    if (uploaderNames.length === 0) {
+        return Promise.reject(new Error('未找到有效的UP主名称'));
+    }
+
+    const currentWhitelist = await loadUploaderWhitelist();
+
+    // 合并现有白名单和新导入的UP主
+    const newWhitelist = [...currentWhitelist];
+
+    uploaderNames.forEach(name => {
+        // 检查是否已存在
+        const existingIndex = newWhitelist.findIndex(item =>
+            (typeof item === 'string' && item === name) ||
+            (item.name === name)
+        );
+
+        if (existingIndex >= 0) {
+            // 如果存在但被禁用，则重新启用
+            if (typeof newWhitelist[existingIndex] !== 'string' && newWhitelist[existingIndex].enabled === false) {
+                newWhitelist[existingIndex].enabled = true;
+            }
+        } else {
+            // 添加新UP主
+            newWhitelist.push({
+                name: name,
+                addedAt: Date.now(),
+                enabled: true
+            });
+        }
+    });
+
+    adskipUtils.logDebug(`已导入${uploaderNames.length}个UP主到白名单`);
+    return saveUploaderWhitelist(newWhitelist);
+}
+
+/**
+ * 导出UP主白名单为文本
+ * @returns {Promise<string>} 导出的白名单文本
+ */
+async function exportUploaderWhitelist() {
+    const whitelist = await loadUploaderWhitelist();
+
+    // 将白名单转换为文本（仅包含启用的UP主）
+    const whitelistText = whitelist
+        .filter(item =>
+            typeof item === 'string' ||
+            item.enabled !== false
+        )
+        .map(item => typeof item === 'string' ? item : item.name)
+        .join('\n');
+
+    adskipUtils.logDebug('已导出UP主白名单');
+    return whitelistText;
+}
+
+/**
+ * 获取当前视频UP主信息
+ * @returns {Promise<Object>} UP主信息对象
+ */
+function getCurrentVideoUploader() {
+    return new Promise((resolve) => {
+        try {
+            // 从页面中提取视频标题
+            const titleElement = document.querySelector('.video-title, .tit, h1.title');
+            const title = titleElement ? titleElement.textContent.trim() : '未知视频';
+
+            // 从页面中提取UP主名称
+            const upElement = document.querySelector('.up-name, .name .username, a.up-name');
+            const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
+
+            resolve({ title, uploader });
+        } catch (e) {
+            adskipUtils.logDebug('提取视频信息失败', e);
+            resolve({ title: '未知视频', uploader: '未知UP主' });
+        }
+    });
+}
+
+/**
+ * 切换UP主在白名单中的启用状态
+ * @param {string} uploaderName UP主名称
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<Array>} 更新后的白名单
+ */
+async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
+    if (!uploaderName) {
+        return Promise.reject(new Error('UP主名称不能为空'));
+    }
+
+    try {
+        const whitelist = await loadUploaderWhitelist();
+        const index = whitelist.findIndex(item =>
+            (typeof item === 'string' && item === uploaderName) ||
+            (typeof item === 'object' && item.name === uploaderName)
+        );
+
+        if (index >= 0) {
+            // 如果是字符串形式，转换为对象
+            if (typeof whitelist[index] === 'string') {
+                whitelist[index] = {
+                    name: whitelist[index],
+                    addedAt: Date.now(),
+                    enabled: enabled
+                };
+            } else {
+                whitelist[index].enabled = enabled;
+            }
+            adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}白名单UP主: ${uploaderName}`);
+        } else {
+            if (enabled) {
+                // 如果不存在且需要启用，则添加
+                whitelist.push({
+                    name: uploaderName,
+                    addedAt: Date.now(),
+                    enabled: true
+                });
+                adskipUtils.logDebug(`已添加并启用白名单UP主: ${uploaderName}`);
+            }
+        }
+
+        // 确保触发变更事件
+        return new Promise((resolve, reject) => {
+            chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                } else {
+                    adskipUtils.logDebug(`白名单状态已更新，触发事件`);
+                    resolve(whitelist);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('切换白名单状态失败:', error);
+        throw error;
+    }
+}
+
+// 添加存储变更监听器
+chrome.storage.onChanged.addListener(function(changes, namespace) {
+    if (namespace !== 'local') return;
+
+    // 监听调试模式变化
+    if (changes.adskip_debug_mode !== undefined) {
+        debugMode = changes.adskip_debug_mode.newValue || false;
+        adskipUtils.logDebug(`存储模块：调试模式状态已更新: ${debugMode ? '启用' : '禁用'}`);
+        updateDebugModeToggle();
+    }
+
+    // 监听UP主白名单变化
+    if (changes.adskip_uploader_whitelist !== undefined) {
+        adskipUtils.logDebug('UP主白名单已更新');
+    }
+});
 
 // 导出模块函数
 window.adskipStorage = {
@@ -252,5 +711,16 @@ window.adskipStorage = {
     verifyAdminAccess,
     checkAdminStatus,
     initDebugMode,
-    updateDebugModeToggle
+    loadUploaderWhitelist,
+    saveUploaderWhitelist,
+    checkUploaderInWhitelist,
+    addUploaderToWhitelist,
+    removeUploaderFromWhitelist,
+    toggleUploaderWhitelistStatus,
+    importUploaderWhitelist,
+    exportUploaderWhitelist,
+    getCurrentVideoUploader,
+    updateDebugModeToggle,
+    disableUploaderInWhitelist,
+    enableUploaderInWhitelist
 };

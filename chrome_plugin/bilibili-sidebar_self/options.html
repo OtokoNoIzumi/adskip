@@ -122,6 +122,7 @@
       cursor: pointer;
       font-size: 14px;
       margin-right: 10px;
+      margin-bottom: 10px;
     }
 
     button:hover {
@@ -167,6 +168,200 @@
     .preset-button:hover {
       background-color: #e6e6e6;
     }
+
+    .tab-buttons {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .tab-button {
+      padding: 10px 20px;
+      background-color: transparent;
+      color: #555;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 0;
+      margin-bottom: 0;
+    }
+
+    .tab-button.active {
+      color: #FB7299;
+      border-bottom: 3px solid #FB7299;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .whitelist-container {
+      margin-top: 20px;
+    }
+
+    .whitelist-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .whitelist-item:last-child {
+      border-bottom: none;
+    }
+
+    .whitelist-item-name {
+      flex-grow: 1;
+      font-size: 14px;
+    }
+
+    .whitelist-item-date {
+      color: #999;
+      font-size: 12px;
+      margin-right: 15px;
+    }
+
+    .whitelist-item-actions {
+      display: flex;
+      gap: 5px;
+    }
+
+    .whitelist-btn {
+      background-color: #f0f0f0;
+      color: #555;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .whitelist-btn:hover {
+      background-color: #e6e6e6;
+    }
+
+    .whitelist-btn-enable {
+      background-color: #4caf50;
+      color: white;
+      border: none;
+    }
+
+    .whitelist-btn-enable:hover {
+      background-color: #43a047;
+    }
+
+    .whitelist-btn-disable {
+      background-color: #ff9800;
+      color: white;
+      border: none;
+    }
+
+    .whitelist-btn-disable:hover {
+      background-color: #fb8c00;
+    }
+
+    .whitelist-btn-delete {
+      background-color: #f44336;
+      color: white;
+      border: none;
+    }
+
+    .whitelist-btn-delete:hover {
+      background-color: #e53935;
+    }
+
+    .whitelist-empty {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+      font-style: italic;
+    }
+
+    .whitelist-import-export {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px dashed #ddd;
+    }
+
+    .whitelist-textarea {
+      width: 100%;
+      min-height: 100px;
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      resize: vertical;
+    }
+
+    .whitelist-help {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    .whitelist-summary {
+      margin-bottom: 15px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .whitelist-count {
+      font-weight: bold;
+      color: #FB7299;
+    }
+
+    .skip-explanation {
+      background-color: #f5f5f5;
+      border-radius: 6px;
+      padding: 15px;
+      margin-top: 15px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .skip-explanation h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .skip-explanation p {
+      margin: 8px 0;
+    }
+
+    .skip-modes {
+      display: flex;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .skip-mode {
+      background-color: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 12px;
+      flex: 1;
+    }
+
+    .skip-mode h4 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: #FB7299;
+    }
+
+    .skip-mode p {
+      margin: 5px 0;
+      font-size: 13px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -175,50 +370,120 @@
     <h1>Bilibili 广告跳过工具 - 全局设置</h1>
   </div>
 
-  <div class="section">
-    <h2>功能设置</h2>
-
-    <div class="form-group">
-      <label for="enable-adskip">启用广告跳过功能</label>
-      <label class="switch">
-        <input type="checkbox" id="enable-adskip" checked>
-        <span class="slider"></span>
-      </label>
-      <p>关闭后插件将不会自动跳过广告内容</p>
-    </div>
-
-    <div class="form-group">
-      <label for="debug-mode">调试模式</label>
-      <label class="switch">
-        <input type="checkbox" id="debug-mode">
-        <span class="slider"></span>
-      </label>
-      <p>启用后将在控制台输出详细日志信息</p>
-    </div>
+  <div class="tab-buttons">
+    <button class="tab-button active" data-tab="general">基本设置</button>
+    <button class="tab-button" data-tab="whitelist">UP主白名单</button>
+    <button class="tab-button" data-tab="data">数据管理</button>
   </div>
 
-  <div class="section">
-    <h2>广告跳过策略</h2>
+  <div id="general-tab" class="tab-content active">
+    <div class="section">
+      <h2>功能设置</h2>
 
-    <div class="form-group">
-      <label for="skip-percentage">触发窗口：前 <span id="percentage-value" class="range-value">5</span>%</label>
-      <input type="range" id="skip-percentage" min="1" max="100" value="5">
-      <div class="preset-buttons">
-        <button class="preset-button" data-value="1">仅起始时跳过(1%)</button>
-        <button class="preset-button" data-value="50">前半段跳过(50%)</button>
-        <button class="preset-button" data-value="100">全程都跳过(100%)</button>
+      <div class="form-group">
+        <label for="enable-adskip">启用广告跳过功能</label>
+        <label class="switch">
+          <input type="checkbox" id="enable-adskip" checked>
+          <span class="slider"></span>
+        </label>
+        <p>关闭后插件将不会自动跳过广告内容</p>
+
+        <div class="skip-explanation">
+          <h3>广告跳过模式说明</h3>
+          <p>本插件支持以下跳过模式，您可以根据需要选择：</p>
+
+          <div class="skip-modes">
+            <div class="skip-mode">
+              <h4>✅ 自动跳过模式</h4>
+              <p>默认模式：当启用广告跳过功能且UP主不在白名单中时，系统会自动跳过广告片段。</p>
+              <p>应用场景：希望所有视频都自动跳过广告时使用此模式。</p>
+            </div>
+
+            <div class="skip-mode">
+              <h4>🔹 白名单模式</h4>
+              <p>即使启用广告跳过功能，白名单中UP主的视频也不会自动跳过广告。</p>
+              <p>应用场景：希望支持特定UP主时使用此模式，仍可通过点击广告标记手动跳过。</p>
+            </div>
+
+            <div class="skip-mode">
+              <h4>⏸️ 手动模式</h4>
+              <p>关闭自动跳过功能后，所有视频都不会自动跳过广告，但仍可点击标记手动跳过。</p>
+              <p>应用场景：希望自行决定是否跳过每个广告片段时使用此模式。</p>
+            </div>
+          </div>
+        </div>
       </div>
-      <p>设置在广告时段的哪个阶段会触发自动跳过：
-        <br>• <strong>前[X]%</strong> 时间段内进入将自动跳至广告结尾
-        <br>• 如果想回看广告，就要把值设置低一些</p>
+
+      <div class="form-group">
+        <label for="debug-mode">调试模式</label>
+        <label class="switch">
+          <input type="checkbox" id="debug-mode">
+          <span class="slider"></span>
+        </label>
+        <p>启用后将在控制台输出详细日志信息</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>广告跳过策略</h2>
+
+      <div class="form-group">
+        <label for="skip-percentage">触发窗口：前 <span id="percentage-value" class="range-value">5</span>%</label>
+        <input type="range" id="skip-percentage" min="1" max="100" value="5">
+        <div class="preset-buttons">
+          <button class="preset-button" data-value="1">仅起始时跳过(1%)</button>
+          <button class="preset-button" data-value="50">前半段跳过(50%)</button>
+          <button class="preset-button" data-value="100">全程都跳过(100%)</button>
+        </div>
+        <p>设置在广告时段的哪个阶段会触发自动跳过：
+          <br>• <strong>前[X]%</strong> 时间段内进入将自动跳至广告结尾
+          <br>• 如果想回看广告，就要把值设置低一些</p>
+      </div>
     </div>
   </div>
 
-  <div class="section">
-    <h2>数据管理</h2>
-    <div class="form-group">
-      <button id="reset-data">重置所有数据</button>
-      <p>清空所有保存的广告跳过时间段和设置</p>
+  <div id="whitelist-tab" class="tab-content">
+    <div class="section">
+      <h2>UP主白名单管理</h2>
+      <p>白名单中UP主的视频不会自动跳过广告，但您仍然可以通过点击广告标记手动跳过</p>
+
+      <div class="whitelist-summary">
+        当前共有 <span id="whitelist-count" class="whitelist-count">0</span> 个UP主在白名单中
+      </div>
+
+      <div id="whitelist-list" class="whitelist-container">
+        <div class="whitelist-empty">白名单为空，您可以在视频页面将UP主添加到白名单</div>
+      </div>
+
+      <div class="whitelist-import-export">
+        <h3>批量导入/导出</h3>
+        <p>您可以批量导入或导出白名单数据，每行一个UP主名称</p>
+
+        <textarea id="whitelist-textarea" class="whitelist-textarea" placeholder="每行输入一个UP主名称，例如：
+某UP主1
+某UP主2
+某UP主3"></textarea>
+
+        <div>
+          <button id="whitelist-import" class="whitelist-btn">导入白名单</button>
+          <button id="whitelist-export" class="whitelist-btn">导出到文本框</button>
+          <button id="whitelist-copy" class="whitelist-btn">复制到剪贴板</button>
+        </div>
+
+        <div class="whitelist-help">
+          提示：导入将与现有白名单合并，已存在的UP主会被保留
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="data-tab" class="tab-content">
+    <div class="section">
+      <h2>数据管理</h2>
+      <div class="form-group">
+        <button id="reset-data">重置所有数据</button>
+        <p>清空所有保存的广告跳过时间段和设置</p>
+      </div>
     </div>
   </div>
 

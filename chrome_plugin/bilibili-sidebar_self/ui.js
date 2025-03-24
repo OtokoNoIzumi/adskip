@@ -25,6 +25,20 @@ function createLinkGenerator() {
         // 刷新当前视频ID
         currentVideoId = adskipUtils.getCurrentVideoId();
 
+        // 获取当前视频UP主信息
+        const { uploader: currentUploader, title: currentTitle } = await adskipStorage.getCurrentVideoUploader();
+
+        // 检查UP主是否在白名单中及其状态
+        const whitelistItem = await adskipStorage.loadUploaderWhitelist()
+            .then(list => list.find(item =>
+                (typeof item === 'string' && item === currentUploader) ||
+                (typeof item === 'object' && item.name === currentUploader)
+            ));
+
+        const isInWhitelist = !!whitelistItem;
+        const isWhitelistEnabled = typeof whitelistItem === 'string' ||
+                         (whitelistItem && whitelistItem.enabled !== false);
+
         const panel = document.createElement('div');
         panel.id = 'adskip-panel';
         panel.className = 'adskip-panel';
@@ -37,19 +51,50 @@ function createLinkGenerator() {
 
         // 检查是否启用广告跳过功能
         chrome.storage.local.get('adskip_enabled', function(result) {
-            const isEnabled = result.adskip_enabled !== false;
+            const globalSkipEnabled = result.adskip_enabled !== false;
+
+            // 生成白名单UP主管理相关元素
+            let whitelistControls = '';
+            if (currentUploader && currentUploader !== '未知UP主') {
+                whitelistControls = `
+                    <div class="adskip-whitelist-container">
+                        <div class="adskip-uploader-info">
+                            <div class="adskip-uploader-name">
+                                <span>UP主：${currentUploader}</span>
+                                <label class="adskip-whitelist-label">
+                                    <span>白名单</span>
+                                    <label class="adskip-switch adskip-switch-small">
+                                        <input type="checkbox" id="adskip-whitelist-toggle" ${isInWhitelist && isWhitelistEnabled ? 'checked' : ''}>
+                                        <span class="adskip-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 获取跳过模式描述
+            const getSkipModeDesc = () => {
+                if (!globalSkipEnabled) return '⏸️ 手动模式，可以点击广告区域手动跳过';
+                if (isInWhitelist && isWhitelistEnabled) return '🔹 白名单已启用，仅手动跳过';
+                return '✅ 自动跳过已启用';
+            };
 
             // 面板内容
             panel.innerHTML = `
                 <div class="adskip-panel-header">
                     <h3 class="adskip-title">广告跳过 - 时间设置</h3>
                     <label class="adskip-switch">
-                        <input type="checkbox" id="adskip-toggle" ${isEnabled ? 'checked' : ''}>
+                        <input type="checkbox" id="adskip-toggle" ${globalSkipEnabled ? 'checked' : ''}>
                         <span class="adskip-slider"></span>
                     </label>
                 </div>
-                <div class="adskip-toggle-desc">${isEnabled ? '✅ 自动跳过已启用' : '⏸️ 手动模式，可以点击广告区域手动跳过'}</div>
+                <div class="adskip-toggle-desc">${getSkipModeDesc()}</div>
                 <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
+
+                ${whitelistControls}
+
                 <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
 
@@ -84,6 +129,73 @@ function createLinkGenerator() {
                 `}
             `;
 
+            // 添加样式
+            const style = document.createElement('style');
+            style.textContent = `
+                .adskip-whitelist-container {
+                    background-color: #f8f9fa;
+                    border-radius: 6px;
+                    padding: 8px 10px;
+                    margin: 10px 0;
+                    border: 1px solid #e0e0e0;
+                }
+                .adskip-uploader-name {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    color: #333;
+                    font-size: 14px;
+                }
+                .adskip-whitelist-label {
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    font-size: 12px;
+                    color: #555;
+                }
+                .adskip-switch-small {
+                    width: 36px;
+                    height: 20px;
+                }
+                .adskip-switch-small .adskip-slider:before {
+                    height: 14px;
+                    width: 14px;
+                    left: 3px;
+                    bottom: 3px;
+                }
+                .adskip-switch-small input:checked + .adskip-slider:before {
+                    transform: translateX(16px);
+                }
+                /* 添加状态信息的动画效果 */
+                .adskip-status {
+                    transition: opacity 0.3s ease-in-out;
+                    border-radius: 4px;
+                    background: rgba(0, 0, 0, 0.03);
+                    padding: 8px;
+                    margin-top: 8px;
+                }
+                /* 白名单标签状态变化反馈 */
+                .adskip-whitelist-label span {
+                    transition: color 0.3s ease;
+                }
+                .adskip-whitelist-toggle:checked ~ .adskip-whitelist-label span {
+                    color: #00a1d6;
+                    font-weight: 500;
+                }
+                /* 开关过渡效果 */
+                .adskip-slider {
+                    transition: background-color 0.3s ease;
+                }
+                .adskip-slider:before {
+                    transition: transform 0.3s ease, box-shadow 0.3s ease;
+                }
+                /* 面板内容平滑过渡 */
+                .adskip-toggle-desc {
+                    transition: color 0.3s ease, opacity 0.2s ease;
+                }
+            `;
+            document.head.appendChild(style);
+
             // 开关逻辑
             document.getElementById('adskip-toggle').addEventListener('change', function() {
                 const isEnabled = this.checked;
@@ -91,9 +203,13 @@ function createLinkGenerator() {
                     // 更新开关描述
                     const toggleDesc = document.querySelector('.adskip-toggle-desc');
                     if (toggleDesc) {
-                        toggleDesc.textContent = isEnabled ?
-                            '✅ 自动跳过已启用' :
-                            '⏸️ 手动模式，可以点击广告区域手动跳过';
+                        if (isEnabled && isInWhitelist && isWhitelistEnabled) {
+                            toggleDesc.textContent = '🔹 白名单已启用，仅手动跳过';
+                        } else if (isEnabled) {
+                            toggleDesc.textContent = '✅ 自动跳过已启用';
+                        } else {
+                            toggleDesc.textContent = '⏸️ 手动模式，可以点击广告区域手动跳过';
+                        }
                     }
                     // 如果禁用，清除当前的监控
                     if (!isEnabled && window.adSkipCheckInterval) {
@@ -109,6 +225,79 @@ function createLinkGenerator() {
                     }
                 });
             });
+
+            // 白名单开关逻辑
+            if (currentUploader && currentUploader !== '未知UP主') {
+                document.getElementById('adskip-whitelist-toggle').addEventListener('change', async function() {
+                    try {
+                        const isChecked = this.checked;
+                        const toggleDesc = document.querySelector('.adskip-toggle-desc');
+                        let statusMessage = '';
+
+                        // 保存开关原始状态，以便在操作失败时恢复
+                        const originalState = this.checked;
+
+                        // 尝试重新获取最新的白名单状态（以防白名单在其他页面被删除）
+                        const freshWhitelistItem = await adskipStorage.loadUploaderWhitelist()
+                            .then(list => list.find(item =>
+                                (typeof item === 'string' && item === currentUploader) ||
+                                (typeof item === 'object' && item.name === currentUploader)
+                            ));
+
+                        // 刷新白名单状态变量
+                        const freshIsInWhitelist = !!freshWhitelistItem;
+                        const freshIsWhitelistEnabled = typeof freshWhitelistItem === 'string' ||
+                                     (freshWhitelistItem && freshWhitelistItem.enabled !== false);
+
+                        // 根据当前最新状态和开关操作执行响应动作
+                        if (isChecked) {
+                            // 启用白名单（如果不在白名单则添加）
+                            if (!freshIsInWhitelist) {
+                                await adskipStorage.addUploaderToWhitelist(currentUploader);
+                                statusMessage = `已将UP主 "${currentUploader}" 加入白名单`;
+                            } else if (!freshIsWhitelistEnabled) {
+                                // 如果在白名单但被禁用，则启用
+                                await adskipStorage.enableUploaderInWhitelist(currentUploader);
+                                statusMessage = `已启用UP主 "${currentUploader}" 的白名单`;
+                            }
+                        } else {
+                            // 禁用白名单
+                            if (freshIsInWhitelist && freshIsWhitelistEnabled) {
+                                await adskipStorage.disableUploaderInWhitelist(currentUploader);
+                                statusMessage = `已禁用UP主 "${currentUploader}" 的白名单`;
+                            }
+                        }
+
+                        // 直接更新UI状态（无需关闭重开面板）
+                        if (toggleDesc && globalSkipEnabled) {
+                            if (isChecked) {
+                                toggleDesc.textContent = '🔹 白名单已启用，仅手动跳过';
+                            } else {
+                                toggleDesc.textContent = '✅ 自动跳过已启用';
+                            }
+                        }
+
+                        // 更新状态显示
+                        if (statusMessage) {
+                            const statusElement = document.getElementById('adskip-status');
+                            statusElement.style.display = 'block';
+                            statusElement.innerText = statusMessage;
+
+                            // 使用淡入淡出效果替代闪烁
+                            statusElement.style.opacity = '0';
+                            statusElement.style.transition = 'opacity 0.3s ease-in-out';
+                            setTimeout(() => { statusElement.style.opacity = '1'; }, 50);
+                        }
+                    } catch (error) {
+                        console.error("白名单操作失败:", error);
+                        // 显示错误消息
+                        alert(`操作失败: ${error.message}`);
+
+                        // 恢复开关状态
+                        this.checked = !this.checked;
+                    }
+                });
+            }
 
             // 广告跳过百分比滑块逻辑
             const percentageSlider = document.getElementById('adskip-percentage-slider');
@@ -248,22 +437,23 @@ function createLinkGenerator() {
                     }
                 });
             }
-            // 重置按钮 - 仅清空已保存的视频广告数据
+            // 重置按钮 - 清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                // 只获取视频ID相关的存储键
+                // 只获取视频ID相关的存储键，排除白名单和设置
                 chrome.storage.local.get(null, function(items) {
                     const allKeys = Object.keys(items);
-                    // 过滤出只与视频ID相关的键，排除所有设置键
+                    // 过滤出只与视频ID相关的键，排除所有设置键和白名单
                     const videoKeys = allKeys.filter(key =>
                         key.startsWith('adskip_') &&
                         key !== 'adskip_debug_mode' &&
                         key !== 'adskip_enabled' &&
                         key !== 'adskip_percentage' &&
-                        key !== 'adskip_admin_authorized'
+                        key !== 'adskip_admin_authorized' &&
+                        key !== 'adskip_uploader_whitelist'
                     );
 
                     if (videoKeys.length > 0) {
-                        if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会修改其他设置。')) {
+                        if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
                             chrome.storage.local.remove(videoKeys, function() {
                                 // 清空当前设置
                                 currentAdTimestamps = [];
