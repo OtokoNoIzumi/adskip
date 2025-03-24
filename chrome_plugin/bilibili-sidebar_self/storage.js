@@ -30,7 +30,7 @@ function loadAdTimestampsForVideo(videoId) {
                 const parsed = JSON.parse(savedData);
                 adskipUtils.logDebug(`成功加载视频 ${videoId} 的广告时间段:`, parsed);
 
-                // 新的数据格式：直接获取timestamps数组
+                // 直接使用timestamps数组
                 const timestamps = parsed.timestamps || [];
                 resolve(timestamps);
             });
@@ -72,16 +72,20 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
 
     const videoInfo = getVideoInfo();
 
-    // 构建存储数据结构
-    const timestampsWithInfo = timestamps.map(ts => ({
-        ...ts,
-        _videoTitle: videoInfo.title,
-        _uploader: videoInfo.uploader
-    }));
+    // 构建存储数据结构 - 优化版：仅保留必要的时间数据，移除无用的description字段
+    const cleanedTimestamps = timestamps.map(ts => {
+        // 只保留start_time和end_time字段
+        const { start_time, end_time } = ts;
+        return { start_time, end_time };
+    });
 
-    // 添加保存时间戳
+    // 优化的数据结构
     const saveData = {
-        timestamps: timestampsWithInfo,
+        videoInfo: {
+            title: videoInfo.title,
+            uploader: videoInfo.uploader
+        },
+        timestamps: cleanedTimestamps,
         savedAt: Date.now() // 添加时间戳记录保存时间
     };
 

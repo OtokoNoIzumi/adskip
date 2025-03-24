@@ -385,8 +385,7 @@ function createLinkGenerator() {
                         }
                         return {
                             start_time: start,
-                            end_time: end,
-                            description: `手动指定的广告 (${start}s-${end}s)`
+                            end_time: end
                         };
                     });
 

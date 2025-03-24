@@ -85,8 +85,7 @@ function parseAdSkipParam() {
             const [start, end] = segment.split('-').map(Number);
             return {
                 start_time: start,
-                end_time: end,
-                description: `URL指定的广告 (${start}s-${end}s)`
+                end_time: end
             };
         });
         logDebug(`解析URL adskip参数成功:`, result);

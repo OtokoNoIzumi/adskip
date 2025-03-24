@@ -41,9 +41,15 @@ function showAdminPanel() {
 
                 // 确保timestamps是数组
                 if (Array.isArray(timestamps) && timestamps.length > 0) {
-                    // 提取视频标题和UP主信息
-                    const videoTitle = timestamps[0]._videoTitle || '未知视频';
-                    const uploader = timestamps[0]._uploader || '未知UP主';
+                    // 直接从顶层videoInfo获取信息
+                    let videoTitle = '未知视频';
+                    let uploader = '未知UP主';
+
+                    // 获取视频信息
+                    if (parsedData.videoInfo) {
+                        videoTitle = parsedData.videoInfo.title || '未知视频';
+                        uploader = parsedData.videoInfo.uploader || '未知UP主';
+                    }
 
                     videoData.push({
                         videoId,
