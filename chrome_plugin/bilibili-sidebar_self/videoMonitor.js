@@ -276,6 +276,19 @@ function checkAndSkip() {
  * 标记视频进度条上的广告位点
  */
 function markAdPositionsOnProgressBar() {
+    // 判断是否有广告时间戳
+    if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
+        // 移除所有现有标记，避免残留
+        document.querySelectorAll('.adskip-marker-container').forEach(function(marker) {
+            marker.remove();
+        });
+        // 减少日志输出，只在调试且未被过滤的情况下输出
+        if (debugMode && !adskipUtils.isLogFiltered('没有广告时间戳，不标记进度条')) {
+            adskipUtils.logDebug('没有广告时间戳，不标记进度条', { throttle: 5000 });
+        }
+        return;
+    }
+
     // 只在调试模式下输出，且使用节流控制
     adskipUtils.logDebug('标记视频进度条上的广告位点', { throttle: 2000 });
 
@@ -283,12 +296,6 @@ function markAdPositionsOnProgressBar() {
     document.querySelectorAll('.adskip-marker-container').forEach(function(marker) {
         marker.remove();
     });
-
-    // 如果没有广告时间戳，则不标记
-    if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
-        adskipUtils.logDebug('没有广告时间戳，不标记进度条', { throttle: 2000 });
-        return;
-    }
 
     // 找到视频元素
     const videoPlayer = adskipUtils.findVideoPlayer();
@@ -313,6 +320,8 @@ function markAdPositionsOnProgressBar() {
     // 创建标记容器
     const markerContainer = document.createElement('div');
     markerContainer.className = 'adskip-marker-container';
+    // 立即设置时间戳标记，避免重复标记
+    markerContainer.setAttribute('data-updated', adskipUtils.timestampsToString(currentAdTimestamps));
     progressBarContainer.appendChild(markerContainer);
 
     // 获取视频总时长
@@ -454,6 +463,11 @@ function setupAdMarkerMonitor() {
 
     // 定期检查进度条和更新标记
     window.adMarkerInterval = setInterval(function() {
+        // 如果没有广告时间戳，则不执行任何操作
+        if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
+            return;
+        }
+
         // 检查视频播放器和进度条是否存在
         const videoPlayer = adskipUtils.findVideoPlayer();
         const progressBar = adskipUtils.findProgressBar();
@@ -461,16 +475,21 @@ function setupAdMarkerMonitor() {
         if (videoPlayer && progressBar) {
             // 检查是否需要更新标记
             const markerContainer = document.querySelector('.adskip-marker-container');
-            const needUpdate = !markerContainer || markerContainer.getAttribute('data-updated') !== adskipUtils.timestampsToString(currentAdTimestamps);
 
-            if (needUpdate) {
+            // 检查标记容器是否存在且已更新
+            const currentTimestampsString = adskipUtils.timestampsToString(currentAdTimestamps);
+            const isUpdated = markerContainer &&
+                              markerContainer.getAttribute('data-updated') === currentTimestampsString;
+
+            // 只有当标记不存在或时间戳变化时才更新
+            if (!isUpdated) {
                 adskipUtils.logDebug('广告时间戳变化或进度条更新，重新标记进度条', { throttle: 3000 });
                 markAdPositionsOnProgressBar();
 
                 // 标记容器已更新
                 const updatedContainer = document.querySelector('.adskip-marker-container');
                 if (updatedContainer) {
-                    updatedContainer.setAttribute('data-updated', adskipUtils.timestampsToString(currentAdTimestamps));
+                    updatedContainer.setAttribute('data-updated', currentTimestampsString);
                 }
             }
         }
@@ -481,18 +500,34 @@ function setupAdMarkerMonitor() {
         const videoPlayer = adskipUtils.findVideoPlayer();
 
         if (videoPlayer) {
-            videoPlayer.removeEventListener('loadedmetadata', markAdPositionsOnProgressBar);
-            videoPlayer.addEventListener('loadedmetadata', markAdPositionsOnProgressBar);
+            // 使用命名函数来避免添加重复的事件监听器
+            if (!videoPlayer._adskipMetadataHandler) {
+                videoPlayer._adskipMetadataHandler = function() {
+                    if (currentAdTimestamps && currentAdTimestamps.length > 0) {
+                        markAdPositionsOnProgressBar();
+                    }
+                };
+                videoPlayer.addEventListener('loadedmetadata', videoPlayer._adskipMetadataHandler);
+            }
 
-            videoPlayer.removeEventListener('durationchange', markAdPositionsOnProgressBar);
-            videoPlayer.addEventListener('durationchange', markAdPositionsOnProgressBar);
+            if (!videoPlayer._adskipDurationHandler) {
+                videoPlayer._adskipDurationHandler = function() {
+                    if (currentAdTimestamps && currentAdTimestamps.length > 0) {
+                        markAdPositionsOnProgressBar();
+                    }
+                };
+                videoPlayer.addEventListener('durationchange', videoPlayer._adskipDurationHandler);
+            }
         } else {
             // 如果找不到视频播放器，稍后再试
             setTimeout(setupVideoEvents, 1000);
         }
     }
 
-    setupVideoEvents();
+    // 只有在有广告时间戳时才设置视频事件
+    if (currentAdTimestamps && currentAdTimestamps.length > 0) {
+        setupVideoEvents();
+    }
 }
 
 /**

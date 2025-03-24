@@ -15,6 +15,24 @@ function showAdminPanel() {
         return;
     }
 
+    // 确保白名单数据格式正确
+    chrome.storage.local.get('adskip_uploader_whitelist', function(whitelistResult) {
+        if (whitelistResult.adskip_uploader_whitelist) {
+            try {
+                // 尝试解析白名单数据
+                JSON.parse(whitelistResult.adskip_uploader_whitelist);
+            } catch (e) {
+                // 错误处理：如果解析失败，记录错误并重置为空数组
+                adskipUtils.logDebug('数据格式错误: adskip_uploader_whitelist，已重置为空数组', e);
+                chrome.storage.local.set({ 'adskip_uploader_whitelist': JSON.stringify([]) });
+            }
+        } else {
+            // 如果白名单数据不存在，初始化为空数组并保存
+            adskipUtils.logDebug('未找到白名单数据，初始化为空数组');
+            chrome.storage.local.set({ 'adskip_uploader_whitelist': JSON.stringify([]) });
+        }
+    });
+
     // 获取所有保存的数据
     chrome.storage.local.get(null, function(items) {
         const allKeys = Object.keys(items);
@@ -24,7 +42,8 @@ function showAdminPanel() {
             key !== 'adskip_debug_mode' &&
             key !== 'adskip_enabled' &&
             key !== 'adskip_percentage' &&
-            key !== 'adskip_admin_authorized'
+            key !== 'adskip_admin_authorized' &&
+            key !== 'adskip_uploader_whitelist'
         );
 
         const videoData = [];
@@ -61,10 +80,10 @@ function showAdminPanel() {
                         savedAt
                     });
                 } else {
-                    console.error(`--==--LOG: 数据格式错误或空数据: ${key}`);
+                    adskipUtils.logDebug(`数据格式错误或空数据: ${key}`, { throttle: 5000 });
                 }
             } catch (e) {
-                console.error(`--==--LOG: 解析存储数据失败: ${key}`, e);
+                adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
             }
         }
 
@@ -217,64 +236,32 @@ function showAdminPanel() {
 
         // 修改清除所有数据按钮的功能
         document.getElementById('adskip-clear-all').addEventListener('click', function() {
-            // 使用更详细的对话框让用户选择要清除的内容
-            const clearOptions = confirm(
-                '请选择清除内容的范围：\n\n' +
-                '【确定】清除所有数据（包括视频数据、功能设置、调试模式设置）\n' +
-                '【取消】仅清除视频数据和基本设置（保留调试模式和管理员状态）'
-            );
-
-            if (clearOptions) {
-                // 全面清除：保留管理员状态，但清除包括调试模式在内的所有设置
-                chrome.storage.local.get(null, function(items) {
-                    const allKeys = Object.keys(items);
-                    // 只保留管理员登录状态
-                    const keysToRemove = allKeys.filter(key =>
-                        key !== 'adskip_admin_authorized'
-                    );
-
-                    if (keysToRemove.length > 0) {
-                        chrome.storage.local.remove(keysToRemove, function() {
-                            // 设置默认值
-                            chrome.storage.local.set({
-                                'adskip_enabled': true,
-                                'adskip_percentage': 5,
-                                'adskip_debug_mode': false  // 重置调试模式为关闭
-                            }, function() {
-                                // 更新全局变量
-                                debugMode = false;
-                                adskipStorage.updateDebugModeToggle();
-
-                                adminPanel.remove();
-                                alert('已执行全面清除：所有数据和设置都已重置（保留管理员状态）');
-                            });
-                        });
-                    }
-                });
-            } else {
-                // 基本清除：保留调试模式和管理员状态
-                chrome.storage.local.get(null, function(items) {
-                    const allKeys = Object.keys(items);
-                    // 保留调试模式和管理员状态
-                    const keysToRemove = allKeys.filter(key =>
-                        key !== 'adskip_debug_mode' &&
-                        key !== 'adskip_admin_authorized'
-                    );
-
-                    if (keysToRemove.length > 0) {
-                        chrome.storage.local.remove(keysToRemove, function() {
-                            // 设置默认值，但不修改调试模式
-                            chrome.storage.local.set({
-                                'adskip_enabled': true,
-                                'adskip_percentage': 5
-                            }, function() {
-                                adminPanel.remove();
-                                alert('已执行基本清除：视频数据和基本设置已重置（保留调试模式和管理员状态）');
-                            });
-                        });
-                    }
-                });
+            // 单次强确认
+            if (!confirm('⚠️ 即将清除所有扩展数据（保留管理员状态）\n\n此操作不可撤销！确定继续吗？')) {
+                return;
             }
+
+            chrome.storage.local.get(null, (items) => {
+                const keysToRemove = Object.keys(items).filter(
+                    key => key !== 'adskip_admin_authorized'
+                );
+
+                if (keysToRemove.length) {
+                    chrome.storage.local.remove(keysToRemove, () => {
+                        // 重置必要默认值
+                        chrome.storage.local.set({
+                            'adskip_enabled': true,
+                            'adskip_percentage': 5,
+                            'adskip_debug_mode': false,
+                            'adskip_uploader_whitelist': '[]'
+                        }, () => {
+                            debugMode = false;
+                            adskipStorage.updateDebugModeToggle();
+                            alert('所有数据已重置完成！');
+                        });
+                    });
+                }
+            });
         });
 
         document.getElementById('adskip-export').addEventListener('click', function() {

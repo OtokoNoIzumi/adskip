@@ -9,6 +9,36 @@
 const logThrottleMap = new Map(); // 用于存储消息和上次输出时间
 const LOG_THROTTLE_DEFAULT = 1000; // 默认节流时间（毫秒）
 
+// 添加日志过滤控制
+const logFilterMap = new Map(); // 用于记录已过滤的日志
+
+/**
+ * 检查某条日志是否应该被过滤
+ * @param {string} message 日志消息
+ * @returns {boolean} 是否已被过滤过
+ */
+function isLogFiltered(message) {
+    const now = Date.now();
+    const lastTime = logFilterMap.get(message) || 0;
+
+    // 如果最近5秒内已经输出过这条日志，则过滤
+    if (now - lastTime < 5000) {
+        return true;
+    }
+
+    // 更新该日志的最后输出时间
+    logFilterMap.set(message, now);
+
+    // 清理过滤Map，避免内存泄漏
+    if (logFilterMap.size > 50) {
+        const oldEntries = [...logFilterMap.entries()]
+            .filter(([_, time]) => now - time > 10000); // 清理超过10秒的记录
+        oldEntries.forEach(([k]) => logFilterMap.delete(k));
+    }
+
+    return false;
+}
+
 /**
  * 调试日志输出函数 - 优化版，添加节流控制，支持选项对象
  * @param {string} message 日志消息
@@ -309,5 +339,6 @@ window.adskipUtils = {
     findVideoPlayer,
     findProgressBar,
     checkExtensionContext,
-    safeApiCall
+    safeApiCall,
+    isLogFiltered
 };
