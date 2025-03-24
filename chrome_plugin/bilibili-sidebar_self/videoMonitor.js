@@ -597,33 +597,52 @@ async function reinitialize() {
     // 获取所有保存的数据，用于比较
     chrome.storage.local.get(null, function(items) {
         const allKeys = Object.keys(items);
-        const adskipKeys = allKeys.filter(key => key.startsWith('adskip_') && key !== 'adskip_debug_mode');
+        // 正确过滤出只与视频ID相关的键，排除所有设置键和当前视频
+        const adskipKeys = allKeys.filter(key =>
+            key.startsWith('adskip_') &&
+            key !== 'adskip_debug_mode' &&
+            key !== 'adskip_enabled' &&
+            key !== 'adskip_percentage' &&
+            key !== 'adskip_admin_authorized' &&
+            key !== 'adskip_uploader_whitelist' &&
+            // 重要：排除当前视频自己的记录
+            key !== `adskip_${currentVideoId}`
+        );
         let matchFound = false;
 
         // 检查当前URL中的时间戳是否与任何已保存的时间戳匹配
         if (currentUrlAdTimestamps.length > 0) {
             const currentTimeString = adskipUtils.timestampsToString(currentUrlAdTimestamps);
 
-            // 遍历所有保存的视频数据，检查是否有匹配的时间戳
+            adskipUtils.logDebug(`检查URL参数 [${currentTimeString}] 是否与其他视频的广告时间戳匹配`, { throttle: 1000 });
+
+            // 遍历所有保存的其他视频数据，检查是否有匹配的时间戳
             for (const key of adskipKeys) {
                 try {
                     const data = items[key];
-                    const timestamps = JSON.parse(data);
-                    const savedTimeString = adskipUtils.timestampsToString(timestamps);
+                    const parsed = JSON.parse(data);
 
-                    if (currentTimeString === savedTimeString) {
-                        matchFound = true;
-                        adskipUtils.logDebug(`找到匹配的时间戳记录: ${key}, 时间戳: ${savedTimeString}`);
-                        break;
+                    // 适应数据格式，确保获取正确的timestamps数组
+                    const timestamps = parsed.timestamps || parsed;
+
+                    if (Array.isArray(timestamps)) {
+                        const savedTimeString = adskipUtils.timestampsToString(timestamps);
+
+                        if (currentTimeString === savedTimeString) {
+                            matchFound = true;
+                            const otherVideoId = key.replace('adskip_', '');
+                            adskipUtils.logDebug(`找到匹配的时间戳记录: 视频 ${otherVideoId} 的时间戳 [${savedTimeString}] 与当前URL参数相同，可能是视频切换造成的污染`);
+                            break;
+                        }
                     }
                 } catch (e) {
-                    console.error(`--==--LOG: 解析存储数据失败: ${key}`, e);
+                    adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
                 }
             }
 
             if (matchFound) {
-                // 如果找到匹配，则设置为空值（可能是异常的URL传递）
-                adskipUtils.logDebug('URL adskip 参数与已保存记录匹配，设置为空值');
+                // 如果找到其他视频的匹配记录，则判定为污染，设置为空值
+                adskipUtils.logDebug('URL adskip 参数与其他视频记录匹配，判定为视频切换污染，清空参数');
                 currentAdTimestamps = [];
                 urlAdTimestamps = [];
 
@@ -632,8 +651,13 @@ async function reinitialize() {
                     clearInterval(window.adSkipCheckInterval);
                     window.adSkipCheckInterval = null;
                 }
+            } else if (savedTimestamps.length > 0) {
+                // 如果没有匹配的污染，但当前视频有保存的时间戳，优先使用保存的
+                setupAdSkipMonitor(savedTimestamps);
+                currentAdTimestamps = [...savedTimestamps];
+                adskipUtils.logDebug('没有检测到URL参数污染，优先使用当前视频已保存的广告时间段');
             } else {
-                // 没有找到匹配，使用URL中的参数
+                // 没有匹配的污染，且当前视频没有保存的时间戳，使用URL中的参数
                 setupAdSkipMonitor(currentUrlAdTimestamps);
                 currentAdTimestamps = [...currentUrlAdTimestamps];
                 urlAdTimestamps = [...currentUrlAdTimestamps];
