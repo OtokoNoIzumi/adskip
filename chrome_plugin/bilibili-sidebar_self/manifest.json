@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bilibili 广告跳过工具",
-  "version": "1.0",
+  "version": "1.1",
   "description": "自动跳过B站视频中的广告，支持按视频ID存储和URL参数控制",
   "action": {
     "default_popup": "popup.html",
@@ -14,7 +14,14 @@
   "content_scripts": [
     {
       "matches": ["*://www.bilibili.com/video/*", "*://www.bilibili.com/bangumi/play/*"],
-      "js": ["content.js"],
+      "js": [
+        "utils.js",
+        "storage.js",
+        "videoMonitor.js",
+        "ui.js",
+        "adminPanel.js",
+        "core.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_end"
     }

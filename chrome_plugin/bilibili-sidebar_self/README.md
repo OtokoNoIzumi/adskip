@@ -4,7 +4,6 @@
 
 ## 规划 todo list
 - 增加API-KEY的输入，启动实时分析
-- 混淆代码
 - 增加有API-KEY了才弹出NOTION的KEY和Database的选项，用来匹配并操作标记
 
 ## 功能特点
