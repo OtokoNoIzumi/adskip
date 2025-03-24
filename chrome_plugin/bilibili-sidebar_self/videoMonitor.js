@@ -78,7 +78,7 @@ function setupAdSkipMonitor(adTimestamps) {
     // 清除旧监控
     if (window.adSkipCheckInterval) {
         clearInterval(window.adSkipCheckInterval);
-        adskipUtils.logDebug('清除旧的广告监控定时器');
+        adskipUtils.logDebug('清除旧的广告监控定时器', { throttle: 2000 });
         window.adSkipCheckInterval = null;
     }
 
@@ -117,7 +117,7 @@ function setupAdSkipMonitor(adTimestamps) {
                 }
             }
         }, 500);
-        adskipUtils.logDebug('设置新的广告监控定时器');
+        adskipUtils.logDebug('设置新的广告监控定时器', { throttle: 2000 });
     } catch (e) {
         console.error("设置广告监控失败:", e);
     }
@@ -147,7 +147,8 @@ function checkAndSkip() {
             if (!extensionAvailable) return;
 
             if (result.adskip_enabled === false) {
-                adskipUtils.logDebug('广告跳过功能已禁用，不执行检查');
+                // 使用节流控制，1秒内不重复输出相同消息
+                adskipUtils.logDebug('广告跳过功能已禁用，不执行检查', { throttle: 1000 });
                 return;
             }
 
@@ -189,6 +190,8 @@ function checkAndSkip() {
             const videoPlayer = adskipUtils.findVideoPlayer();
 
             if (!videoPlayer) {
+                // 使用节流控制，1秒内不重复输出相同消息
+                adskipUtils.logDebug('未找到视频播放器', { throttle: 1000 });
                 return;
             }
 
@@ -225,9 +228,9 @@ function checkAndSkip() {
                 return;
             }
 
-            // 记录时间跳跃情况
+            // 记录时间跳跃情况，使用节流避免频繁日志
             if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
-                adskipUtils.logDebug(`检测到大幅时间跳跃: ${lastCheckTime} -> ${currentTime}`);
+                adskipUtils.logDebug(`检测到大幅时间跳跃: ${lastCheckTime.toFixed(2)} -> ${currentTime.toFixed(2)}`, { throttle: 500 });
             }
             lastCheckTime = currentTime;
 
@@ -244,12 +247,12 @@ function checkAndSkip() {
 
                 // 如果在广告开始区域，直接跳到结束
                 if (currentTime >= ad.start_time && currentTime < adStartRange) {
-                    adskipUtils.logDebug(`检测到在广告开始区域 [${ad.start_time}s-${adStartRange}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time}s`);
+                    adskipUtils.logDebug(`检测到在广告开始区域 [${ad.start_time.toFixed(1)}s-${adStartRange.toFixed(1)}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time.toFixed(1)}s`);
 
                     // 标记为脚本操作并跳转
                     scriptInitiatedSeek = true;
                     videoPlayer.currentTime = ad.end_time;
-                    adskipUtils.logDebug(`已跳过广告: ${ad.start_time}s-${ad.end_time}s`);
+                    adskipUtils.logDebug(`已跳过广告: ${ad.start_time.toFixed(1)}s-${ad.end_time.toFixed(1)}s`);
                     break;
                 }
             }
@@ -273,7 +276,8 @@ function checkAndSkip() {
  * 标记视频进度条上的广告位点
  */
 function markAdPositionsOnProgressBar() {
-    adskipUtils.logDebug('标记视频进度条上的广告位点');
+    // 只在调试模式下输出，且使用节流控制
+    adskipUtils.logDebug('标记视频进度条上的广告位点', { throttle: 2000 });
 
     // 先移除旧的标记
     document.querySelectorAll('.adskip-marker-container').forEach(function(marker) {
@@ -282,7 +286,7 @@ function markAdPositionsOnProgressBar() {
 
     // 如果没有广告时间戳，则不标记
     if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
-        adskipUtils.logDebug('没有广告时间戳，不标记进度条');
+        adskipUtils.logDebug('没有广告时间戳，不标记进度条', { throttle: 2000 });
         return;
     }
 
@@ -290,7 +294,7 @@ function markAdPositionsOnProgressBar() {
     const videoPlayer = adskipUtils.findVideoPlayer();
 
     if (!videoPlayer || !videoPlayer.duration) {
-        adskipUtils.logDebug('未找到视频播放器或视频时长不可用，稍后重试标记');
+        adskipUtils.logDebug('未找到视频播放器或视频时长不可用，稍后重试标记', { throttle: 2000 });
         // 如果视频播放器不可用或时长不可用，稍后再试
         setTimeout(markAdPositionsOnProgressBar, 1000);
         return;
@@ -300,7 +304,7 @@ function markAdPositionsOnProgressBar() {
     const progressBarContainer = adskipUtils.findProgressBar();
 
     if (!progressBarContainer) {
-        adskipUtils.logDebug('未找到进度条容器，稍后重试标记');
+        adskipUtils.logDebug('未找到进度条容器，稍后重试标记', { throttle: 2000 });
         // 如果进度条不可用，稍后再试
         setTimeout(markAdPositionsOnProgressBar, 1000);
         return;
@@ -434,7 +438,8 @@ function markAdPositionsOnProgressBar() {
         }
     });
 
-    adskipUtils.logDebug(`已标记 ${currentAdTimestamps.length} 个广告位点`);
+    // 增加节流控制，延长节流时间以减少重复日志
+    adskipUtils.logDebug(`已标记 ${currentAdTimestamps.length} 个广告位点`, { throttle: 5000 });
 }
 
 /**
@@ -459,7 +464,7 @@ function setupAdMarkerMonitor() {
             const needUpdate = !markerContainer || markerContainer.getAttribute('data-updated') !== adskipUtils.timestampsToString(currentAdTimestamps);
 
             if (needUpdate) {
-                adskipUtils.logDebug('广告时间戳变化或进度条更新，重新标记进度条');
+                adskipUtils.logDebug('广告时间戳变化或进度条更新，重新标记进度条', { throttle: 3000 });
                 markAdPositionsOnProgressBar();
 
                 // 标记容器已更新

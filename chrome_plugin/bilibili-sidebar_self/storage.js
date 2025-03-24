@@ -272,7 +272,7 @@ function loadUploaderWhitelist() {
 
                     // 只有当白名单内容变化时才输出日志
                     if (simpleHash !== lastWhitelistHash) {
-                        adskipUtils.logDebug('已加载UP主白名单', whitelist);
+                        adskipUtils.logDebug('已加载UP主白名单', { data: whitelist, throttle: 5000 }); // 使用新的配置对象格式
                         lastWhitelistHash = simpleHash;
                     }
 
@@ -284,7 +284,7 @@ function loadUploaderWhitelist() {
             } else {
                 // 同样使用节流，避免反复输出"未找到白名单"
                 if (lastWhitelistHash !== 'empty') {
-                    adskipUtils.logDebug('未找到UP主白名单，返回空列表');
+                    adskipUtils.logDebug('未找到UP主白名单，返回空列表', { throttle: 5000 }); // 使用新的配置对象格式
                     lastWhitelistHash = 'empty';
                 }
                 resolve([]);
@@ -325,7 +325,9 @@ function saveUploaderWhitelist(whitelist) {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
-                adskipUtils.logDebug('已保存UP主白名单', formattedWhitelist);
+                // 只在调试模式下输出详细白名单内容
+                const logData = debugMode ? formattedWhitelist : { length: formattedWhitelist.length };
+                adskipUtils.logDebug('已保存UP主白名单', logData);
                 resolve(formattedWhitelist);
             }
         });
@@ -385,9 +387,8 @@ async function addUploaderToWhitelist(uploader) {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
-                    // 确保此更改触发事件
-                    // Chrome 会自动处理，但这里显式记录一下以确保
-                    adskipUtils.logDebug(`已将UP主 "${uploader}" 添加到白名单并触发事件`);
+                    // 更精简的日志
+                    adskipUtils.logDebug(`已将UP主 "${uploader}" 添加到白名单`);
                     resolve();
                 }
             });
@@ -438,7 +439,7 @@ async function disableUploaderInWhitelist(uploader) {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
-                        adskipUtils.logDebug(`已禁用白名单中的UP主 "${uploader}" 并触发事件`);
+                        adskipUtils.logDebug(`已禁用白名单中的UP主 "${uploader}"`);
                         resolve();
                     }
                 });
@@ -484,7 +485,7 @@ async function enableUploaderInWhitelist(uploader) {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
-                        adskipUtils.logDebug(`已启用白名单中的UP主 "${uploader}" 并触发事件`);
+                        adskipUtils.logDebug(`已启用白名单中的UP主 "${uploader}"`);
                         resolve();
                     }
                 });
@@ -522,7 +523,7 @@ async function removeUploaderFromWhitelist(uploader) {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
-                        adskipUtils.logDebug(`已从白名单移除UP主 "${uploader}" 并触发事件`);
+                        adskipUtils.logDebug(`已从白名单移除UP主 "${uploader}"`);
                         resolve();
                     }
                 });
@@ -678,7 +679,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
-                    adskipUtils.logDebug(`白名单状态已更新，触发事件`);
+                    // 移除多余的触发事件日志
                     resolve(whitelist);
                 }
             });

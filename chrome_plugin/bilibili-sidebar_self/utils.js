@@ -5,14 +5,56 @@
 
 'use strict';
 
+// 日志节流控制
+const logThrottleMap = new Map(); // 用于存储消息和上次输出时间
+const LOG_THROTTLE_DEFAULT = 1000; // 默认节流时间（毫秒）
+
 /**
- * 调试日志输出函数
+ * 调试日志输出函数 - 优化版，添加节流控制，支持选项对象
  * @param {string} message 日志消息
- * @param {any} data 可选的数据对象
+ * @param {any|Object} dataOrOptions 可选的数据对象或配置选项
+ * @param {number} throttleTime 节流时间（毫秒），0表示不节流
  */
-function logDebug(message, data) {
+function logDebug(message, dataOrOptions, throttleTime = 0) {
     if (!debugMode) return;
 
+    // 检查第二个参数是否为配置对象
+    let data = null;
+    let throttle = throttleTime;
+
+    if (dataOrOptions && typeof dataOrOptions === 'object' && dataOrOptions.hasOwnProperty('throttle')) {
+        // 如果是配置对象格式
+        data = dataOrOptions.data || null;
+        throttle = dataOrOptions.throttle || 0;
+    } else {
+        // 传统格式，第二个参数是数据
+        data = dataOrOptions;
+    }
+
+    // 如果设置了节流时间，检查是否应该throttle
+    if (throttle > 0) {
+        const now = Date.now();
+        const key = `${message}${data ? JSON.stringify(data) : ''}`;
+        const lastTime = logThrottleMap.get(key) || 0;
+
+        // 如果距离上次输出的时间小于throttleTime，跳过本次输出
+        if (now - lastTime < throttle) {
+            return;
+        }
+
+        // 更新最后输出时间
+        logThrottleMap.set(key, now);
+
+        // 清理太旧的记录，避免内存泄漏
+        if (logThrottleMap.size > 100) {
+            const oldEntries = [...logThrottleMap.entries()]
+                .filter(([_, time]) => now - time > 60000); // 清理超过1分钟的记录
+
+            oldEntries.forEach(([k]) => logThrottleMap.delete(k));
+        }
+    }
+
+    // 输出日志
     if (data) {
         console.log(`--==--LOG: ${message}`, data);
     } else {
