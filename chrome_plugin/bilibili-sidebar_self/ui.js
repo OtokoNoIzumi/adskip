@@ -48,6 +48,7 @@ function createLinkGenerator() {
                         <span class="adskip-slider"></span>
                     </label>
                 </div>
+                <div class="adskip-toggle-desc">${isEnabled ? '✅ 自动跳过已启用' : '⏸️ 手动模式，可以点击广告区域手动跳过'}</div>
                 <div class="adskip-video-id">当前视频: ${currentVideoId || '未识别'}</div>
                 <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
@@ -87,6 +88,13 @@ function createLinkGenerator() {
             document.getElementById('adskip-toggle').addEventListener('change', function() {
                 const isEnabled = this.checked;
                 chrome.storage.local.set({'adskip_enabled': isEnabled}, function() {
+                    // 更新开关描述
+                    const toggleDesc = document.querySelector('.adskip-toggle-desc');
+                    if (toggleDesc) {
+                        toggleDesc.textContent = isEnabled ?
+                            '✅ 自动跳过已启用' :
+                            '⏸️ 手动模式，可以点击广告区域手动跳过';
+                    }
                     // 如果禁用，清除当前的监控
                     if (!isEnabled && window.adSkipCheckInterval) {
                         clearInterval(window.adSkipCheckInterval);

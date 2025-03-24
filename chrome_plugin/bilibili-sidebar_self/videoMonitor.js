@@ -239,6 +239,8 @@ function markAdPositionsOnProgressBar() {
         marker.style.left = `${startPercent}%`;
         marker.style.width = `${width}%`;
         marker.setAttribute('data-index', index);
+        marker.setAttribute('data-start-time', ad.start_time);
+        marker.setAttribute('data-end-time', ad.end_time);
         markerContainer.appendChild(marker);
 
         // 创建提示元素
@@ -255,6 +257,37 @@ function markAdPositionsOnProgressBar() {
 
         marker.addEventListener('mouseleave', function() {
             tooltip.style.opacity = '0';
+        });
+
+        // 添加点击事件 - 实现手动跳过功能
+        marker.addEventListener('click', function(e) {
+            // 阻止事件冒泡，以防触发进度条的点击事件
+            e.stopPropagation();
+
+            // 检查全局是否关闭了广告跳过
+            chrome.storage.local.get('adskip_enabled', function(result) {
+                const globalSkipEnabled = result.adskip_enabled !== false;
+                const currentTime = videoPlayer.currentTime;
+                const adStartTime = parseFloat(marker.getAttribute('data-start-time'));
+                const adEndTime = parseFloat(marker.getAttribute('data-end-time'));
+
+                // 检查是否在广告时间范围内
+                const isInAdRange = currentTime >= adStartTime && currentTime < adEndTime;
+
+                // 如果全局跳过功能关闭，并且当前时间在广告范围内，允许手动跳过
+                if (!globalSkipEnabled && isInAdRange) {
+                    adskipUtils.logDebug(`手动跳过广告: ${adStartTime}s-${adEndTime}s`);
+                    scriptInitiatedSeek = true;
+                    videoPlayer.currentTime = adEndTime;
+                } else if (globalSkipEnabled) {
+                    // 如果全局跳过功能开启，告知用户
+                    adskipUtils.logDebug('全局广告跳过已启用，无需手动跳过');
+                    // 可以在这里添加一个临时提示
+                } else if (!isInAdRange) {
+                    // 如果不在广告范围内，可以选择跳转到广告开始处或结束处
+                    adskipUtils.logDebug(`当前不在广告范围内，不执行跳过`);
+                }
+            });
         });
 
         // 如果启用了百分比跳过，显示跳过区域
