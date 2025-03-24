@@ -5,6 +5,51 @@
 
 'use strict';
 
+// 添加全局变量，用于缓存当前播放时间
+let lastKnownPlaybackTime = 0;
+let lastPlaybackTimeUpdate = 0;
+
+// 添加全局函数，用于获取当前播放时间（优先使用缓存的时间）
+function getCurrentRealPlaybackTime() {
+    const now = Date.now();
+    const videoPlayer = adskipUtils.findVideoPlayer();
+
+    // 如果视频播放器存在，更新缓存的时间
+    if (videoPlayer) {
+        // 只有当距离上次更新超过100ms时才更新时间，减少频繁获取
+        if (now - lastPlaybackTimeUpdate > 100) {
+            lastKnownPlaybackTime = videoPlayer.currentTime;
+            lastPlaybackTimeUpdate = now;
+        }
+    }
+
+    return lastKnownPlaybackTime;
+}
+
+// 定期更新缓存的播放时间，避免点击时才获取导致不准确
+function setupPlaybackTimeMonitor() {
+    // 清除旧的监听器
+    if (window.playbackTimeMonitorInterval) {
+        clearInterval(window.playbackTimeMonitorInterval);
+    }
+
+    // 设置新的定时器，定期更新播放时间缓存
+    window.playbackTimeMonitorInterval = setInterval(function() {
+        const videoPlayer = adskipUtils.findVideoPlayer();
+        if (videoPlayer && !videoPlayer.paused && !videoPlayer.ended) {
+            lastKnownPlaybackTime = videoPlayer.currentTime;
+            lastPlaybackTimeUpdate = Date.now();
+        }
+    }, 100); // 每100ms更新一次
+
+    // 页面卸载时清理资源
+    window.addEventListener('unload', function() {
+        if (window.playbackTimeMonitorInterval) {
+            clearInterval(window.playbackTimeMonitorInterval);
+        }
+    });
+}
+
 /**
  * 设置广告跳过监控
  * @param {Array} adTimestamps 广告时间戳数组
@@ -39,6 +84,9 @@ function setupAdSkipMonitor(adTimestamps) {
             window.adSkipCheckInterval = null;
         }
     });
+
+    // 启动播放时间监控
+    setupPlaybackTimeMonitor();
 
     // 设置新监控，使用try-catch包装以处理可能的错误
     try {
@@ -126,6 +174,10 @@ function checkAndSkip() {
             if (videoPlayer.paused || videoPlayer.ended) return;
 
             const currentTime = videoPlayer.currentTime;
+
+            // 更新时间缓存
+            lastKnownPlaybackTime = currentTime;
+            lastPlaybackTimeUpdate = Date.now();
 
             // 检查视频ID是否变化
             const newVideoId = adskipUtils.getCurrentVideoId();
@@ -263,20 +315,49 @@ function markAdPositionsOnProgressBar() {
         marker.addEventListener('click', function(e) {
             // 阻止事件冒泡，以防触发进度条的点击事件
             e.stopPropagation();
+            e.preventDefault(); // 添加阻止默认行为
+
+            // 使用缓存的播放时间，而不是直接获取
+            const currentPlaybackTime = getCurrentRealPlaybackTime();
+
+            // 记录调试信息，包括时间缓存更新时间
+            adskipUtils.logDebug(`时间缓存状态: 当前缓存时间=${lastKnownPlaybackTime.toFixed(2)}s, 上次更新=${Date.now() - lastPlaybackTimeUpdate}ms前`);
+
+            const adStartTime = parseFloat(marker.getAttribute('data-start-time'));
+            const adEndTime = parseFloat(marker.getAttribute('data-end-time'));
+
+            // 计算点击位置对应的视频时间点
+            const rect = marker.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const markerWidth = rect.width;
+            const clickRatio = clickX / markerWidth; // 点击位置在标记内的比例
+
+            // 根据比例计算对应的时间点
+            const adDuration = adEndTime - adStartTime;
+            const clickTimePosition = adStartTime + (adDuration * clickRatio);
 
             // 检查全局是否关闭了广告跳过
             chrome.storage.local.get('adskip_enabled', function(result) {
                 const globalSkipEnabled = result.adskip_enabled !== false;
-                const currentTime = videoPlayer.currentTime;
-                const adStartTime = parseFloat(marker.getAttribute('data-start-time'));
-                const adEndTime = parseFloat(marker.getAttribute('data-end-time'));
+
+                // 检查当前播放器时间 - 用于比较验证
+                const currentVideoTime = videoPlayer.currentTime;
 
                 // 检查是否在广告时间范围内
-                const isInAdRange = currentTime >= adStartTime && currentTime < adEndTime;
+                const isInAdRange = currentPlaybackTime >= adStartTime && currentPlaybackTime < adEndTime;
 
-                // 如果全局跳过功能关闭，并且当前时间在广告范围内，允许手动跳过
-                if (!globalSkipEnabled && isInAdRange) {
-                    adskipUtils.logDebug(`手动跳过广告: ${adStartTime}s-${adEndTime}s`);
+                // 检查点击位置是否在当前播放进度之后
+                const isClickAheadOfPlayback = clickTimePosition > currentPlaybackTime;
+
+                // 记录详细的调试信息，同时记录实时播放器时间和缓存时间的差异
+                adskipUtils.logDebug(`点击处理 - 缓存时间: ${currentPlaybackTime.toFixed(2)}s, 实时时间: ${currentVideoTime.toFixed(2)}s, 差异: ${(currentVideoTime - currentPlaybackTime).toFixed(2)}s, 广告范围: ${adStartTime.toFixed(2)}s-${adEndTime.toFixed(2)}s, 点击位置时间: ${clickTimePosition.toFixed(2)}s`);
+
+                // 满足所有条件时才执行跳过：
+                // 1. 全局跳过功能关闭
+                // 2. 当前播放位置在广告范围内
+                // 3. 点击位置在当前播放进度之后
+                if (!globalSkipEnabled && isInAdRange && isClickAheadOfPlayback) {
+                    adskipUtils.logDebug(`手动跳过广告: ${adStartTime.toFixed(2)}s-${adEndTime.toFixed(2)}s (点击位置: ${clickTimePosition.toFixed(2)}s)，跳转前时间: ${currentPlaybackTime.toFixed(2)}s`);
                     scriptInitiatedSeek = true;
                     videoPlayer.currentTime = adEndTime;
                 } else if (globalSkipEnabled) {
@@ -284,8 +365,11 @@ function markAdPositionsOnProgressBar() {
                     adskipUtils.logDebug('全局广告跳过已启用，无需手动跳过');
                     // 可以在这里添加一个临时提示
                 } else if (!isInAdRange) {
-                    // 如果不在广告范围内，可以选择跳转到广告开始处或结束处
+                    // 如果不在广告范围内
                     adskipUtils.logDebug(`当前不在广告范围内，不执行跳过`);
+                } else if (!isClickAheadOfPlayback) {
+                    // 如果点击位置在当前播放进度之前
+                    adskipUtils.logDebug(`点击位置 (${clickTimePosition.toFixed(2)}s) 在当前播放进度 (${currentPlaybackTime.toFixed(2)}s) 之前，不执行跳过`);
                 }
             });
         });
@@ -509,5 +593,6 @@ window.adskipVideoMonitor = {
     setupAdMarkerMonitor,
     setupUrlChangeMonitor,
     checkForVideoChange,
-    reinitialize
+    reinitialize,
+    getCurrentRealPlaybackTime // 导出新函数
 };
