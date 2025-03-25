@@ -89,7 +89,7 @@ function showAdminPanel() {
                 </div>
 
                 <div class="adskip-api-section">
-                    <h4>当前视频字幕信息</h4>
+                    <h4>当前视频信息</h4>
                     <div id="subtitle-info" class="adskip-api-info-container">
                         <div class="adskip-loading">加载中...</div>
                     </div>
@@ -412,7 +412,7 @@ async function loadCredentialInfo() {
         let infoHTML = '<div class="credential-data">';
 
         if (userInfo.isLoggedIn) {
-            // 用户已登录，显示详细信息
+            // 用户已登录，显示简化信息
             infoHTML += `
                 <div class="credential-row">
                     <span class="credential-label">状态:</span>
@@ -435,7 +435,7 @@ async function loadCredentialInfo() {
                     </div>`;
             }
 
-            // 展示完整的会员信息
+            // 展示会员等级
             if (userInfo.vipType !== undefined) {
                 const vipLabel = userInfo.vipType === 0 ? '普通用户' :
                                  userInfo.vipType === 1 ? '大会员' : '年度大会员';
@@ -446,23 +446,6 @@ async function loadCredentialInfo() {
                         <span class="credential-label">会员等级:</span>
                         <span class="credential-value ${vipClass}">${vipLabel}</span>
                     </div>`;
-
-                if (userInfo.vipStatus !== undefined) {
-                    infoHTML += `
-                        <div class="credential-row">
-                            <span class="credential-label">会员状态:</span>
-                            <span class="credential-value">${userInfo.vipStatus === 1 ? '已激活' : '未激活'}</span>
-                        </div>`;
-                }
-
-                if (userInfo.vipDueDate) {
-                    const dueDate = new Date(userInfo.vipDueDate);
-                    infoHTML += `
-                        <div class="credential-row">
-                            <span class="credential-label">到期时间:</span>
-                            <span class="credential-value">${dueDate.toLocaleDateString()}</span>
-                        </div>`;
-                }
             }
 
             // 如果有头像，显示头像
@@ -473,15 +456,6 @@ async function loadCredentialInfo() {
                         <span class="credential-value">
                             <img src="${userInfo.avatar}" alt="用户头像" style="width: 40px; height: 40px; border-radius: 50%;">
                         </span>
-                    </div>`;
-            }
-
-            // 如果有硬币数，显示硬币数
-            if (userInfo.money !== undefined) {
-                infoHTML += `
-                    <div class="credential-row">
-                        <span class="credential-label">硬币:</span>
-                        <span class="credential-value">${userInfo.money}</span>
                     </div>`;
             }
 
@@ -527,15 +501,6 @@ async function loadCredentialInfo() {
             }
         }
 
-        // 添加信息来源
-        if (userInfo.source) {
-            infoHTML += `
-                <div class="credential-row">
-                    <span class="credential-label">信息来源:</span>
-                    <span class="credential-value info">${userInfo.source}</span>
-                </div>`;
-        }
-
         infoHTML += '</div>';
         credentialSection.innerHTML = infoHTML;
 
@@ -549,7 +514,7 @@ async function loadCredentialInfo() {
 }
 
 /**
- * 加载字幕信息
+ * 加载视频和字幕信息
  */
 async function loadSubtitleInfo() {
     const subtitleSection = document.getElementById('subtitle-info');
@@ -582,22 +547,6 @@ async function loadSubtitleInfo() {
                     <span class="credential-value">${videoData.bvid || '未知'}</span>
                 </div>
                 <div class="credential-row">
-                    <span class="credential-label">AID:</span>
-                    <span class="credential-value">${videoData.aid || '未知'}</span>
-                </div>
-                <div class="credential-row">
-                    <span class="credential-label">CID:</span>
-                    <span class="credential-value">${videoData.cid || '未知'}</span>
-                </div>
-                <div class="credential-row">
-                    <span class="credential-label">标题:</span>
-                    <span class="credential-value">${videoData.title || '未知'}</span>
-                </div>
-                <div class="credential-row">
-                    <span class="credential-label">UP主:</span>
-                    <span class="credential-value">${videoData.uploader || '未知'}</span>
-                </div>
-                <div class="credential-row">
                     <span class="credential-label">字幕功能:</span>
                     <span class="credential-value ${subtitleInfo.hasSubtitleFeature ? 'success' : 'error'}">
                         ${subtitleInfo.hasSubtitleFeature ? '支持' : '不支持'}
@@ -606,18 +555,10 @@ async function loadSubtitleInfo() {
 
         if (subtitleInfo.hasSubtitleFeature && subtitleInfo.subtitles.length > 0) {
             infoHTML += `
-                <div class="subtitle-list-header">可用字幕语言:</div>
-                <div class="subtitle-preview-list" style="max-height: 100px;">`;
-
-            subtitleInfo.subtitles.forEach(sub => {
-                infoHTML += `
-                    <div class="subtitle-preview-item">
-                        <div class="subtitle-time">${sub.language}</div>
-                        <div class="subtitle-content">${sub.languageName} ${sub.isDefault ? '(默认)' : ''}</div>
-                    </div>`;
-            });
-
-            infoHTML += `</div>`;
+                <div class="credential-row">
+                    <span class="credential-label">可用字幕:</span>
+                    <span class="credential-value">${subtitleInfo.subtitles.map(s => s.languageName).join(', ')}</span>
+                </div>`;
 
             // 如果有字幕内容，显示预览
             if (subtitlePreview.subtitleContent && subtitlePreview.subtitleContent.length > 0) {
@@ -641,20 +582,6 @@ async function loadSubtitleInfo() {
                         <span class="credential-value">无法加载字幕内容预览</span>
                     </div>`;
             }
-
-            // 如果有字幕URL，显示URL
-            const firstSubtitle = subtitleInfo.subtitles[0];
-            if (firstSubtitle && firstSubtitle.url) {
-                infoHTML += `
-                    <div class="credential-api-data-container">
-                        <details>
-                            <summary>查看字幕URL</summary>
-                            <div class="credential-api-data">
-                                <pre>${firstSubtitle.url}</pre>
-                            </div>
-                        </details>
-                    </div>`;
-            }
         } else if (subtitleInfo.hasSubtitleFeature) {
             infoHTML += `
                 <div class="credential-row">
@@ -668,17 +595,47 @@ async function loadSubtitleInfo() {
                 ${subtitlePreview.message || subtitleInfo.message || ''}
             </div>`;
 
-        // 显示API返回的原始字幕数据
-        if (subtitleInfo.subtitles.length > 0) {
+        // 显示视频完整数据
+        infoHTML += `
+            <div class="credential-api-data-container">
+                <details>
+                    <summary>查看完整视频信息</summary>
+                    <div class="credential-api-data">
+                        <pre>${JSON.stringify(videoData, null, 2)}</pre>
+                    </div>
+                </details>
+            </div>`;
+
+        // 显示完整的字幕API响应数据
+        if (subtitleInfo.rawData) {
             infoHTML += `
                 <div class="credential-api-data-container">
                     <details>
-                        <summary>查看完整字幕数据</summary>
+                        <summary>查看完整字幕API响应</summary>
                         <div class="credential-api-data">
-                            <pre>${JSON.stringify(subtitleInfo.subtitles, null, 2)}</pre>
+                            <pre>${JSON.stringify(subtitleInfo.rawData, null, 2)}</pre>
                         </div>
                     </details>
                 </div>`;
+        }
+
+        // 显示字幕URL和完整字幕数据
+        if (subtitleInfo.subtitles.length > 0) {
+            const firstSubtitle = subtitleInfo.subtitles[0];
+            if (firstSubtitle && firstSubtitle.url) {
+                infoHTML += `
+                    <div class="credential-api-data-container">
+                        <details>
+                            <summary>查看字幕URL和数据</summary>
+                            <div class="credential-api-data">
+                                <h4>字幕URL:</h4>
+                                <pre>${firstSubtitle.url}</pre>
+                                <h4>完整字幕数据:</h4>
+                                <pre>${JSON.stringify(subtitleInfo.subtitles, null, 2)}</pre>
+                            </div>
+                        </details>
+                    </div>`;
+            }
         }
 
         infoHTML += '</div>';
@@ -687,7 +644,7 @@ async function loadSubtitleInfo() {
     } catch (error) {
         subtitleSection.innerHTML = `
             <div class="error-message">
-                加载字幕信息失败: ${error.message}
+                加载视频信息失败: ${error.message}
                 <button class="retry-button" onclick="adskipAdmin.loadSubtitleInfo()">重试</button>
             </div>`;
     }
