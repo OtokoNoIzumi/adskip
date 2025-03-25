@@ -803,7 +803,7 @@ async function loadSubtitleInfo() {
                 <details>
                     <summary class="with-copy-btn">
                         查看重要参数信息
-                        <button class="copy-data-btn" data-content='${safeStringify(keyParams)}'>复制完整数据</button>
+                        <button class="copy-data-btn" data-content='${safeStringify(keyParams)}'>复制</button>
                     </summary>
                     <div class="credential-api-data">
                         <pre>${formatKeyParamsForDisplay(keyParams)}</pre>

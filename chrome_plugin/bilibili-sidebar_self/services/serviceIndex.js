@@ -15,7 +15,6 @@ window.adskipApiService = window.adskipApiService || {};
 window.adskipBilibiliApi = window.adskipBilibiliApi || {};
 window.adskipCredentialService = window.adskipCredentialService || {};
 window.adskipSubtitleService = window.adskipSubtitleService || {};
-window.adskipUserDataService = window.adskipUserDataService || {};
 
 // 定义服务模块内容
 
@@ -616,14 +615,6 @@ window.adskipUserDataService = window.adskipUserDataService || {};
     };
 
     console.log('[AdSkip服务] 字幕服务已加载');
-})();
-
-// 用户数据服务 - userDataService
-(function() {
-    // 将函数导出到全局服务对象
-    window.adskipUserDataService = {};
-
-    console.log('[AdSkip服务] 用户数据服务已加载');
 })();
 
 // 服务加载完成后触发事件

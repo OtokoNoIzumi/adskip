@@ -27,18 +27,6 @@
       "run_at": "document_end"
     }
   ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "services/api/apiService.js",
-        "services/api/bilibiliApi.js",
-        "services/auth/credentialService.js",
-        "services/data/subtitleService.js",
-        "services/data/userDataService.js"
-      ],
-      "matches": ["*://*.bilibili.com/*"]
-    }
-  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true

@@ -38,8 +38,7 @@ const serviceCheckInterval = setInterval(function() {
 
     // 检查所有需要的服务是否加载
     if (typeof adskipCredentialService !== 'undefined' &&
-        typeof adskipSubtitleService !== 'undefined' &&
-        typeof adskipUserDataService !== 'undefined') {
+        typeof adskipSubtitleService !== 'undefined') {
 
         servicesLoaded = true;
         adskipUtils.logDebug('检测到服务模块已加载，但未触发事件，手动设置服务加载状态');
