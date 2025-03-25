@@ -169,7 +169,6 @@ function saveAdSkipPercentage(percentage) {
  */
 function verifyAdminAccess(apiKey) {
     // 这是一个简单的哈希检查，您可以替换为更安全的方法
-    // 示例API密钥: bilibili-adskip-admin-2025
     const validKeyHash = "12d9853b"; // 一个示例哈希
 
     // 简单哈希函数
