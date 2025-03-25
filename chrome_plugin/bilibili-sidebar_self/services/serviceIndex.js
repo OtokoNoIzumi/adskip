@@ -273,8 +273,18 @@ window.adskipUserDataService = window.adskipUserDataService || {};
                 return result;
             }
 
-            // 使用官方API获取字幕信息（player/wbi/v2接口）
-            const url = `https://api.bilibili.com/x/player/wbi/v2?aid=${videoData.aid}&cid=${videoData.cid}`;
+            // 根据视频类型选择正确的API
+            let url;
+            let isBangumi = !!videoData.epid;
+
+            if (isBangumi) {
+                // 番剧使用的API
+                url = `https://api.bilibili.com/pgc/player/web/v2/playurl?ep_id=${videoData.epid}&cid=${videoData.cid}`;
+            } else {
+                // 普通视频使用的API
+                url = `https://api.bilibili.com/x/player/wbi/v2?aid=${videoData.aid}&cid=${videoData.cid}`;
+            }
+
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'include'
@@ -289,14 +299,20 @@ window.adskipUserDataService = window.adskipUserDataService || {};
                 throw new Error(`获取字幕列表失败: ${data.message}`);
             }
 
-            // 提取字幕列表
-            const subtitles = data.data?.subtitle?.subtitles || [];
+            // 提取字幕列表 - 番剧和普通视频的数据结构可能不同
+            let subtitles = [];
+            if (isBangumi) {
+                subtitles = data.result?.subtitle?.subtitles || [];
+            } else {
+                subtitles = data.data?.subtitle?.subtitles || [];
+            }
+
             result.subtitles = subtitles.map(sub => ({
                 id: sub.id,
                 language: sub.lan,
                 languageName: sub.lan_doc,
                 url: sub.subtitle_url.startsWith('//') ? `https:${sub.subtitle_url}` : sub.subtitle_url,
-                isDefault: sub.type === 1
+                isDefault: sub.type === 1 || !!sub.is_default
             }));
 
             result.hasSubtitleFeature = subtitles.length > 0;
@@ -319,66 +335,165 @@ window.adskipUserDataService = window.adskipUserDataService || {};
      */
     async function getVideoData() {
         try {
-            // 尝试从URL获取视频BV号
-            const bvid = window.location.pathname.match(/\/video\/(BV[\w]+)/)?.[1];
-            if (!bvid) {
-                throw new Error('无法从URL获取BV号');
+            // 检查是普通视频还是番剧页面
+            const isBangumi = window.location.pathname.includes('/bangumi/play/');
+
+            // 获取视频ID (BV号或EP号)
+            let bvid = null;
+            let epid = null;
+
+            if (isBangumi) {
+                // 从番剧URL中提取ep号
+                epid = window.location.pathname.match(/\/bangumi\/play\/ep(\d+)/)?.[1];
+                if (!epid) {
+                    // 尝试提取ss号
+                    const ssid = window.location.pathname.match(/\/bangumi\/play\/ss(\d+)/)?.[1];
+                    if (ssid) {
+                        console.log('获取到番剧ssid:', ssid);
+                        // 需要通过API获取当前播放剧集的epid
+                        // 此处可能需要额外实现，暂时跳过
+                    }
+                } else {
+                    console.log('获取到番剧epid:', epid);
+                }
+            } else {
+                // 从普通视频URL中提取BV号
+                bvid = window.location.pathname.match(/\/video\/(BV[\w]+)/)?.[1];
             }
 
-            // 尝试从页面脚本中获取aid和CID
+            // 初始化返回对象
+            let result = {
+                bvid: bvid,
+                aid: null,
+                cid: null,
+                title: '',
+                uploader: '',
+                epid: epid
+            };
+
+            // 尝试从页面脚本获取视频信息
             const videoInfoScript = Array.from(document.querySelectorAll('script'))
                 .find(script => script.textContent.includes('window.__INITIAL_STATE__'));
-
-            let aid = null;
-            let cid = null;
-            let title = '';
-            let uploader = '';
 
             if (videoInfoScript) {
                 const match = videoInfoScript.textContent.match(/window\.__INITIAL_STATE__\s*=\s*({.+?});/);
                 if (match && match[1]) {
                     const data = JSON.parse(match[1]);
-                    aid = data.videoData?.aid || data.aid;
-                    cid = data.videoData?.cid || data.cid;
-                    title = data.videoData?.title || data.title || '';
-                    uploader = data.videoData?.owner?.name || '';
+
+                    if (isBangumi) {
+                        // 番剧页面的数据结构
+                        if (data.epInfo) {
+                            result.aid = data.epInfo.aid || null;
+                            result.cid = data.epInfo.cid || null;
+                            result.bvid = data.epInfo.bvid || null;
+                            result.title = data.mediaInfo?.title || data.h1Title || '';
+                            result.uploader = '哔哩哔哩番剧';
+                            result.epTitle = data.epInfo.longTitle || data.epInfo.title || '';
+                        } else if (data.epList && data.epList.length > 0 && epid) {
+                            // 在epList中查找对应的ep
+                            const ep = data.epList.find(ep => ep.id == epid);
+                            if (ep) {
+                                result.aid = ep.aid || null;
+                                result.cid = ep.cid || null;
+                                result.bvid = ep.bvid || null;
+                                result.title = data.mediaInfo?.title || data.h1Title || '';
+                                result.uploader = '哔哩哔哩番剧';
+                                result.epTitle = ep.longTitle || ep.title || '';
+                            }
+                        }
+                    } else {
+                        // 普通视频页面的数据结构
+                        result.aid = data.videoData?.aid || data.aid || null;
+                        result.cid = data.videoData?.cid || data.cid || null;
+                        result.bvid = data.videoData?.bvid || data.bvid || bvid || null;
+                        result.title = data.videoData?.title || data.title || '';
+                        result.uploader = data.videoData?.owner?.name || '';
+                    }
                 }
             }
 
-            // 如果从页面获取不到，通过API获取
-            if (!aid || !cid) {
-                // 先通过bvid获取aid
-                const url = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
-                const response = await fetch(url, {
-                    method: 'GET',
-                    credentials: 'include'
-                });
+            // 如果从页面无法获取完整信息，尝试通过API获取
+            if ((!result.aid || !result.cid) && (result.bvid || result.epid)) {
+                if (isBangumi && result.epid) {
+                    // 使用番剧API获取信息
+                    try {
+                        const url = `https://api.bilibili.com/pgc/player/web/v2/playurl?ep_id=${result.epid}&qn=120&fnval=4048`;
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            credentials: 'include'
+                        });
 
-                if (!response.ok) {
-                    throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.code === 0 && data.result) {
+                                const epInfo = data.result.play_view_business_info?.episode_info;
+                                if (epInfo) {
+                                    result.aid = epInfo.aid || result.aid;
+                                    result.bvid = epInfo.bvid || result.bvid;
+                                    result.cid = epInfo.cid || result.cid;
+                                    result.title = epInfo.title || result.title;
+                                    result.epTitle = epInfo.long_title || epInfo.title || result.epTitle;
+
+                                    // 如果已有aid但没有cid，尝试使用另一个API
+                                    if (result.aid && !result.cid) {
+                                        const videoInfoUrl = `https://api.bilibili.com/x/web-interface/view?aid=${result.aid}`;
+                                        const videoInfoResp = await fetch(videoInfoUrl, {
+                                            method: 'GET',
+                                            credentials: 'include'
+                                        });
+
+                                        if (videoInfoResp.ok) {
+                                            const videoData = await videoInfoResp.json();
+                                            if (videoData.code === 0 && videoData.data) {
+                                                result.cid = videoData.data.cid || result.cid;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (apiError) {
+                        console.error('获取番剧API信息失败:', apiError);
+                    }
+                } else if (result.bvid) {
+                    // 使用普通视频API获取信息
+                    try {
+                        const url = `https://api.bilibili.com/x/web-interface/view?bvid=${result.bvid}`;
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            credentials: 'include'
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.code === 0 && data.data) {
+                                result.aid = data.data.aid || result.aid;
+                                result.cid = data.data.cid || result.cid;
+                                result.title = data.data.title || result.title;
+                                result.uploader = data.data.owner?.name || result.uploader;
+                            }
+                        }
+                    } catch (apiError) {
+                        console.error('获取视频API信息失败:', apiError);
+                    }
                 }
-
-                const data = await response.json();
-                if (data.code !== 0) {
-                    throw new Error(`获取视频信息失败: ${data.message}`);
-                }
-
-                aid = data.data.aid;
-                cid = data.data.cid;
-                title = data.data.title;
-                uploader = data.data.owner?.name || '';
             }
 
-            return {
-                bvid,
-                aid,
-                cid,
-                title,
-                uploader
-            };
+            // 确保输出完整的日志
+            console.log('获取到视频数据:', {
+                bvid: result.bvid,
+                aid: result.aid,
+                cid: result.cid,
+                epid: result.epid,
+                title: result.title,
+                epTitle: result.epTitle,
+                uploader: result.uploader
+            });
+
+            return result;
         } catch (error) {
             console.error('获取视频数据失败:', error);
-            return { bvid: null, aid: null, cid: null };
+            return { bvid: null, aid: null, cid: null, epid: null };
         }
     }
 
@@ -408,19 +523,38 @@ window.adskipUserDataService = window.adskipUserDataService || {};
             const defaultSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
             if (defaultSubtitle && defaultSubtitle.url) {
                 // 下载字幕文件
-                const subtitleContent = await downloadSubtitleFile(defaultSubtitle.url);
-                if (subtitleContent && subtitleContent.body) {
-                    // 提取前10条字幕作为预览
-                    result.subtitleContent = subtitleContent.body.slice(0, 10).map(item => ({
-                        time: formatSubtitleTime(item.from),
-                        text: item.content
-                    }));
-                    result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览`;
-                } else {
-                    result.message = '字幕文件格式异常，无法提取内容';
+                try {
+                    console.log('尝试获取字幕内容预览:', defaultSubtitle.url);
+                    const subtitleContent = await downloadSubtitleFile(defaultSubtitle.url);
+
+                    // 检查字幕格式并提取内容
+                    if (subtitleContent) {
+                        if (subtitleContent.body && Array.isArray(subtitleContent.body)) {
+                            // 标准格式
+                            result.subtitleContent = subtitleContent.body.slice(0, 10).map(item => ({
+                                time: formatSubtitleTime(item.from),
+                                text: item.content
+                            }));
+                            result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览`;
+                        } else if (Array.isArray(subtitleContent)) {
+                            // 可能是直接返回的数组
+                            result.subtitleContent = subtitleContent.slice(0, 10).map(item => ({
+                                time: formatSubtitleTime(item.from || item.t || 0),
+                                text: item.content || item.text || ''
+                            }));
+                            result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览 (兼容格式)`;
+                        } else {
+                            result.message = '字幕文件格式无法识别: ' + JSON.stringify(subtitleContent).substring(0, 100) + '...';
+                        }
+                    } else {
+                        result.message = '字幕内容为空';
+                    }
+                } catch (downloadError) {
+                    console.error('下载字幕失败:', downloadError);
+                    result.message = `下载字幕失败: ${downloadError.message}`;
                 }
             } else {
-                result.message = '找不到可用的字幕文件';
+                result.message = '找不到可用的字幕文件URL';
             }
 
             return result;
@@ -454,13 +588,22 @@ window.adskipUserDataService = window.adskipUserDataService || {};
         try {
             if (!url) throw new Error('字幕URL不能为空');
 
-            const response = await fetch(url);
+            console.log('开始下载字幕文件:', url);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Referer': 'https://www.bilibili.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
 
             if (!response.ok) {
                 throw new Error(`下载字幕失败: ${response.status} ${response.statusText}`);
             }
 
-            return await response.json();
+            const subtitleData = await response.json();
+            console.log('字幕文件下载成功:', subtitleData);
+            return subtitleData;
         } catch (error) {
             console.error('下载字幕文件失败:', error);
             throw error;
