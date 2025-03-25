@@ -10,51 +10,16 @@ let currentAdTimestamps = [];     // 当前生效的广告时间段
 let urlAdTimestamps = [];         // URL解析的原始广告时间段
 let currentVideoId = '';          // 当前视频ID
 let lastVideoId = '';             // 上一个视频ID
-let debugMode = false;            // 调试模式开关
 let scriptInitiatedSeek = false;  // 标记是否是脚本引起的seeking
 let isAdminAuthorized = false;    // 管理员认证状态
 let adSkipPercentage = 5;         // 添加广告跳过百分比全局变量，默认为5%
 let extensionAvailable = true;    // 标记扩展上下文是否可用
 let cachedVideoPlayer = null;     // 缓存视频播放器元素
 let lastPlayerCheck = 0;          // 上次查找播放器的时间
-let servicesLoaded = false;       // 服务模块是否已加载完成
 
 // 缓存进度条容器
 let cachedProgressBar = null;
 let lastProgressBarCheck = 0;
-
-// 服务加载完成事件监听
-document.addEventListener('adskip_services_loaded', function() {
-    servicesLoaded = true;
-    adskipUtils.logDebug('服务模块加载完成，可以使用服务API');
-});
-
-// 添加轮询检测，确保服务模块可用
-const serviceCheckInterval = setInterval(function() {
-    if (servicesLoaded) {
-        clearInterval(serviceCheckInterval);
-        return;
-    }
-
-    // 检查所有需要的服务是否加载
-    if (typeof adskipCredentialService !== 'undefined' &&
-        typeof adskipSubtitleService !== 'undefined') {
-
-        servicesLoaded = true;
-        adskipUtils.logDebug('检测到服务模块已加载，但未触发事件，手动设置服务加载状态');
-
-        // 手动触发一次事件
-        try {
-            document.dispatchEvent(new CustomEvent('adskip_services_loaded'));
-        } catch (e) {
-            console.error('手动触发服务加载事件失败', e);
-        }
-
-        clearInterval(serviceCheckInterval);
-    } else {
-        adskipUtils.logDebug('等待服务模块加载...', { throttle: 2000 });
-    }
-}, 500);
 
 /**
  * 主函数 - 插件入口
@@ -185,9 +150,10 @@ async function init() {
             // 检查调试模式是否变化
             if (changes.adskip_debug_mode !== undefined) {
                 const newDebugMode = changes.adskip_debug_mode.newValue;
-                if (debugMode !== newDebugMode) {
-                    debugMode = newDebugMode;
-                    adskipUtils.logDebug(`检测到调试模式变化: ${debugMode ? '已启用' : '已禁用'}`);
+                const currentDebugMode = window.adskipStorage.getDebugMode();
+                if (currentDebugMode !== newDebugMode) {
+                    window.adskipStorage.setDebugMode(newDebugMode);
+                    adskipUtils.logDebug(`检测到调试模式变化: ${newDebugMode ? '已启用' : '已禁用'}`);
                     adskipStorage.updateDebugModeToggle();
                 }
             }

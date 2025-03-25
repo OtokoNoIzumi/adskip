@@ -283,7 +283,7 @@ function markAdPositionsOnProgressBar() {
             marker.remove();
         });
         // 减少日志输出，只在调试且未被过滤的情况下输出
-        if (debugMode && !adskipUtils.isLogFiltered('没有广告时间戳，不标记进度条')) {
+        if (!adskipUtils.isLogFiltered('没有广告时间戳，不标记进度条')) {
             adskipUtils.logDebug('没有广告时间戳，不标记进度条', { throttle: 5000 });
         }
         return;
@@ -712,8 +712,9 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
 
     // 监听调试模式变化
     if (changes.adskip_debug_mode !== undefined) {
-        debugMode = changes.adskip_debug_mode.newValue || false;
-        adskipUtils.logDebug(`调试模式状态已更新: ${debugMode ? '启用' : '禁用'}`);
+        const newDebugMode = changes.adskip_debug_mode.newValue || false;
+        window.adskipStorage.setDebugMode(newDebugMode);
+        adskipUtils.logDebug(`调试模式状态已更新: ${newDebugMode ? '启用' : '禁用'}`);
     }
 
     // 监听广告跳过百分比变化

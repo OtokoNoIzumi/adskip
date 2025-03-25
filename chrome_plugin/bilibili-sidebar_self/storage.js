@@ -5,6 +5,11 @@
 
 'use strict';
 
+
+// storage.js
+let debugMode = false; // 私有变量
+
+
 /**
  * 加载指定视频ID的广告时间戳
  * @param {string} videoId 视频ID
@@ -236,6 +241,22 @@ function initDebugMode() {
     });
 }
 
+/**
+ * 获取调试模式状态
+ * @returns {boolean} 调试模式状态
+ */
+function getDebugMode() {
+    return debugMode;
+}
+
+/**
+ * 设置调试模式状态
+ * @param {boolean} newValue 新的调试模式状态
+ */
+function setDebugMode(newValue) {
+    debugMode = newValue;
+    updateDebugModeToggle();
+}
 /**
  * 更新调试模式开关UI状态
  */
@@ -715,6 +736,8 @@ window.adskipStorage = {
     verifyAdminAccess,
     checkAdminStatus,
     initDebugMode,
+    getDebugMode,
+    setDebugMode,
     loadUploaderWhitelist,
     saveUploaderWhitelist,
     checkUploaderInWhitelist,

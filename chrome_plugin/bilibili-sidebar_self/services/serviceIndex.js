@@ -40,7 +40,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             return await response.json();
         } catch (error) {
-            console.error('API请求出错:', error);
+            adskipUtils.logDebug('API请求出错:', error);
             throw error;
         }
     }
@@ -71,7 +71,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             return await response.json();
         } catch (error) {
-            console.error('API请求出错:', error);
+            adskipUtils.logDebug('API请求出错:', error);
             throw error;
         }
     }
@@ -82,7 +82,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         post
     };
 
-    console.log('[AdSkip服务] API服务已加载');
+    adskipUtils.logDebug('[AdSkip服务] API服务已加载');
 })();
 
 // B站API服务 - bilibiliApi
@@ -160,18 +160,30 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         getVideoCid
     };
 
-    console.log('[AdSkip服务] B站API服务已加载');
+    adskipUtils.logDebug('[AdSkip服务] B站API服务已加载');
 })();
 
 // 凭证服务 - credentialService
 (function() {
+    // 添加缓存变量
+    let loginStatusCache = null;
+    let loginStatusCacheTimestamp = 0;
+    const LOGIN_CACHE_LIFETIME = 60000; // 登录状态缓存1分钟
+
     /**
      * 获取B站登录状态和用户信息 - 通过API获取
      * @returns {Promise<Object>} 用户登录状态信息
      */
     async function getBilibiliLoginStatus() {
         try {
-            console.log('[AdSkip服务] 正在获取B站登录状态...');
+            // 检查缓存是否有效
+            const now = Date.now();
+            if (loginStatusCache && (now - loginStatusCacheTimestamp < LOGIN_CACHE_LIFETIME)) {
+                adskipUtils.logDebug('[AdSkip服务] 使用缓存的登录状态数据');
+                return loginStatusCache;
+            }
+
+            adskipUtils.logDebug('[AdSkip服务] 正在获取B站登录状态...');
             const url = 'https://api.bilibili.com/x/web-interface/nav';
             const data = await window.adskipApiService.get(url);
 
@@ -180,10 +192,10 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             }
 
             const userInfo = data.data;
-            console.log('[AdSkip服务] 成功获取登录状态:', userInfo.isLogin ? '已登录' : '未登录');
+            adskipUtils.logDebug('[AdSkip服务] 成功获取登录状态:', userInfo.isLogin ? '已登录' : '未登录');
 
             // 返回标准格式的用户信息
-            return {
+            const result = {
                 isLoggedIn: userInfo.isLogin,
                 username: userInfo.uname || '未知用户',
                 uid: userInfo.mid,
@@ -197,8 +209,14 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                 ...userInfo,
                 source: 'API'
             };
+
+            // 更新缓存
+            loginStatusCache = result;
+            loginStatusCacheTimestamp = now;
+
+            return result;
         } catch (error) {
-            console.error('获取登录状态失败:', error);
+            adskipUtils.logDebug('获取登录状态失败:', error);
             return {
                 isLoggedIn: false,
                 username: '未知用户',
@@ -207,27 +225,12 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         }
     }
 
-    /**
-     * 检查用户是否为大会员
-     * @returns {Promise<boolean>} 是否为大会员
-     */
-    async function checkVipStatus() {
-        try {
-            const userInfo = await getBilibiliLoginStatus();
-            return userInfo.isLoggedIn && (userInfo.vipType > 0) && (userInfo.vipStatus === 1);
-        } catch (error) {
-            console.error('检查大会员状态失败:', error);
-            return false;
-        }
-    }
-
     // 将函数导出到全局服务对象
     window.adskipCredentialService = {
-        getBilibiliLoginStatus,
-        checkVipStatus
+        getBilibiliLoginStatus
     };
 
-    console.log('[AdSkip服务] 凭证服务已加载');
+    adskipUtils.logDebug('[AdSkip服务] 凭证服务已加载');
 })();
 
 // 字幕服务 - subtitleService
@@ -241,6 +244,10 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
     let subtitlesCache = null;
     let subtitlesCacheTimestamp = 0;
 
+    // 添加字幕文件缓存
+    const subtitleFileCache = new Map();
+    const SUBTITLE_CACHE_LIFETIME = 60000; // 字幕文件缓存1分钟
+
     /**
      * 获取视频字幕信息 - 直接通过API获取
      * @returns {Promise<Object>} 字幕信息
@@ -250,7 +257,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             // 检查缓存是否有效
             const now = Date.now();
             if (subtitlesCache && (now - subtitlesCacheTimestamp < CACHE_LIFETIME)) {
-                console.log('[AdSkip服务] 使用缓存的字幕列表数据');
+                adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕列表数据');
                 return subtitlesCache;
             }
 
@@ -269,7 +276,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             // 所有视频（包括番剧）都使用统一的API通过aid和cid获取字幕
             const url = `https://api.bilibili.com/x/player/wbi/v2?aid=${videoData.aid}&cid=${videoData.cid}`;
-            console.log('[AdSkip服务] 使用统一字幕API获取字幕列表:', url);
+            adskipUtils.logDebug('[AdSkip服务] 使用统一字幕API获取字幕列表:', url);
 
             try {
                 const response = await fetch(url, {
@@ -309,12 +316,12 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
                 return result;
             } catch (apiError) {
-                console.error('[AdSkip服务] 字幕API请求失败:', apiError);
+                adskipUtils.logDebug('[AdSkip服务] 字幕API请求失败:', apiError);
                 result.message = `字幕API请求失败: ${apiError.message}`;
                 return result;
             }
         } catch (error) {
-            console.error('[AdSkip服务] 获取字幕信息失败:', error);
+            adskipUtils.logDebug('[AdSkip服务] 获取字幕信息失败:', error);
             return {
                 hasSubtitleFeature: false,
                 subtitles: [],
@@ -332,18 +339,18 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         // 检查缓存是否有效
         const now = Date.now();
         if (!forceRefresh && videoDataCache && (now - cacheTimestamp < CACHE_LIFETIME)) {
-            console.log('[AdSkip服务] 使用缓存的视频数据');
+            adskipUtils.logDebug('[AdSkip服务] 使用缓存的视频数据');
             return videoDataCache;
         }
 
         try {
-            console.log('[AdSkip服务] 开始获取视频数据...');
+            adskipUtils.logDebug('[AdSkip服务] 开始获取视频数据...');
             // 检查是普通视频还是番剧页面
             const currentUrl = window.location.href;
             const isBangumi = currentUrl.includes('/bangumi/play/') ||
                               currentUrl.includes('/play/ep') ||
                               currentUrl.includes('/play/ss');
-            console.log('[AdSkip服务] 视频类型:', isBangumi ? '番剧页面' : '普通视频页面');
+            adskipUtils.logDebug('[AdSkip服务] 视频类型:', isBangumi ? '番剧页面' : '普通视频页面');
 
             // 获取视频ID (BV号或EP号)
             let bvid = null;
@@ -354,13 +361,13 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                 const epMatch = currentUrl.match(/\/play\/ep(\d+)/);
                 if (epMatch && epMatch[1]) {
                     epid = epMatch[1];
-                    console.log('[AdSkip服务] 从URL提取到番剧epid:', epid);
+                    adskipUtils.logDebug('[AdSkip服务] 从URL提取到番剧epid:', epid);
                 } else {
                     // 尝试提取ss号 - 如果需要
                     const ssMatch = currentUrl.match(/\/bangumi\/play\/ss(\d+)/) ||
                                    currentUrl.match(/\/play\/ss(\d+)/);
                     if (ssMatch && ssMatch[1]) {
-                        console.log('[AdSkip服务] 从URL提取到番剧ssid:', ssMatch[1]);
+                        adskipUtils.logDebug('[AdSkip服务] 从URL提取到番剧ssid:', ssMatch[1]);
                         // 这里可以添加ss号的处理逻辑
                     }
                 }
@@ -369,7 +376,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                 const bvMatch = currentUrl.match(/\/video\/(BV[\w]+)/);
                 if (bvMatch && bvMatch[1]) {
                     bvid = bvMatch[1];
-                    console.log('[AdSkip服务] 从URL提取到BV号:', bvid);
+                    adskipUtils.logDebug('[AdSkip服务] 从URL提取到BV号:', bvid);
                 }
             }
 
@@ -386,13 +393,13 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             // 先处理番剧，获取其BVid
             if (isBangumi && epid) {
                 // 使用番剧API获取信息
-                console.log('[AdSkip服务] 使用番剧API获取信息');
+                adskipUtils.logDebug('[AdSkip服务] 使用番剧API获取信息');
                 try {
                     const url = `https://api.bilibili.com/pgc/player/web/v2/playurl?ep_id=${epid}&qn=120&fnval=4048`;
                     const data = await window.adskipApiService.get(url);
 
                     if (data.code === 0 && data.result) {
-                        console.log('[AdSkip服务] 番剧API返回成功');
+                        adskipUtils.logDebug('[AdSkip服务] 番剧API返回成功');
                         const epInfo = data.result.play_view_business_info?.episode_info;
 
                         // 保存原始番剧API响应数据
@@ -407,10 +414,10 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                             // result.uploader = epInfo.title;
                         }
                     } else {
-                        console.log('[AdSkip服务] 番剧API返回失败:', data?.message || '未知错误');
+                        adskipUtils.logDebug('[AdSkip服务] 番剧API返回失败:', data?.message || '未知错误');
                     }
                 } catch (apiError) {
-                    console.error('[AdSkip服务] 获取番剧API信息失败:', apiError);
+                    adskipUtils.logDebug('[AdSkip服务] 获取番剧API信息失败:', apiError);
                 }
             }
 
@@ -418,13 +425,13 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             if (result.bvid || bvid) {
                 // 使用普通视频API获取信息
                 const videoBvid = result.bvid || bvid;
-                console.log('[AdSkip服务] 使用视频API获取详细信息, BVid:', videoBvid);
+                adskipUtils.logDebug('[AdSkip服务] 使用视频API获取详细信息, BVid:', videoBvid);
                 try {
                     const url = `https://api.bilibili.com/x/web-interface/view?bvid=${videoBvid}`;
                     const data = await window.adskipApiService.get(url);
 
                     if (data.code === 0 && data.data) {
-                        console.log('[AdSkip服务] 视频API返回成功');
+                        adskipUtils.logDebug('[AdSkip服务] 视频API返回成功');
                         result.aid = data.data.aid;
                         result.cid = data.data.cid;
                         result.title = result.title || data.data.title;
@@ -443,16 +450,16 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                         result.dimension = data.data.dimension;
                         result.subtitle = data.data.subtitle;
                     } else {
-                        console.log('[AdSkip服务] 视频API返回失败:', data?.message || '未知错误');
+                        adskipUtils.logDebug('[AdSkip服务] 视频API返回失败:', data?.message || '未知错误');
                     }
                 } catch (apiError) {
-                    console.error('[AdSkip服务] 获取视频API信息失败:', apiError);
+                    adskipUtils.logDebug('[AdSkip服务] 获取视频API信息失败:', apiError);
                 }
             }
 
             // 检查最终结果是否完整
             const hasCompleteInfo = !!(result.aid && result.cid);
-            console.log('[AdSkip服务] 最终获取到的视频数据' + (hasCompleteInfo ? '完整' : '不完整') + ':', {
+            adskipUtils.logDebug('[AdSkip服务] 最终获取到的视频数据' + (hasCompleteInfo ? '完整' : '不完整') + ':', {
                 bvid: result.bvid,
                 aid: result.aid,
                 cid: result.cid,
@@ -470,8 +477,97 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             return result;
         } catch (error) {
-            console.error('[AdSkip服务] 获取视频数据失败:', error);
+            adskipUtils.logDebug('[AdSkip服务] 获取视频数据失败:', error);
             return { bvid: null, aid: null, cid: null, epid: null };
+        }
+    }
+
+    /**
+     * 下载字幕文件
+     * @param {string} url 字幕文件URL
+     * @returns {Promise<Object>} 字幕内容 - 已优化格式的字幕数据，以及原始完整字幕
+     */
+    async function downloadSubtitleFile(url) {
+        try {
+            if (!url) throw new Error('字幕URL不能为空');
+
+            // 检查缓存
+            const now = Date.now();
+            if (subtitleFileCache.has(url)) {
+                const cacheEntry = subtitleFileCache.get(url);
+                if (now - cacheEntry.timestamp < SUBTITLE_CACHE_LIFETIME) {
+                    adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕文件数据:', url);
+                    return cacheEntry.data;
+                }
+            }
+
+            adskipUtils.logDebug('[AdSkip服务] 开始下载字幕文件:', url);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Referer': 'https://www.bilibili.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`下载字幕失败: ${response.status} ${response.statusText}`);
+            }
+
+            const rawSubtitleData = await response.json();
+            adskipUtils.logDebug('[AdSkip服务] 字幕文件下载成功');
+
+            // 返回标准格式的字幕数据
+            let processedData = {
+                originalData: null,   // 原始完整数据，供需要的地方使用
+                subtitles: [],        // 标准化处理后的字幕数组 [{ from, content }]
+                preview: []           // 前10条预览 [{ time: "mm:ss", text: "内容" }]
+            };
+
+            // 处理B站字幕标准格式: {body: [{from, to, content}]}
+            if (rawSubtitleData && rawSubtitleData.body && Array.isArray(rawSubtitleData.body)) {
+                // 保存原始数据引用（可以用于特殊场景）
+                processedData.originalData = rawSubtitleData;
+
+                // 提取标准化字幕内容（只保留from和content字段）
+                processedData.subtitles = rawSubtitleData.body.map(item => ({
+                    from: item.from,
+                    content: item.content
+                }));
+
+                // 生成预览内容（前10条，格式化时间）
+                processedData.preview = rawSubtitleData.body.slice(0, 10).map(item => ({
+                    time: formatSubtitleTime(item.from),
+                    text: item.content
+                }));
+
+                adskipUtils.logDebug('[AdSkip服务] 成功处理字幕内容，共', rawSubtitleData.body.length, '条');
+            } else {
+                // 如果不是标准格式，保留原始数据
+                processedData.originalData = rawSubtitleData;
+                adskipUtils.logDebug('[AdSkip服务] 非标准字幕格式，保留原始数据');
+            }
+
+            // 更新缓存
+            subtitleFileCache.set(url, {
+                data: processedData,
+                timestamp: now
+            });
+
+            // 清理过期缓存
+            if (subtitleFileCache.size > 20) {
+                // 如果缓存项超过20个，清理过期项
+                for (const [cacheUrl, cacheEntry] of subtitleFileCache.entries()) {
+                    if (now - cacheEntry.timestamp > SUBTITLE_CACHE_LIFETIME) {
+                        subtitleFileCache.delete(cacheUrl);
+                    }
+                }
+            }
+
+            return processedData;
+        } catch (error) {
+            adskipUtils.logDebug('[AdSkip服务] 下载字幕文件失败:', error);
+            throw error;
         }
     }
 
@@ -481,7 +577,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
      */
     async function getSubtitlePreview() {
         try {
-            console.log('[AdSkip服务] 开始获取字幕预览...');
+            adskipUtils.logDebug('[AdSkip服务] 开始获取字幕预览...');
             const result = {
                 availableLanguages: [],
                 subtitleContent: [],
@@ -491,16 +587,16 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             // 使用已缓存的字幕信息
             const subtitleInfo = await getVideoSubtitles();
             if (!subtitleInfo.hasSubtitleFeature) {
-                console.log('[AdSkip服务] 当前视频没有字幕功能:', subtitleInfo.message);
+                adskipUtils.logDebug('[AdSkip服务] 当前视频没有字幕功能:', subtitleInfo.message);
                 result.message = subtitleInfo.message;
                 return result;
             }
 
-            console.log('[AdSkip服务] 获取到字幕列表:', subtitleInfo.subtitles.length, '个字幕');
+            adskipUtils.logDebug('[AdSkip服务] 获取到字幕列表:', subtitleInfo.subtitles.length, '个字幕');
 
             // 提取可用语言列表
             result.availableLanguages = subtitleInfo.subtitles.map(sub => sub.languageName);
-            console.log('[AdSkip服务] 可用字幕语言:', result.availableLanguages.join(', '));
+            adskipUtils.logDebug('[AdSkip服务] 可用字幕语言:', result.availableLanguages.join(', '));
 
             // 如果没有字幕，直接返回可用语言列表
             if (subtitleInfo.subtitles.length === 0) {
@@ -511,42 +607,30 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             // 获取默认字幕或第一个字幕的内容
             const defaultSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
             if (defaultSubtitle && defaultSubtitle.url) {
-                console.log('[AdSkip服务] 尝试获取字幕内容:', defaultSubtitle.languageName, defaultSubtitle.url);
+                adskipUtils.logDebug('[AdSkip服务] 尝试获取字幕内容:', defaultSubtitle.languageName, defaultSubtitle.url);
 
                 try {
-                    // 下载字幕文件
-                    const subtitleContent = await downloadSubtitleFile(defaultSubtitle.url);
+                    // 下载字幕文件 - 已处理格式
+                    const processedSubtitle = await downloadSubtitleFile(defaultSubtitle.url);
 
-                    if (!subtitleContent) {
-                        console.log('[AdSkip服务] 字幕内容为空');
+                    if (!processedSubtitle || processedSubtitle.subtitles.length === 0) {
+                        adskipUtils.logDebug('[AdSkip服务] 字幕内容为空');
                         result.message = '字幕内容为空';
                         return result;
                     }
 
-                    // 保存原始字幕数据供完整展示使用
-                    if (subtitleContent.body && Array.isArray(subtitleContent.body)) {
-                        result.rawSubtitleOriginal = subtitleContent.body;
-                    }
-
-                    // B站字幕只处理标准格式: {body: [{from, to, content}]}
-                    if (subtitleContent.body && Array.isArray(subtitleContent.body)) {
-                        console.log('[AdSkip服务] 检测到标准字幕格式 (body数组)');
-                        result.subtitleContent = subtitleContent.body.slice(0, 10).map(item => ({
-                            time: formatSubtitleTime(item.from),
-                            text: item.content
-                        }));
-                        result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览`;
-                        console.log('[AdSkip服务] 提取到', result.subtitleContent.length, '条字幕预览，共', subtitleContent.body.length, '条完整字幕');
-                    } else {
-                        console.log('[AdSkip服务] 未知字幕格式:', typeof subtitleContent, Object.keys(subtitleContent).join(', '));
-                        result.message = '字幕文件格式无法识别';
-                    }
+                    // 使用已处理好的字幕内容
+                    result.subtitleContent = processedSubtitle.preview; // 使用已经处理好的预览
+                    result.rawSubtitleOriginal = processedSubtitle.subtitles; // 使用标准化的字幕内容
+                    result.rawFullSubtitle = processedSubtitle; // 保存完整的处理结果
+                    result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览`;
+                    adskipUtils.logDebug('[AdSkip服务] 提取到', result.subtitleContent.length, '条字幕预览，共', processedSubtitle.subtitles.length, '条完整字幕');
                 } catch (downloadError) {
-                    console.error('[AdSkip服务] 下载字幕失败:', downloadError);
+                    adskipUtils.logDebug('[AdSkip服务] 下载字幕失败:', downloadError);
                     result.message = `下载字幕失败: ${downloadError.message}`;
                 }
             } else {
-                console.log('[AdSkip服务] 找不到可用的字幕文件URL');
+                adskipUtils.logDebug('[AdSkip服务] 找不到可用的字幕文件URL');
                 result.message = '找不到可用的字幕文件URL';
             }
 
@@ -555,7 +639,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             return result;
         } catch (error) {
-            console.error('[AdSkip服务] 获取字幕预览失败:', error);
+            adskipUtils.logDebug('[AdSkip服务] 获取字幕预览失败:', error);
             return {
                 availableLanguages: [],
                 subtitleContent: [],
@@ -575,38 +659,6 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 
-    /**
-     * 下载字幕文件
-     * @param {string} url 字幕文件URL
-     * @returns {Promise<Object>} 字幕内容
-     */
-    async function downloadSubtitleFile(url) {
-        try {
-            if (!url) throw new Error('字幕URL不能为空');
-
-            console.log('[AdSkip服务] 开始下载字幕文件:', url);
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Referer': 'https://www.bilibili.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`下载字幕失败: ${response.status} ${response.statusText}`);
-            }
-
-            const subtitleData = await response.json();
-            console.log('[AdSkip服务] 字幕文件下载成功');
-            return subtitleData;
-        } catch (error) {
-            console.error('[AdSkip服务] 下载字幕文件失败:', error);
-            throw error;
-        }
-    }
-
-    // 将函数导出到全局服务对象
     window.adskipSubtitleService = {
         getVideoSubtitles,
         getSubtitlePreview,
@@ -614,9 +666,5 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         getVideoData
     };
 
-    console.log('[AdSkip服务] 字幕服务已加载');
+    adskipUtils.logDebug('[AdSkip服务] 字幕服务已加载');
 })();
-
-// 服务加载完成后触发事件
-console.log('[AdSkip服务] 所有服务模块加载完成');
-document.dispatchEvent(new CustomEvent('adskip_services_loaded'));

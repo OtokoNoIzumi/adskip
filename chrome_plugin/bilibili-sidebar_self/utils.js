@@ -46,6 +46,7 @@ function isLogFiltered(message) {
  * @param {number} throttleTime 节流时间（毫秒），0表示不节流
  */
 function logDebug(message, dataOrOptions, throttleTime = 0) {
+    const debugMode = window.adskipStorage.getDebugMode();
     if (!debugMode) return;
 
     // 检查第二个参数是否为配置对象

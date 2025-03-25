@@ -15,9 +15,9 @@
     {
       "matches": ["*://www.bilibili.com/video/*", "*://www.bilibili.com/bangumi/play/*"],
       "js": [
-        "services/serviceIndex.js",
         "utils.js",
         "storage.js",
+        "services/serviceIndex.js",
         "videoMonitor.js",
         "ui.js",
         "adminPanel.js",

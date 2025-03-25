@@ -169,7 +169,7 @@ function showAdminPanel() {
 
             <div class="adskip-tab-content active" id="general-tab">
                 <div class="adskip-debug-toggle">
-                    <input type="checkbox" id="adskip-debug-mode" ${debugMode ? 'checked' : ''}>
+                    <input type="checkbox" id="adskip-debug-mode" ${window.adskipStorage.getDebugMode() ? 'checked' : ''}>
                     <label for="adskip-debug-mode">启用调试模式 (在控制台输出详细日志)</label>
                 </div>
 
@@ -264,7 +264,7 @@ function showAdminPanel() {
 
             if (currentDebugMode !== newDebugMode) {
                 chrome.storage.local.set({'adskip_debug_mode': newDebugMode}, function() {
-                    debugMode = newDebugMode;
+                    window.adskipStorage.setDebugMode(newDebugMode);
                     adskipUtils.logDebug(`调试模式已${newDebugMode ? '启用' : '禁用'}`);
                     adskipStorage.updateDebugModeToggle();
                 });
@@ -309,7 +309,7 @@ function showAdminPanel() {
                         'adskip_debug_mode': false,
                         'adskip_uploader_whitelist': '[]'
                     }, () => {
-                        debugMode = false;
+                        window.adskipStorage.setDebugMode(false);
                         adskipStorage.updateDebugModeToggle();
                         if (typeof adskipUI !== 'undefined' && adskipUI.updateStatusDisplay) {
                             adskipUI.updateStatusDisplay('所有数据已重置完成！', 'success');
@@ -522,7 +522,7 @@ async function loadCredentialInfo() {
 
         // 使用服务API获取登录状态
         const userInfo = await adskipCredentialService.getBilibiliLoginStatus();
-        console.log("完整用户信息:", userInfo);
+        adskipUtils.logDebug("完整用户信息:", userInfo);
 
         let infoHTML = '<div class="credential-data">';
 
@@ -700,45 +700,42 @@ async function loadSubtitleInfo() {
             subtitle: videoData.subtitle || {}
         };
 
-
         // 添加字幕完整内容（如果有）
         if (subtitlePreview && subtitlePreview.subtitleContent && subtitlePreview.subtitleContent.length > 0) {
             try {
                 // 找到默认字幕或第一个字幕
                 const firstSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
                 if (firstSubtitle) {
-                    // 首先检查subtitlePreview是否已经有可用的完整字幕内容
+                    // 使用已经处理过的字幕数据
                     let fullContent = null;
 
-                    // 如果有预览中已有原始数据
+                    // 检查是否已经有预处理好的字幕内容
                     if (subtitlePreview.rawSubtitleOriginal && Array.isArray(subtitlePreview.rawSubtitleOriginal)) {
-                        console.log('[AdSkip服务] 使用已有的原始字幕内容');
-                        fullContent = subtitlePreview.rawSubtitleOriginal.map(item => ({
-                            from: item.from,
-                            content: item.content
-                        }));
+                        adskipUtils.logDebug('[AdSkip服务] 使用已有的处理后字幕内容');
+                        fullContent = subtitlePreview.rawSubtitleOriginal;
                     }
-
-                    // 如果没有从预览中获取到原始数据，直接请求字幕文件
-                    if (!fullContent && firstSubtitle.url) {
-                        console.log('[AdSkip服务] 重新获取完整字幕内容:', firstSubtitle.url);
-                        const subtitleContent = await adskipSubtitleService.downloadSubtitleFile(firstSubtitle.url);
-                        if (subtitleContent && subtitleContent.body && Array.isArray(subtitleContent.body)) {
-                            fullContent = subtitleContent.body.map(item => ({
-                                from: item.from,
-                                content: item.content
-                            }));
+                    // 如果有完整的字幕处理结果
+                    else if (subtitlePreview.rawFullSubtitle && subtitlePreview.rawFullSubtitle.subtitles) {
+                        adskipUtils.logDebug('[AdSkip服务] 使用完整字幕处理结果');
+                        fullContent = subtitlePreview.rawFullSubtitle.subtitles;
+                    }
+                    // 如果需要重新获取字幕（极少情况）
+                    else if (!fullContent && firstSubtitle.url) {
+                        adskipUtils.logDebug('[AdSkip服务] 需要重新获取字幕内容:', firstSubtitle.url);
+                        const processedSubtitle = await adskipSubtitleService.downloadSubtitleFile(firstSubtitle.url);
+                        if (processedSubtitle && processedSubtitle.subtitles) {
+                            fullContent = processedSubtitle.subtitles;
                         }
                     }
 
-                    // 保存完整字幕内容
+                    // 保存完整字幕内容到keyParams
                     if (fullContent) {
                         keyParams.subtitle_contents = [fullContent];
-                        console.log(`[AdSkip服务] 成功获取${fullContent.length}条字幕内容`);
+                        adskipUtils.logDebug(`[AdSkip服务] 成功获取${fullContent.length}条字幕内容`);
                     }
                 }
             } catch (e) {
-                console.error('[AdSkip服务] 获取字幕内容失败:', e);
+                adskipUtils.logDebug('[AdSkip服务] 获取字幕内容失败:', e);
             }
         }
 
