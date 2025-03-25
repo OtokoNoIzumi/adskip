@@ -327,6 +327,17 @@ function safeApiCall(callback) {
     });
 }
 
+/**
+ * 隐藏部分敏感信息，用于显示
+ * @param {string} text 需要处理的文本
+ * @returns {string} 处理后的文本
+ */
+function maskSensitiveInfo(text) {
+    if (!text) return '';
+    if (text.length <= 8) return '****';
+    return text.substring(0, 4) + '****' + text.substring(text.length - 4);
+}
+
 // 导出模块函数
 window.adskipUtils = {
     logDebug,
@@ -340,5 +351,6 @@ window.adskipUtils = {
     findProgressBar,
     checkExtensionContext,
     safeApiCall,
-    isLogFiltered
+    isLogFiltered,
+    maskSensitiveInfo
 };

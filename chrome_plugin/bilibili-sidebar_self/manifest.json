@@ -15,6 +15,7 @@
     {
       "matches": ["*://www.bilibili.com/video/*", "*://www.bilibili.com/bangumi/play/*"],
       "js": [
+        "services/serviceIndex.js",
         "utils.js",
         "storage.js",
         "videoMonitor.js",
@@ -24,6 +25,18 @@
       ],
       "css": ["content.css"],
       "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "services/api/apiService.js",
+        "services/api/bilibiliApi.js",
+        "services/auth/credentialService.js",
+        "services/data/subtitleService.js",
+        "services/data/userDataService.js"
+      ],
+      "matches": ["*://*.bilibili.com/*"]
     }
   ],
   "options_ui": {

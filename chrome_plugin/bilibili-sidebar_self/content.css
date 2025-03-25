@@ -136,6 +136,38 @@ input:checked + .adskip-slider:before {
   margin-top: 10px;
   color: #4CAF50;
   display: none;
+  transition: opacity 0.5s ease;
+  border-radius: 4px;
+  padding: 8px;
+  opacity: 1;
+}
+
+.adskip-status.fade-out {
+  opacity: 0;
+}
+
+.adskip-status.status-success {
+  background-color: rgba(40, 167, 69, 0.1);
+  border-left: 3px solid #28a745;
+  color: #155724;
+}
+
+.adskip-status.status-warning {
+  background-color: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid #ffc107;
+  color: #856404;
+}
+
+.adskip-status.status-error {
+  background-color: rgba(220, 53, 69, 0.1);
+  border-left: 3px solid #dc3545;
+  color: #721c24;
+}
+
+.adskip-status.status-info {
+  background-color: rgba(23, 162, 184, 0.1);
+  border-left: 3px solid #17a2b8;
+  color: #0c5460;
 }
 
 .adskip-result {
@@ -511,4 +543,376 @@ input:checked + .adskip-slider:before {
   pointer-events: all;
   top: 0;
   border-radius: 2px;
+}
+
+/* 标签页和内容区域样式 */
+.adskip-tabs-container {
+  margin-bottom: 15px;
+}
+
+.adskip-tabs {
+  display: flex;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #e1e1e1;
+}
+
+.adskip-tab {
+  padding: 8px 15px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.adskip-tab:hover {
+  color: #FB7299;
+}
+
+.adskip-tab.active {
+  color: #FB7299;
+  border-bottom: 2px solid #FB7299;
+  font-weight: bold;
+}
+
+.adskip-tab-content {
+  display: none;
+  padding: 10px 0;
+}
+
+.adskip-tab-content.active {
+  display: block;
+}
+
+/* API信息展示区域样式 */
+.adskip-api-section {
+  margin-bottom: 20px;
+  background-color: rgba(251, 114, 153, 0.05);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid rgba(251, 114, 153, 0.1);
+}
+
+.adskip-api-section h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #333;
+  border-bottom: 1px dashed rgba(251, 114, 153, 0.2);
+  padding-bottom: 5px;
+}
+
+.adskip-api-info-container {
+  font-size: 13px;
+}
+
+.adskip-loading {
+  text-align: center;
+  color: #666;
+  padding: 15px;
+  font-style: italic;
+}
+
+/* 凭证信息样式 */
+.credential-data {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.credential-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+}
+
+.credential-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.credential-value {
+  font-family: monospace;
+  color: #666;
+}
+
+.credential-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 8px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+}
+
+.credential-note {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff3cd;
+  border-radius: 4px;
+  color: #856404;
+}
+
+.credential-error {
+  padding: 10px;
+  background-color: #f8d7da;
+  border-radius: 4px;
+  color: #721c24;
+}
+
+/* 字幕信息样式 */
+.subtitle-data {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subtitle-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+}
+
+.subtitle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.subtitle-item {
+  padding: 8px;
+  background-color: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  border-left: 3px solid #FB7299;
+}
+
+.subtitle-item.active {
+  background-color: rgba(251, 114, 153, 0.1);
+  border-left: 3px solid #00a1d6;
+}
+
+.subtitle-option {
+  padding: 8px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+}
+
+.subtitle-error {
+  padding: 10px;
+  background-color: #f8d7da;
+  border-radius: 4px;
+  color: #721c24;
+}
+
+/* 视频信息简介 */
+.video-info-brief {
+  background-color: #f8f8f8;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-left: 3px solid #00a1d6;
+}
+
+/* 字幕列表标题 */
+.subtitle-list-header {
+  font-weight: bold;
+  margin-top: 8px;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+/* 提示信息 */
+.subtitle-note, .credential-note {
+  padding: 8px;
+  border-radius: 4px;
+  background-color: #f8f8f8;
+  margin-top: 8px;
+  color: #666;
+}
+
+.subtitle-note.info, .credential-note.info {
+  background-color: rgba(0, 161, 214, 0.1);
+  color: #0c5460;
+  border-left: 3px solid #00a1d6;
+}
+
+/* 用户头像 */
+.user-avatar-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.user-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid #FB7299;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 字幕检测方法说明 */
+.subtitle-detection-method {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+/* 状态点样式 */
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-dot.green {
+  background-color: #28a745;
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.2);
+}
+
+.status-dot.red {
+  background-color: #dc3545;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+}
+
+.status-dot.yellow {
+  background-color: #ffc107;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.2);
+}
+
+/* 字幕预览样式 */
+.subtitle-preview-header {
+  font-weight: bold;
+  margin-top: 12px;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.subtitle-preview-list {
+  border: 1px solid rgba(251, 114, 153, 0.2);
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: rgba(251, 114, 153, 0.03);
+}
+
+.subtitle-preview-item {
+  margin-bottom: 8px;
+  padding: 6px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  font-size: 13px;
+}
+
+.subtitle-time {
+  width: 50px;
+  color: #666;
+  flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.subtitle-content {
+  flex-grow: 1;
+  word-break: break-word;
+}
+
+/* 会员等级显示 */
+.credential-value.vip-1 {
+  color: #fb7299;
+  font-weight: bold;
+}
+
+.credential-value.vip-2 {
+  color: #f9ae51;
+  font-weight: bold;
+  text-shadow: 0 0 1px rgba(249, 174, 81, 0.3);
+}
+
+/* 优化用户信息卡片 */
+.credential-data {
+  background-color: rgba(251, 251, 251, 0.8);
+  padding: 10px;
+  border-radius: 6px;
+}
+
+/* 服务未加载错误信息样式 */
+.error-message {
+    background-color: #fff2f2;
+    border-left: 4px solid #ff5252;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    color: #e53935;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* 重试按钮样式 */
+.retry-button {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    margin-top: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s;
+    display: block;
+}
+
+.retry-button:hover {
+    background-color: #1976d2;
+}
+
+/* API数据展示区域 */
+.credential-api-data-container {
+    margin-top: 15px;
+    border-top: 1px solid rgba(251, 114, 153, 0.2);
+    padding-top: 10px;
+}
+
+.credential-api-data-container summary {
+    cursor: pointer;
+    color: #666;
+    font-size: 12px;
+    padding: 5px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.credential-api-data-container summary:hover {
+    background-color: #ececec;
+    color: #333;
+}
+
+.credential-api-data {
+    margin-top: 10px;
+    background-color: #f8f8f8;
+    border-radius: 4px;
+    padding: 8px;
+    overflow: auto;
+    max-height: 300px;
+}
+
+.credential-api-data pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    font-family: monospace;
+    color: #333;
 }

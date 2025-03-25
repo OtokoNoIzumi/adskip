@@ -764,18 +764,9 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
                     }
                 });
 
-                // 使用动画效果提示状态已更新
-                const statusElement = document.getElementById('adskip-status');
-                if (statusElement) {
-                    statusElement.style.display = 'block';
-                    statusElement.innerText = `白名单状态已更新`;
-                    statusElement.style.opacity = '0';
-                    statusElement.style.transition = 'opacity 0.3s ease-in-out';
-                    setTimeout(() => {
-                        statusElement.style.opacity = '1';
-                        // 3秒后淡出
-                        setTimeout(() => { statusElement.style.opacity = '0'; }, 3000);
-                    }, 50);
+                // 使用统一的状态显示函数，传递正确的参数顺序
+                if (typeof adskipUI !== 'undefined' && adskipUI.updateStatusDisplay) {
+                    adskipUI.updateStatusDisplay('白名单状态已更新', 'info');
                 }
             }
         })();

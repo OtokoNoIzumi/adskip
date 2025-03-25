@@ -5,6 +5,60 @@
 
 'use strict';
 
+// 状态消息的全局计时器
+let statusMessageTimerId = null;
+
+/**
+ * 更新状态显示
+ * @param {string} message 状态信息
+ * @param {string} type 消息类型: 'success', 'warning', 'error', 'info'
+ * @param {number} duration 显示持续时间（毫秒）
+ */
+function updateStatusDisplay(message, type = 'success', duration = 3000) {
+    // 找到主状态显示元素
+    const statusElement = document.getElementById('adskip-status');
+    if (!statusElement) {
+        console.log('未找到状态显示元素');
+        return;
+    }
+
+    // 清除之前的计时器
+    if (statusMessageTimerId) {
+        clearTimeout(statusMessageTimerId);
+        statusMessageTimerId = null;
+    }
+
+    // 移除所有状态类
+    statusElement.classList.remove('status-success', 'status-warning', 'status-error', 'status-info');
+
+    // 添加对应的状态类
+    statusElement.classList.add(`status-${type}`);
+
+    // 设置消息内容
+    statusElement.textContent = message;
+
+    // 确保元素显示
+    statusElement.style.opacity = '1';
+    statusElement.style.display = 'block';
+
+    // 添加即将淡出的类（用于CSS过渡效果）
+    statusElement.classList.remove('fade-out');
+
+    // 设置定时器准备淡出
+    statusMessageTimerId = setTimeout(() => {
+        // 添加淡出类
+        statusElement.classList.add('fade-out');
+
+        // 设置淡出后隐藏的计时器
+        setTimeout(() => {
+            statusElement.style.display = 'none';
+            statusElement.classList.remove('fade-out');
+        }, 500); // 与CSS过渡时间一致
+
+        statusMessageTimerId = null;
+    }, duration);
+}
+
 /**
  * 创建链接生成器UI
  */
@@ -116,7 +170,7 @@ function createLinkGenerator() {
                     <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
                     <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
                 </div>
-                <div id="adskip-status" class="adskip-status">设置已应用</div>
+                <div id="adskip-status" class="adskip-status"></div>
                 <div id="adskip-result" class="adskip-result"></div>
                 ${isAdmin ? `
                 <div class="adskip-admin-container">
@@ -166,13 +220,39 @@ function createLinkGenerator() {
                 .adskip-switch-small input:checked + .adskip-slider:before {
                     transform: translateX(16px);
                 }
-                /* 添加状态信息的动画效果 */
+                /* 状态信息样式 */
                 .adskip-status {
-                    transition: opacity 0.3s ease-in-out;
+                    transition: opacity 0.5s ease;
                     border-radius: 4px;
-                    background: rgba(0, 0, 0, 0.03);
                     padding: 8px;
                     margin-top: 8px;
+                    display: none;
+                    opacity: 1;
+                }
+                /* 淡出效果类 */
+                .adskip-status.fade-out {
+                    opacity: 0;
+                }
+                /* 状态类型样式 */
+                .adskip-status.status-success {
+                    background-color: rgba(40, 167, 69, 0.1);
+                    border-left: 3px solid #28a745;
+                    color: #155724;
+                }
+                .adskip-status.status-warning {
+                    background-color: rgba(255, 193, 7, 0.1);
+                    border-left: 3px solid #ffc107;
+                    color: #856404;
+                }
+                .adskip-status.status-error {
+                    background-color: rgba(220, 53, 69, 0.1);
+                    border-left: 3px solid #dc3545;
+                    color: #721c24;
+                }
+                .adskip-status.status-info {
+                    background-color: rgba(23, 162, 184, 0.1);
+                    border-left: 3px solid #17a2b8;
+                    color: #0c5460;
                 }
                 /* 白名单标签状态变化反馈 */
                 .adskip-whitelist-label span {
@@ -216,11 +296,13 @@ function createLinkGenerator() {
                         clearInterval(window.adSkipCheckInterval);
                         window.adSkipCheckInterval = null;
                         adskipUtils.logDebug('已临时禁用广告跳过功能');
+                        updateStatusDisplay('已临时禁用广告跳过功能', 'warning');
                     } else if (isEnabled) {
                         // 重新启用监控
                         if (currentAdTimestamps.length > 0) {
                             adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
                             adskipUtils.logDebug('已重新启用广告跳过功能');
+                            updateStatusDisplay('已重新启用广告跳过功能', 'success');
                         }
                     }
                 });
@@ -279,19 +361,12 @@ function createLinkGenerator() {
 
                         // 更新状态显示
                         if (statusMessage) {
-                            const statusElement = document.getElementById('adskip-status');
-                            statusElement.style.display = 'block';
-                            statusElement.innerText = statusMessage;
-
-                            // 使用淡入淡出效果替代闪烁
-                            statusElement.style.opacity = '0';
-                            statusElement.style.transition = 'opacity 0.3s ease-in-out';
-                            setTimeout(() => { statusElement.style.opacity = '1'; }, 50);
+                            updateStatusDisplay(statusMessage, 'info');
                         }
                     } catch (error) {
                         console.error("白名单操作失败:", error);
                         // 显示错误消息
-                        alert(`操作失败: ${error.message}`);
+                        updateStatusDisplay(`操作失败: ${error.message}`, 'error');
 
                         // 恢复开关状态
                         this.checked = !this.checked;
@@ -318,8 +393,7 @@ function createLinkGenerator() {
                         adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
                     }
 
-                    document.getElementById('adskip-status').textContent = `已更新广告跳过范围为：前${newValue}%`;
-                    document.getElementById('adskip-status').style.display = 'block';
+                    updateStatusDisplay(`已更新广告跳过范围为：前${newValue}%`, 'success');
                 });
             });
 
@@ -342,8 +416,7 @@ function createLinkGenerator() {
                             adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
                         }
 
-                        document.getElementById('adskip-status').textContent = `已更新广告跳过范围为：前${presetValue}%`;
-                        document.getElementById('adskip-status').style.display = 'block';
+                        updateStatusDisplay(`已更新广告跳过范围为：前${presetValue}%`, 'success');
                     });
                 });
             });
@@ -352,7 +425,7 @@ function createLinkGenerator() {
             document.getElementById('adskip-generate').addEventListener('click', function() {
                 const input = document.getElementById('adskip-input').value.trim();
                 if (!input) {
-                    alert('请输入有效的时间段');
+                    updateStatusDisplay('请输入有效的时间段', 'error');
                     return;
                 }
 
@@ -364,6 +437,8 @@ function createLinkGenerator() {
                     <p>广告跳过链接:</p>
                     <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
                 `;
+
+                updateStatusDisplay('分享链接已生成', 'success');
             });
 
             // 立即应用按钮
@@ -372,8 +447,7 @@ function createLinkGenerator() {
                 if (!input) {
                     // 如果输入为空，则清空时间段
                     adskipVideoMonitor.setupAdSkipMonitor([]);
-                    document.getElementById('adskip-status').style.display = 'block';
-                    document.getElementById('adskip-status').innerText = '设置已应用: 已清空所有时间段';
+                    updateStatusDisplay('设置已应用: 已清空所有时间段', 'info');
                     return;
                 }
 
@@ -390,10 +464,9 @@ function createLinkGenerator() {
                     });
 
                     adskipVideoMonitor.setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
-                    document.getElementById('adskip-status').style.display = 'block';
-                    document.getElementById('adskip-status').innerText = '设置已应用: ' + input;
+                    updateStatusDisplay('设置已应用: ' + input, 'success');
                 } catch (e) {
-                    alert('格式错误，请使用正确的格式：开始-结束,开始-结束');
+                    updateStatusDisplay('格式错误，请使用正确的格式：开始-结束,开始-结束', 'error');
                 }
             });
 
@@ -403,14 +476,12 @@ function createLinkGenerator() {
                 if (urlAdTimestamps.length > 0) {
                     adskipVideoMonitor.setupAdSkipMonitor(urlAdTimestamps);
                     document.getElementById('adskip-input').value = adskipUtils.timestampsToString(urlAdTimestamps);
-                    document.getElementById('adskip-status').style.display = 'block';
-                    document.getElementById('adskip-status').innerText = '已还原为URL中的设置';
+                    updateStatusDisplay('已还原为URL中的设置', 'info');
                 } else {
                     // 否则清空
                     adskipVideoMonitor.setupAdSkipMonitor([]);
                     document.getElementById('adskip-input').value = '';
-                    document.getElementById('adskip-status').style.display = 'block';
-                    document.getElementById('adskip-status').innerText = '已还原（清空所有设置）';
+                    updateStatusDisplay('已还原（清空所有设置）', 'info');
                 }
             });
 
@@ -426,13 +497,13 @@ function createLinkGenerator() {
                     if (!apiKey) return;
 
                     if (adskipStorage.verifyAdminAccess(apiKey)) {
-                        alert('验证成功，已获得管理员权限');
+                        updateStatusDisplay('验证成功，已获得管理员权限', 'success');
                         // 重新加载面板以显示管理员选项
                         document.getElementById('adskip-panel').remove();
                         createLinkGenerator();
                         document.getElementById('adskip-button').click();
                     } else {
-                        alert('API密钥无效');
+                        updateStatusDisplay('API密钥无效', 'error');
                     }
                 });
             }
@@ -466,15 +537,13 @@ function createLinkGenerator() {
 
                                 // 更新输入框
                                 document.getElementById('adskip-input').value = '';
-                                document.getElementById('adskip-status').style.display = 'block';
-                                document.getElementById('adskip-status').innerText = '已清空所有视频广告数据';
+                                updateStatusDisplay('已清空所有视频广告数据', 'warning');
 
                                 adskipUtils.logDebug('已清空所有视频广告数据');
                             });
                         }
                     } else {
-                        document.getElementById('adskip-status').style.display = 'block';
-                        document.getElementById('adskip-status').innerText = '没有已保存的视频广告数据';
+                        updateStatusDisplay('没有已保存的视频广告数据', 'info');
                     }
                 });
             });
@@ -488,5 +557,6 @@ function createLinkGenerator() {
 
 // 导出模块函数
 window.adskipUI = {
-    createLinkGenerator
+    createLinkGenerator,
+    updateStatusDisplay
 };
