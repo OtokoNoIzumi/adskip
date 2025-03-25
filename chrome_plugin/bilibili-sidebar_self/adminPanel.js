@@ -6,6 +6,92 @@
 'use strict';
 
 /**
+ * 安全地处理JSON对象，避免循环引用和过大的对象
+ * @param {Object} obj 需要序列化的对象
+ * @param {number} maxDepth 最大递归深度
+ * @returns {string} 处理后的JSON字符串
+ */
+function safeStringify(obj, maxDepth = 10) {
+    // 处理循环引用
+    const seen = new WeakSet();
+
+    const replacer = (key, value) => {
+        // 处理特殊类型
+        if (value instanceof Error) {
+            return {
+                errorType: value.constructor.name,
+                message: value.message,
+                stack: value.stack
+            };
+        }
+
+        // 处理函数
+        if (typeof value === 'function') {
+            return '[Function]';
+        }
+
+        // 处理DOM节点
+        if (value instanceof Node) {
+            return `[${value.nodeName}]`;
+        }
+
+        // 处理循环引用
+        if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) {
+                return '[Circular Reference]';
+            }
+            seen.add(value);
+        }
+
+        return value;
+    };
+
+    try {
+        return JSON.stringify(obj, replacer, 2);
+    } catch (err) {
+        return JSON.stringify({
+            error: "无法序列化此对象",
+            reason: err.message
+        });
+    }
+}
+
+/**
+ * 格式化重要参数用于显示，对字幕内容进行截取
+ * @param {Object} params 重要参数对象
+ * @returns {string} 格式化后的JSON字符串
+ */
+function formatKeyParamsForDisplay(params) {
+    // 深拷贝对象，避免修改原对象
+    const displayParams = JSON.parse(JSON.stringify(params));
+
+    // 如果有字幕内容，只显示前10条
+    if (displayParams.subtitle_contents &&
+        Array.isArray(displayParams.subtitle_contents) &&
+        displayParams.subtitle_contents[0].length > 10) {
+
+        // 保存完整长度
+        const totalLength = displayParams.subtitle_contents[0].length;
+
+        // 添加提示信息
+        displayParams.subtitle_content_note = `显示前10条，共${totalLength}条字幕`;
+        // 截取前10条
+        displayParams.subtitle_contents[0] = displayParams.subtitle_contents[0].slice(0, 10);
+    }
+
+    // 为预览优化显示格式
+    if (displayParams.pubdate && typeof displayParams.pubdate === 'number') {
+        displayParams.pubdate = new Date(displayParams.pubdate * 1000).toLocaleString();
+    }
+
+    if (displayParams.dimension && typeof displayParams.dimension === 'object') {
+        displayParams.dimension = `${displayParams.dimension.width}x${displayParams.dimension.height}`;
+    }
+
+    return safeStringify(displayParams, 2);
+}
+
+/**
  * 显示管理员面板
  */
 function showAdminPanel() {
@@ -32,6 +118,35 @@ function showAdminPanel() {
             chrome.storage.local.set({ 'adskip_uploader_whitelist': JSON.stringify([]) });
         }
     });
+
+    // 创建复制按钮的样式
+    const copyBtnStyle = document.createElement('style');
+    copyBtnStyle.textContent = `
+        .with-copy-btn {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-right: 5px;
+        }
+        .copy-data-btn {
+            background-color: #23ade5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+        }
+        .copy-data-btn:hover {
+            background-color: #1a9cd7;
+        }
+        .copy-data-btn.copied {
+            background-color: #4caf50;
+        }
+    `;
+    document.head.appendChild(copyBtnStyle);
 
     // 创建管理面板基本结构
     const adminPanel = document.createElement('div');
@@ -472,9 +587,12 @@ async function loadCredentialInfo() {
             infoHTML += `
                 <div class="credential-api-data-container">
                     <details>
-                        <summary>查看完整API数据</summary>
+                        <summary class="with-copy-btn">
+                            查看完整API数据
+                            <button class="copy-data-btn" data-content='${safeStringify(userInfo)}'>复制</button>
+                        </summary>
                         <div class="credential-api-data">
-                            <pre>${JSON.stringify(userInfo, null, 2)}</pre>
+                            <pre>${safeStringify(userInfo, 2)}</pre>
                         </div>
                     </details>
                 </div>`;
@@ -504,6 +622,34 @@ async function loadCredentialInfo() {
         infoHTML += '</div>';
         credentialSection.innerHTML = infoHTML;
 
+        // 添加复制按钮事件监听
+        const copyButtons = credentialSection.querySelectorAll('.copy-data-btn');
+        copyButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation(); // 防止触发details的展开/收起
+
+                const content = this.getAttribute('data-content');
+                if (content) {
+                    navigator.clipboard.writeText(content)
+                        .then(() => {
+                            // 临时显示复制成功
+                            const originalText = this.textContent;
+                            this.textContent = '已复制!';
+                            this.classList.add('copied');
+
+                            setTimeout(() => {
+                                this.textContent = originalText;
+                                this.classList.remove('copied');
+                            }, 1500);
+                        })
+                        .catch(err => {
+                            console.error('复制失败:', err);
+                            alert('复制失败，请手动复制');
+                        });
+                }
+            });
+        });
     } catch (error) {
         credentialSection.innerHTML = `
             <div class="error-message">
@@ -539,6 +685,62 @@ async function loadSubtitleInfo() {
         // 获取字幕信息
         const subtitleInfo = await adskipSubtitleService.getVideoSubtitles();
         const subtitlePreview = await adskipSubtitleService.getSubtitlePreview();
+
+        // 准备重要参数信息对象
+        const keyParams = {
+            bvid: videoData.bvid || '',
+            title: videoData.title || '',
+            owner: videoData.owner || '',
+            mid: videoData.owner?.mid || '',
+            desc: videoData.desc || '',
+            dynamic: videoData.dynamic || '',
+            duration: videoData.duration || 0,
+            pubdate: videoData.pubdate || 0,
+            dimension: videoData.dimension,
+            subtitle: videoData.subtitle || {}
+        };
+
+
+        // 添加字幕完整内容（如果有）
+        if (subtitlePreview && subtitlePreview.subtitleContent && subtitlePreview.subtitleContent.length > 0) {
+            try {
+                // 找到默认字幕或第一个字幕
+                const firstSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
+                if (firstSubtitle) {
+                    // 首先检查subtitlePreview是否已经有可用的完整字幕内容
+                    let fullContent = null;
+
+                    // 如果有预览中已有原始数据
+                    if (subtitlePreview.rawSubtitleOriginal && Array.isArray(subtitlePreview.rawSubtitleOriginal)) {
+                        console.log('[AdSkip服务] 使用已有的原始字幕内容');
+                        fullContent = subtitlePreview.rawSubtitleOriginal.map(item => ({
+                            from: item.from,
+                            content: item.content
+                        }));
+                    }
+
+                    // 如果没有从预览中获取到原始数据，直接请求字幕文件
+                    if (!fullContent && firstSubtitle.url) {
+                        console.log('[AdSkip服务] 重新获取完整字幕内容:', firstSubtitle.url);
+                        const subtitleContent = await adskipSubtitleService.downloadSubtitleFile(firstSubtitle.url);
+                        if (subtitleContent && subtitleContent.body && Array.isArray(subtitleContent.body)) {
+                            fullContent = subtitleContent.body.map(item => ({
+                                from: item.from,
+                                content: item.content
+                            }));
+                        }
+                    }
+
+                    // 保存完整字幕内容
+                    if (fullContent) {
+                        keyParams.subtitle_contents = [fullContent];
+                        console.log(`[AdSkip服务] 成功获取${fullContent.length}条字幕内容`);
+                    }
+                }
+            } catch (e) {
+                console.error('[AdSkip服务] 获取字幕内容失败:', e);
+            }
+        }
 
         let infoHTML = `
             <div class="credential-data">
@@ -595,13 +797,30 @@ async function loadSubtitleInfo() {
                 ${subtitlePreview.message || subtitleInfo.message || ''}
             </div>`;
 
+        // 添加重要参数信息折叠区
+        infoHTML += `
+            <div class="credential-api-data-container">
+                <details>
+                    <summary class="with-copy-btn">
+                        查看重要参数信息
+                        <button class="copy-data-btn" data-content='${safeStringify(keyParams)}'>复制完整数据</button>
+                    </summary>
+                    <div class="credential-api-data">
+                        <pre>${formatKeyParamsForDisplay(keyParams)}</pre>
+                    </div>
+                </details>
+            </div>`;
+
         // 显示视频完整数据
         infoHTML += `
             <div class="credential-api-data-container">
                 <details>
-                    <summary>查看完整视频信息</summary>
+                    <summary class="with-copy-btn">
+                        查看完整视频信息
+                        <button class="copy-data-btn" data-content='${safeStringify(videoData)}'>复制</button>
+                    </summary>
                     <div class="credential-api-data">
-                        <pre>${JSON.stringify(videoData, null, 2)}</pre>
+                        <pre>${safeStringify(videoData, 2)}</pre>
                     </div>
                 </details>
             </div>`;
@@ -611,9 +830,12 @@ async function loadSubtitleInfo() {
             infoHTML += `
                 <div class="credential-api-data-container">
                     <details>
-                        <summary>查看完整字幕API响应</summary>
+                        <summary class="with-copy-btn">
+                            查看完整字幕API响应
+                            <button class="copy-data-btn" data-content='${safeStringify(subtitleInfo.rawData)}'>复制</button>
+                        </summary>
                         <div class="credential-api-data">
-                            <pre>${JSON.stringify(subtitleInfo.rawData, null, 2)}</pre>
+                            <pre>${safeStringify(subtitleInfo.rawData, 2)}</pre>
                         </div>
                     </details>
                 </div>`;
@@ -626,12 +848,18 @@ async function loadSubtitleInfo() {
                 infoHTML += `
                     <div class="credential-api-data-container">
                         <details>
-                            <summary>查看字幕URL和数据</summary>
+                            <summary class="with-copy-btn">
+                                查看字幕URL和数据
+                                <button class="copy-data-btn" data-content='${safeStringify({
+                                    url: firstSubtitle.url,
+                                    subtitles: subtitleInfo.subtitles
+                                })}'>复制</button>
+                            </summary>
                             <div class="credential-api-data">
                                 <h4>字幕URL:</h4>
                                 <pre>${firstSubtitle.url}</pre>
                                 <h4>完整字幕数据:</h4>
-                                <pre>${JSON.stringify(subtitleInfo.subtitles, null, 2)}</pre>
+                                <pre>${safeStringify(subtitleInfo.subtitles, 2)}</pre>
                             </div>
                         </details>
                     </div>`;
@@ -641,6 +869,34 @@ async function loadSubtitleInfo() {
         infoHTML += '</div>';
         subtitleSection.innerHTML = infoHTML;
 
+        // 添加复制按钮事件监听
+        const copyButtons = subtitleSection.querySelectorAll('.copy-data-btn');
+        copyButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation(); // 防止触发details的展开/收起
+
+                const content = this.getAttribute('data-content');
+                if (content) {
+                    navigator.clipboard.writeText(content)
+                        .then(() => {
+                            // 临时显示复制成功
+                            const originalText = this.textContent;
+                            this.textContent = '已复制!';
+                            this.classList.add('copied');
+
+                            setTimeout(() => {
+                                this.textContent = originalText;
+                                this.classList.remove('copied');
+                            }, 1500);
+                        })
+                        .catch(err => {
+                            console.error('复制失败:', err);
+                            alert('复制失败，请手动复制');
+                        });
+                }
+            });
+        });
     } catch (error) {
         subtitleSection.innerHTML = `
             <div class="error-message">
@@ -652,5 +908,7 @@ async function loadSubtitleInfo() {
 
 // 导出模块函数
 window.adskipAdmin = {
-    showAdminPanel
+    showAdminPanel,
+    loadCredentialInfo,
+    loadSubtitleInfo
 };
