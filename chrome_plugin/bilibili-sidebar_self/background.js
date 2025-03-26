@@ -14,24 +14,81 @@ const adskipState = {
   debugMode: false,
 };
 
+// 等待adskipStorage模块加载完成
+let storageModuleReady = false;
+
 // 初始化服务
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('[AdSkip] 插件已安装/更新');
 
-  // 初始化存储设置
-  const result = await chrome.storage.local.get(['adskip_enabled', 'adskip_debug_mode']);
+  // 初始化存储模块(如果需要的话)
+  await initStorageModule();
 
-  // 设置默认值
-  if (result.adskip_enabled === undefined) {
-    await chrome.storage.local.set({ 'adskip_enabled': true });
-  }
-
-  // 更新状态对象
-  adskipState.isEnabled = result.adskip_enabled !== undefined ? result.adskip_enabled : true;
-  adskipState.debugMode = result.adskip_debug_mode === true;
+  // 加载保存的设置
+  await loadSavedSettings();
 
   console.log('[AdSkip] 初始化设置完成:', adskipState);
 });
+
+/**
+ * 初始化存储模块
+ */
+async function initStorageModule() {
+  // 如果adskipStorage不存在，我们需要直接使用chrome.storage.local
+  // 在实际的background脚本中，应该导入storage.js
+  // 这里我们检查adskipStorage是否存在
+  if (typeof adskipStorage === 'undefined') {
+    console.log('[AdSkip] 存储模块未加载，使用直接存储访问');
+
+    // 检查enabled设置
+    const result = await chrome.storage.local.get(['adskip_enabled', 'adskip_debug_mode']);
+
+    // 设置默认值
+    if (result.adskip_enabled === undefined) {
+      await chrome.storage.local.set({ 'adskip_enabled': true });
+    }
+
+    // 更新状态对象
+    adskipState.isEnabled = result.adskip_enabled !== undefined ? result.adskip_enabled : true;
+    adskipState.debugMode = result.adskip_debug_mode === true;
+  } else {
+    storageModuleReady = true;
+    console.log('[AdSkip] 存储模块已加载');
+  }
+}
+
+/**
+ * 加载已保存的设置
+ */
+async function loadSavedSettings() {
+  if (storageModuleReady && typeof adskipStorage !== 'undefined') {
+    // 使用存储模块API加载设置
+    adskipState.isEnabled = await adskipStorage.getEnabled();
+    adskipState.debugMode = await adskipStorage.getDebugMode();
+  } else {
+    // 直接使用chrome.storage.local (回退方案)
+    const result = await chrome.storage.local.get(['adskip_enabled', 'adskip_debug_mode']);
+    adskipState.isEnabled = result.adskip_enabled !== undefined ? result.adskip_enabled : true;
+    adskipState.debugMode = result.adskip_debug_mode === true;
+  }
+}
+
+/**
+ * 保存插件状态
+ */
+async function saveState() {
+  if (storageModuleReady && typeof adskipStorage !== 'undefined') {
+    // 使用存储模块API保存设置
+    await adskipStorage.setEnabled(adskipState.isEnabled);
+    await adskipStorage.setDebugMode(adskipState.debugMode);
+  } else {
+    // 直接使用chrome.storage.local (回退方案)
+    await chrome.storage.local.set({
+      'adskip_enabled': adskipState.isEnabled,
+      'adskip_debug_mode': adskipState.debugMode
+    });
+  }
+}
 
 // 处理来自内容脚本的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -54,13 +111,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 更新插件状态
     if (message.state && typeof message.state === 'object') {
       Object.assign(adskipState, message.state);
+
       // 同步到存储
-      if (message.state.isEnabled !== undefined) {
-        chrome.storage.local.set({ 'adskip_enabled': message.state.isEnabled });
-      }
-      if (message.state.debugMode !== undefined) {
-        chrome.storage.local.set({ 'adskip_debug_mode': message.state.debugMode });
-      }
+      saveState().then(() => {
+        console.log('[AdSkip] 状态已更新并保存:', adskipState);
+      });
     }
     sendResponse({ success: true });
   }

@@ -5,10 +5,19 @@
 
 'use strict';
 
+// 存储键名常量定义
+const STORAGE_KEYS = {
+    DEBUG_MODE: 'adskip_debug_mode',
+    ENABLED: 'adskip_enabled',
+    PERCENTAGE: 'adskip_percentage',
+    ADMIN_AUTH: 'adskip_admin_authorized',
+    UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
+    VIDEO_PREFIX: 'adskip_'
+};
 
-// storage.js
-let debugMode = true; // 私有变量
-
+// 模块私有变量
+let debugMode = false; // 私有变量，只在本模块内使用
+let lastWhitelistHash = ''; // 白名单缓存哈希
 
 /**
  * 加载指定视频ID的广告时间戳
@@ -24,8 +33,8 @@ function loadAdTimestampsForVideo(videoId) {
         }
 
         try {
-            chrome.storage.local.get(`adskip_${videoId}`, (result) => {
-                const savedData = result[`adskip_${videoId}`];
+            chrome.storage.local.get(`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`, (result) => {
+                const savedData = result[`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`];
                 if (!savedData) {
                     adskipUtils.logDebug(`没有找到视频 ${videoId} 的保存数据`);
                     resolve([]);
@@ -40,10 +49,114 @@ function loadAdTimestampsForVideo(videoId) {
                 resolve(timestamps);
             });
         } catch (e) {
-            console.error(`--==--LOG: 加载视频 ${videoId} 广告数据失败:`, e);
+            console.error(`加载视频 ${videoId} 广告数据失败:`, e);
             resolve([]);
         }
     });
+}
+
+/**
+ * 加载指定视频ID的广告时间戳，并检测URL时间戳污染
+ * @param {string} videoId 视频ID
+ * @param {Array} urlTimestamps URL中解析出的时间戳数组（可能被污染）
+ * @returns {Promise<Object>} 结果对象，包含时间戳和是否污染的标志
+ */
+async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
+    // 参数验证
+    if (!videoId) {
+        adskipUtils.logDebug('视频ID为空，无法加载和验证广告时间段');
+        return { timestamps: [], fromUrl: false, isPolluted: false };
+    }
+
+    try {
+        // 1. 加载当前视频的存储时间戳
+        const savedTimestamps = await loadAdTimestampsForVideo(videoId);
+
+        // 2. 如果没有URL时间戳，直接返回存储的时间戳
+        if (!urlTimestamps || !Array.isArray(urlTimestamps) || urlTimestamps.length === 0) {
+            adskipUtils.logDebug('没有URL时间戳参数，使用存储的时间戳');
+            return {
+                timestamps: savedTimestamps,
+                fromUrl: false,
+                isPolluted: false
+            };
+        }
+
+        // 3. 获取所有存储的视频时间戳数据(除了当前视频和设置)
+        const allItems = await new Promise(resolve => {
+            chrome.storage.local.get(null, items => resolve(items));
+        });
+
+        // 4. 过滤出视频时间戳相关的键
+        const allKeys = Object.keys(allItems);
+        const videoKeys = allKeys.filter(key =>
+            key.startsWith(STORAGE_KEYS.VIDEO_PREFIX) &&
+            key !== `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}` &&
+            key !== STORAGE_KEYS.DEBUG_MODE &&
+            key !== STORAGE_KEYS.ENABLED &&
+            key !== STORAGE_KEYS.PERCENTAGE &&
+            key !== STORAGE_KEYS.ADMIN_AUTH &&
+            key !== STORAGE_KEYS.UPLOADER_WHITELIST
+        );
+
+        // 5. 检查URL时间戳是否与其他视频的时间戳匹配(污染检测)
+        const urlTimeString = adskipUtils.timestampsToString(urlTimestamps);
+        let isPolluted = false;
+        let matchedVideoId = null;
+
+        adskipUtils.logDebug(`检查URL参数 [${urlTimeString}] 是否与其他视频的广告时间戳匹配`, { throttle: 1000 });
+
+        for (const key of videoKeys) {
+            try {
+                const data = allItems[key];
+                const parsed = JSON.parse(data);
+                const timestamps = parsed.timestamps || parsed;
+
+                if (Array.isArray(timestamps) && timestamps.length > 0) {
+                    const savedTimeString = adskipUtils.timestampsToString(timestamps);
+                    if (urlTimeString === savedTimeString) {
+                        isPolluted = true;
+                        matchedVideoId = key.replace(STORAGE_KEYS.VIDEO_PREFIX, '');
+                        adskipUtils.logDebug(`URL参数污染检测: 视频 ${matchedVideoId} 的时间戳与URL参数相同，判定为视频切换造成的污染`);
+                        break;
+                    }
+                }
+            } catch (e) {
+                adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
+            }
+        }
+
+        // 6. 根据检测结果返回适当的时间戳
+        if (isPolluted) {
+            adskipUtils.logDebug('URL时间戳已被污染，改用保存的时间戳');
+            return {
+                timestamps: savedTimestamps,
+                fromUrl: false,
+                isPolluted: true,
+                pollutionSource: matchedVideoId
+            };
+        } else if (savedTimestamps.length > 0) {
+            // 存在保存的时间戳，优先使用存储的
+            adskipUtils.logDebug('URL时间戳未污染，但优先使用已保存的时间戳');
+            return {
+                timestamps: savedTimestamps,
+                fromUrl: false,
+                isPolluted: false
+            };
+        } else {
+            // URL参数未污染，且没有保存的时间戳，使用URL参数
+            adskipUtils.logDebug('使用URL时间戳参数（未污染且无保存数据）');
+            return {
+                timestamps: urlTimestamps,
+                fromUrl: true,
+                isPolluted: false
+            };
+        }
+
+    } catch (e) {
+        console.error(`处理视频 ${videoId} 广告数据验证失败:`, e);
+        return { timestamps: [], fromUrl: false, isPolluted: false };
+    }
 }
 
 /**
@@ -97,7 +210,7 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
     const jsonData = JSON.stringify(saveData);
 
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({ [`adskip_${videoId}`]: jsonData }, function() {
+        chrome.storage.local.set({ [`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`]: jsonData }, function() {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
@@ -114,19 +227,17 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
  */
 function loadAdSkipPercentage() {
     return new Promise((resolve) => {
-        chrome.storage.local.get('adskip_percentage', function(result) {
-            if (result.adskip_percentage !== undefined) {
-                adSkipPercentage = result.adskip_percentage;
-                adskipUtils.logDebug(`加载广告跳过百分比设置: ${adSkipPercentage}%`);
-                resolve(adSkipPercentage);
+        chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, function(result) {
+            let percentage = 5; // 默认值
+            if (result[STORAGE_KEYS.PERCENTAGE] !== undefined) {
+                percentage = result[STORAGE_KEYS.PERCENTAGE];
+                adskipUtils.logDebug(`加载广告跳过百分比设置: ${percentage}%`);
             } else {
-                // 如果没有保存的设置，默认为5%
-                adSkipPercentage = 5;
-                // 保存默认设置
-                chrome.storage.local.set({'adskip_percentage': adSkipPercentage});
-                adskipUtils.logDebug(`设置默认广告跳过百分比: ${adSkipPercentage}%`);
-                resolve(adSkipPercentage);
+                // 如果没有保存的设置，保存默认设置
+                chrome.storage.local.set({[STORAGE_KEYS.PERCENTAGE]: percentage});
+                adskipUtils.logDebug(`设置默认广告跳过百分比: ${percentage}%`);
             }
+            resolve(percentage);
         });
     });
 }
@@ -141,15 +252,14 @@ function saveAdSkipPercentage(percentage) {
     percentage = parseInt(percentage, 10);
 
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({'adskip_percentage': percentage}, function() {
+        chrome.storage.local.set({[STORAGE_KEYS.PERCENTAGE]: percentage}, function() {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
             }
 
-            adSkipPercentage = percentage;
-            adskipUtils.logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
-            resolve(adSkipPercentage);
+            adskipUtils.logDebug(`已保存广告跳过百分比设置: ${percentage}%`);
+            resolve(percentage);
         });
     });
 }
@@ -157,7 +267,7 @@ function saveAdSkipPercentage(percentage) {
 /**
  * 验证管理员身份
  * @param {string} apiKey API密钥
- * @returns {boolean} 验证结果
+ * @returns {Promise<boolean>} 验证结果
  */
 function verifyAdminAccess(apiKey) {
     // 这是一个简单的哈希检查，您可以替换为更安全的方法
@@ -177,17 +287,17 @@ function verifyAdminAccess(apiKey) {
     const inputHash = simpleHash(apiKey);
     const isValid = (inputHash === validKeyHash);
 
-    if (isValid) {
-        // 将授权状态保存在chrome.storage.local中，这样在不同标签页间也能保持授权
-        chrome.storage.local.set({'adskip_admin_authorized': true}, function() {
-            isAdminAuthorized = true;
-            adskipUtils.logDebug('管理员授权已保存到存储中');
-        });
-        isAdminAuthorized = true;
-        return true;
-    }
-
-    return false;
+    return new Promise((resolve) => {
+        if (isValid) {
+            // 将授权状态保存在chrome.storage.local中
+            chrome.storage.local.set({[STORAGE_KEYS.ADMIN_AUTH]: true}, function() {
+                adskipUtils.logDebug('管理员授权已保存到存储中');
+                resolve(true);
+            });
+        } else {
+            resolve(false);
+        }
+    });
 }
 
 /**
@@ -197,14 +307,8 @@ function verifyAdminAccess(apiKey) {
 async function checkAdminStatus() {
     return new Promise((resolve) => {
         // 从chrome.storage.local中获取授权状态
-        chrome.storage.local.get('adskip_admin_authorized', function(result) {
-            if (result.adskip_admin_authorized === true) {
-                isAdminAuthorized = true;
-                resolve(true);
-            } else {
-                isAdminAuthorized = false;
-                resolve(false);
-            }
+        chrome.storage.local.get(STORAGE_KEYS.ADMIN_AUTH, function(result) {
+            resolve(result[STORAGE_KEYS.ADMIN_AUTH] === true);
         });
     });
 }
@@ -215,10 +319,10 @@ async function checkAdminStatus() {
  */
 function initDebugMode() {
     return new Promise((resolve) => {
-        chrome.storage.local.get('adskip_debug_mode', (result) => {
-            debugMode = result.adskip_debug_mode || false;
+        chrome.storage.local.get(STORAGE_KEYS.DEBUG_MODE, (result) => {
+            debugMode = result[STORAGE_KEYS.DEBUG_MODE] || false;
             if (debugMode) {
-                console.log('--==--LOG: 调试模式已启用');
+                adskipUtils.logDebug('调试模式已启用');
             }
 
             // 更新所有页面的调试模式开关状态
@@ -239,11 +343,21 @@ function getDebugMode() {
 /**
  * 设置调试模式状态
  * @param {boolean} newValue 新的调试模式状态
+ * @returns {Promise<boolean>} 设置后的调试模式状态
  */
 function setDebugMode(newValue) {
-    debugMode = newValue;
-    chrome.storage.local.set({'adskip_debug_mode': newValue});
-    updateDebugModeToggle();
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({[STORAGE_KEYS.DEBUG_MODE]: newValue}, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+
+            debugMode = newValue;
+            updateDebugModeToggle();
+            resolve(debugMode);
+        });
+    });
 }
 
 /**
@@ -262,19 +376,16 @@ function updateDebugModeToggle() {
     }
 }
 
-// 添加一个变量用于缓存上次白名单状态的哈希
-let lastWhitelistHash = '';
-
 /**
  * 加载UP主白名单列表
  * @returns {Promise<Array>} UP主白名单数组
  */
 function loadUploaderWhitelist() {
     return new Promise((resolve) => {
-        chrome.storage.local.get('adskip_uploader_whitelist', (result) => {
-            if (result.adskip_uploader_whitelist) {
+        chrome.storage.local.get(STORAGE_KEYS.UPLOADER_WHITELIST, (result) => {
+            if (result[STORAGE_KEYS.UPLOADER_WHITELIST]) {
                 try {
-                    const whitelist = JSON.parse(result.adskip_uploader_whitelist);
+                    const whitelist = JSON.parse(result[STORAGE_KEYS.UPLOADER_WHITELIST]);
 
                     // 计算当前白名单的哈希值（简单方法：长度+第一项名称）
                     const simpleHash = `${whitelist.length}_${whitelist.length > 0 ? (typeof whitelist[0] === 'string' ? whitelist[0] : whitelist[0]?.name || '') : ''}`;
@@ -330,7 +441,7 @@ function saveUploaderWhitelist(whitelist) {
             };
         });
 
-        chrome.storage.local.set({ 'adskip_uploader_whitelist': JSON.stringify(formattedWhitelist) }, () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(formattedWhitelist) }, () => {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
@@ -392,7 +503,7 @@ async function addUploaderToWhitelist(uploader) {
 
         // 保存更新后的白名单
         await new Promise((resolve, reject) => {
-            chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+            chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
@@ -444,7 +555,7 @@ async function disableUploaderInWhitelist(uploader) {
         if (modified) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -490,7 +601,7 @@ async function enableUploaderInWhitelist(uploader) {
         if (modified) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -528,7 +639,7 @@ async function removeUploaderFromWhitelist(uploader) {
         if (newWhitelist.length < initialLength) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(newWhitelist)}, function() {
+                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(newWhitelist)}, function() {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -683,7 +794,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
 
         // 保存白名单
         return new Promise((resolve, reject) => {
-            chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
+            chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
@@ -697,18 +808,62 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
     }
 }
 
-// 暴露给全局对象的方法
+/**
+ * 获取功能开关状态
+ * @returns {Promise<boolean>} 功能是否启用
+ */
+function getEnabled() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(STORAGE_KEYS.ENABLED, function(result) {
+            // 默认为启用状态
+            resolve(result[STORAGE_KEYS.ENABLED] !== false);
+        });
+    });
+}
+
+/**
+ * 设置功能开关状态
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<boolean>} 设置后的状态
+ */
+function setEnabled(enabled) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({[STORAGE_KEYS.ENABLED]: enabled}, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}广告跳过功能`);
+            resolve(enabled);
+        });
+    });
+}
+
+// 导出模块接口
 window.adskipStorage = {
+    // 存储键常量
+    KEYS: STORAGE_KEYS,
+
+    // 广告时间戳管理
     loadAdTimestampsForVideo,
     saveAdTimestampsForVideo,
+    loadAndValidateTimestamps,
+
+    // 百分比设置
     loadAdSkipPercentage,
     saveAdSkipPercentage,
+
+    // 管理员权限
     verifyAdminAccess,
     checkAdminStatus,
+
+    // 调试模式
     initDebugMode,
     getDebugMode,
     setDebugMode,
     updateDebugModeToggle,
+
+    // UP主白名单管理
     loadUploaderWhitelist,
     saveUploaderWhitelist,
     checkUploaderInWhitelist,
@@ -719,5 +874,9 @@ window.adskipStorage = {
     importUploaderWhitelist,
     exportUploaderWhitelist,
     getCurrentVideoUploader,
-    toggleUploaderWhitelistStatus
+    toggleUploaderWhitelistStatus,
+
+    // 功能开关状态
+    getEnabled,
+    setEnabled
 };
