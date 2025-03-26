@@ -24,44 +24,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (videoId) {
           // 查询这个视频是否有保存的广告时间段以及功能启用状态
-          chrome.storage.local.get([`adskip_${videoId}`, 'adskip_enabled'], function(result) {
-            const savedData = result[`adskip_${videoId}`];
-            const isEnabled = result.adskip_enabled !== false;
+          Promise.all([
+            adskipStorage.loadAdTimestampsForVideo(videoId),
+            adskipStorage.getEnabled()
+          ]).then(function([timestamps, isEnabled]) {
+            // 如果有时间戳，则在界面上显示
+            if (timestamps && timestamps.length > 0) {
+              const timeString = adskipUtils.timestampsToString(timestamps);
 
-            // 如果有，则在界面上显示
-            if (savedData) {
-              try {
-                const timestamps = JSON.parse(savedData);
-                const timeString = timestamps.map(ad => `${ad.start_time}-${ad.end_time}`).join(',');
+              // 创建显示区域
+              const div = document.createElement('div');
+              div.className = 'instructions';
+              div.innerHTML = `
+                <h2>当前视频设置</h2>
+                <p>视频ID: ${videoId}</p>
+                <p>广告时间段: <span class="format">${timeString}</span></p>
+                <p>功能状态: <span class="format">${isEnabled ? '已启用' : '已禁用'}</span></p>
+              `;
 
-                // 创建显示区域
-                const div = document.createElement('div');
-                div.className = 'instructions';
-                div.innerHTML = `
-                  <h2>当前视频设置</h2>
-                  <p>视频ID: ${videoId}</p>
-                  <p>广告时间段: <span class="format">${timeString}</span></p>
-                  <p>功能状态: <span class="format">${isEnabled ? '已启用' : '已禁用'}</span></p>
-                `;
+              // 插入到按钮前面
+              const button = document.getElementById('go-to-options');
+              button.parentNode.insertBefore(div, button);
 
-                // 插入到按钮前面
-                const button = document.getElementById('go-to-options');
-                button.parentNode.insertBefore(div, button);
-
-                // 修改按钮文字
-                button.textContent = '打开视频页面';
-              } catch (e) {
-                console.error('解析存储数据失败:', e);
-              }
+              // 修改按钮文字
+              button.textContent = '打开视频页面';
             }
+          }).catch(function(error) {
+            console.error('获取视频数据失败:', error);
           });
         }
       }
     }
   });
+
   // 显示管理员状态
-  chrome.storage.local.get('adskip_admin_authorized', function(result) {
-    const isAdmin = result.adskip_admin_authorized === true;
+  adskipStorage.checkAdminStatus().then(function(isAdmin) {
     if (isAdmin) {
       const adminInfo = document.createElement('div');
       adminInfo.className = 'instructions';
