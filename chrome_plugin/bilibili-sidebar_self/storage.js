@@ -242,8 +242,10 @@ function getDebugMode() {
  */
 function setDebugMode(newValue) {
     debugMode = newValue;
+    chrome.storage.local.set({'adskip_debug_mode': newValue});
     updateDebugModeToggle();
 }
+
 /**
  * 更新调试模式开关UI状态
  */
@@ -695,24 +697,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
     }
 }
 
-// 添加存储变更监听器
-chrome.storage.onChanged.addListener(function(changes, namespace) {
-    if (namespace !== 'local') return;
-
-    // 监听调试模式变化
-    if (changes.adskip_debug_mode !== undefined) {
-        debugMode = changes.adskip_debug_mode.newValue || false;
-        adskipUtils.logDebug(`存储模块：调试模式状态已更新: ${debugMode ? '启用' : '禁用'}`);
-        updateDebugModeToggle();
-    }
-
-    // 监听UP主白名单变化
-    if (changes.adskip_uploader_whitelist !== undefined) {
-        adskipUtils.logDebug('UP主白名单已更新');
-    }
-});
-
-// 导出模块函数
+// 暴露给全局对象的方法
 window.adskipStorage = {
     loadAdTimestampsForVideo,
     saveAdTimestampsForVideo,
@@ -723,16 +708,16 @@ window.adskipStorage = {
     initDebugMode,
     getDebugMode,
     setDebugMode,
+    updateDebugModeToggle,
     loadUploaderWhitelist,
     saveUploaderWhitelist,
     checkUploaderInWhitelist,
     addUploaderToWhitelist,
+    disableUploaderInWhitelist,
+    enableUploaderInWhitelist,
     removeUploaderFromWhitelist,
-    toggleUploaderWhitelistStatus,
     importUploaderWhitelist,
     exportUploaderWhitelist,
     getCurrentVideoUploader,
-    updateDebugModeToggle,
-    disableUploaderInWhitelist,
-    enableUploaderInWhitelist
+    toggleUploaderWhitelistStatus
 };

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Bilibili 广告跳过工具",
+  "name": "Bilibili 切片广告之友",
   "version": "1.1",
-  "description": "自动跳过B站视频中的广告，支持按视频ID存储和URL参数控制",
+  "description": "自动识别并跳过B站视频中的切片广告，带来纯净的观影体验。",
   "background": {
     "service_worker": "background.js",
     "type": "module"
