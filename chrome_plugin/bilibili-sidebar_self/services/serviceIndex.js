@@ -21,24 +21,18 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 // API服务 - apiService
 (function() {
     /**
-     * 发送GET请求
+     * 发送GET请求 - 使用通信模块通过后台服务发送
      * @param {string} url 请求URL
      * @param {Object} options 请求选项
      * @returns {Promise<Object>} 响应数据
      */
     async function get(url, options = {}) {
         try {
-            const response = await fetch(url, {
+            // 通过后台服务发送请求
+            return await window.adskipCommunication.fetchViaBackground(url, {
                 method: 'GET',
-                credentials: 'include',
                 ...options
             });
-
-            if (!response.ok) {
-                throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-            }
-
-            return await response.json();
         } catch (error) {
             adskipUtils.logDebug('API请求出错:', error);
             throw error;
@@ -46,7 +40,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
     }
 
     /**
-     * 发送POST请求
+     * 发送POST请求 - 使用通信模块通过后台服务发送
      * @param {string} url 请求URL
      * @param {Object} data 请求数据
      * @param {Object} options 请求选项
@@ -54,9 +48,9 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
      */
     async function post(url, data = {}, options = {}) {
         try {
-            const response = await fetch(url, {
+            // 通过后台服务发送请求
+            return await window.adskipCommunication.fetchViaBackground(url, {
                 method: 'POST',
-                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                     ...options.headers
@@ -64,12 +58,6 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                 body: JSON.stringify(data),
                 ...options
             });
-
-            if (!response.ok) {
-                throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-            }
-
-            return await response.json();
         } catch (error) {
             adskipUtils.logDebug('API请求出错:', error);
             throw error;

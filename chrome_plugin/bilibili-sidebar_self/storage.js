@@ -7,7 +7,7 @@
 
 
 // storage.js
-let debugMode = false; // 私有变量
+let debugMode = true; // 私有变量
 
 
 /**
@@ -137,34 +137,21 @@ function loadAdSkipPercentage() {
  * @returns {Promise<number>} 保存的百分比值
  */
 function saveAdSkipPercentage(percentage) {
-    // 检查扩展上下文是否可用
-    if (!extensionAvailable && !adskipUtils.checkExtensionContext()) {
-        return Promise.reject(new Error('Extension context invalidated'));
-    }
-
     // 转为整数确保一致性
     percentage = parseInt(percentage, 10);
 
-    // 检查是否实际发生了变化
-    if (adSkipPercentage !== percentage) {
-        return new Promise((resolve, reject) => {
-            try {
-                chrome.storage.local.set({'adskip_percentage': percentage}, function() {
-                    if (!extensionAvailable) return reject(new Error('Extension context invalidated'));
-                    adSkipPercentage = percentage;
-                    adskipUtils.logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
-                    resolve(adSkipPercentage);
-                });
-            } catch(e) {
-                // 扩展上下文可能已失效
-                extensionAvailable = false;
-                console.log("Bilibili广告跳过插件：无法保存设置，扩展上下文已失效");
-                reject(e);
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({'adskip_percentage': percentage}, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
             }
+
+            adSkipPercentage = percentage;
+            adskipUtils.logDebug(`已保存广告跳过百分比设置: ${adSkipPercentage}%`);
+            resolve(adSkipPercentage);
         });
-    } else {
-        return Promise.resolve(adSkipPercentage);
-    }
+    });
 }
 
 /**
@@ -664,6 +651,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
 
     try {
         const whitelist = await loadUploaderWhitelist();
+
         const index = whitelist.findIndex(item =>
             (typeof item === 'string' && item === uploaderName) ||
             (typeof item === 'object' && item.name === uploaderName)
@@ -681,25 +669,22 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
                 whitelist[index].enabled = enabled;
             }
             adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}白名单UP主: ${uploaderName}`);
-        } else {
-            if (enabled) {
-                // 如果不存在且需要启用，则添加
-                whitelist.push({
-                    name: uploaderName,
-                    addedAt: Date.now(),
-                    enabled: true
-                });
-                adskipUtils.logDebug(`已添加并启用白名单UP主: ${uploaderName}`);
-            }
+        } else if (enabled) {
+            // 如果不存在且需要启用，则添加
+            whitelist.push({
+                name: uploaderName,
+                addedAt: Date.now(),
+                enabled: true
+            });
+            adskipUtils.logDebug(`已添加并启用白名单UP主: ${uploaderName}`);
         }
 
-        // 确保触发变更事件
+        // 保存白名单
         return new Promise((resolve, reject) => {
             chrome.storage.local.set({'adskip_uploader_whitelist': JSON.stringify(whitelist)}, function() {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
-                    // 移除多余的触发事件日志
                     resolve(whitelist);
                 }
             });

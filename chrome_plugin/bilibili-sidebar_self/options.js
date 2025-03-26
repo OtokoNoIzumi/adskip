@@ -292,17 +292,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }, function() {
       renderWhitelist();
       showStatus('白名单已更新');
-
-      // 确保触发事件，即使内容相同
-      // 这有助于通知所有页面刷新白名单状态
-      chrome.storage.local.get('adskip_uploader_whitelist', function(result) {
-        // 简单地重新保存一次，强制触发事件
-        chrome.storage.local.set({
-          'adskip_uploader_whitelist': result.adskip_uploader_whitelist
-        }, function() {
-          console.log("已强制触发白名单更新事件");
-        });
-      });
     });
   }
 
@@ -473,10 +462,9 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     }
   }
 
-  // 监听白名单变化，如果当前在白名单选项卡，则刷新白名单列表
-  if (changes.adskip_uploader_whitelist !== undefined && window.location.hash === '#whitelist') {
-    // 检查函数是否存在再调用，避免在非选项页面调用时报错
-    if (typeof loadWhitelistData === 'function') {
+  // 监听白名单变化
+  if (changes.adskip_uploader_whitelist !== undefined) {
+    if (typeof loadWhitelistData === 'function' && window.location.hash === '#whitelist') {
       loadWhitelistData();
     }
   }

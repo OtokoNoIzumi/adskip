@@ -283,22 +283,19 @@ function findProgressBar() {
 }
 
 /**
- * 检查扩展上下文是否可用
- * @returns {boolean} 扩展上下文是否可用
+ * 检查扩展上下文是否有效
+ * @returns {boolean} 扩展上下文是否有效
  */
 function checkExtensionContext() {
     try {
         // 尝试访问chrome.runtime.id，如果抛出异常，则表示扩展上下文已失效
         if (chrome && chrome.runtime && chrome.runtime.id) {
-            extensionAvailable = true;
             return true;
         } else {
-            extensionAvailable = false;
             console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
             return false;
         }
     } catch (e) {
-        extensionAvailable = false;
         console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
         return false;
     }
@@ -311,7 +308,7 @@ function checkExtensionContext() {
  */
 function safeApiCall(callback) {
     return new Promise((resolve, reject) => {
-        if (!extensionAvailable && !checkExtensionContext()) {
+        if (!checkExtensionContext()) {
             reject(new Error('Extension context invalidated'));
             return;
         }
@@ -320,9 +317,6 @@ function safeApiCall(callback) {
             const result = callback();
             resolve(result);
         } catch (e) {
-            if (e.message && e.message.includes('Extension context invalidated')) {
-                extensionAvailable = false;
-            }
             reject(e);
         }
     });

@@ -555,6 +555,48 @@ function createLinkGenerator() {
     document.body.appendChild(button);
 }
 
+// 添加存储变更监听器
+chrome.storage.onChanged.addListener(function(changes, namespace) {
+    if (namespace !== 'local') return;
+
+    // 监听广告跳过功能开关变化
+    if (changes.adskip_enabled !== undefined) {
+        const globalSkipEnabled = changes.adskip_enabled.newValue !== false;
+        const toggleButton = document.getElementById('adskip-toggle');
+        if (toggleButton) {
+            toggleButton.checked = globalSkipEnabled;
+        }
+    }
+
+    // 监听广告跳过百分比变化
+    if (changes.adskip_percentage !== undefined) {
+        const newPercentage = changes.adskip_percentage.newValue;
+
+        // 更新滑块和显示值
+        const percentageSlider = document.getElementById('adskip-percentage-slider');
+        const percentageValue = document.getElementById('adskip-percentage-value');
+
+        if (percentageSlider && percentageValue) {
+            percentageSlider.value = newPercentage;
+            percentageValue.textContent = newPercentage;
+        }
+    }
+
+    // 监听白名单变化
+    if (changes.adskip_uploader_whitelist !== undefined) {
+        adskipStorage.getCurrentVideoUploader().then(({uploader: currentUploader}) => {
+            if (!currentUploader || currentUploader === '未知UP主') return;
+
+            adskipStorage.checkUploaderInWhitelist(currentUploader).then(isInWhitelist => {
+                const whitelistToggle = document.getElementById('adskip-whitelist-toggle');
+                if (whitelistToggle) {
+                    whitelistToggle.checked = isInWhitelist;
+                }
+            });
+        });
+    }
+});
+
 // 导出模块函数
 window.adskipUI = {
     createLinkGenerator,

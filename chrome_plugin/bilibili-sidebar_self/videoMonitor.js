@@ -93,37 +93,22 @@ function setupAdSkipMonitor(adTimestamps) {
     // 启动播放时间监控
     setupPlaybackTimeMonitor();
 
-    // 设置新监控，使用try-catch包装以处理可能的错误
-    try {
-        window.adSkipCheckInterval = setInterval(function() {
-            // 先检查扩展上下文是否仍然有效
-            if (!extensionAvailable && !adskipUtils.checkExtensionContext()) {
-                clearInterval(window.adSkipCheckInterval);
-                window.adSkipCheckInterval = null;
-                return;
-            }
-
-            try {
-                checkAndSkip();
-            } catch (e) {
-                // 捕获checkAndSkip中可能出现的错误
-                if (e.message && e.message.includes('Extension context invalidated')) {
-                    extensionAvailable = false;
-                    clearInterval(window.adSkipCheckInterval);
-                    window.adSkipCheckInterval = null;
-                    console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
-                } else {
-                    console.error("广告跳过检查出错:", e);
-                }
-            }
-        }, 500);
-        adskipUtils.logDebug('设置新的广告监控定时器', { throttle: 2000 });
-    } catch (e) {
-        console.error("设置广告监控失败:", e);
-    }
+    // 设置新监控
+    window.adSkipCheckInterval = setInterval(function() {
+        checkAndSkip();
+    }, 500);
+    adskipUtils.logDebug('设置新的广告监控定时器', { throttle: 2000 });
 
     // 标记进度条上的广告位点
     markAdPositionsOnProgressBar();
+}
+
+/**
+ * 检查扩展上下文是否有效
+ * @returns {boolean} 如果扩展上下文有效返回true，否则返回false
+ */
+function isExtensionContextValid() {
+    return typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
 }
 
 /**
@@ -131,145 +116,126 @@ function setupAdSkipMonitor(adTimestamps) {
  */
 function checkAndSkip() {
     // 检查扩展上下文是否有效
-    if (!extensionAvailable && !adskipUtils.checkExtensionContext()) {
-        // 如果扩展上下文已失效，停止所有操作
-        if (window.adSkipCheckInterval) {
-            clearInterval(window.adSkipCheckInterval);
-            window.adSkipCheckInterval = null;
-        }
+    if (!isExtensionContextValid()) {
+        adskipUtils.logDebug('扩展上下文已失效，停止执行 checkAndSkip');
+        clearInterval(window.adSkipCheckInterval); // 清除定时器
+        window.adSkipCheckInterval = null;
         return;
     }
 
     // 检查是否启用广告跳过功能
-    try {
-        chrome.storage.local.get('adskip_enabled', async function(result) {
-            // 再次检查扩展上下文是否有效
-            if (!extensionAvailable) return;
+    chrome.storage.local.get('adskip_enabled', async function(result) {
+        if (result.adskip_enabled === false) {
+            // 使用节流控制，1秒内不重复输出相同消息
+            adskipUtils.logDebug('广告跳过功能已禁用，不执行检查', { throttle: 1000 });
+            return;
+        }
 
-            if (result.adskip_enabled === false) {
-                // 使用节流控制，1秒内不重复输出相同消息
-                adskipUtils.logDebug('广告跳过功能已禁用，不执行检查', { throttle: 1000 });
-                return;
-            }
+        // 获取当前视频的UP主信息
+        const { uploader } = await adskipStorage.getCurrentVideoUploader();
 
-            // 获取当前视频的UP主信息
-            const { uploader } = await adskipStorage.getCurrentVideoUploader();
+        // 检查UP主是否在白名单中
+        const isUploaderWhitelisted = await adskipStorage.checkUploaderInWhitelist(uploader);
+        const globalSkipEnabled = result.adskip_enabled !== false;
 
-            // 检查UP主是否在白名单中
-            const isUploaderWhitelisted = await adskipStorage.checkUploaderInWhitelist(uploader);
-            const globalSkipEnabled = result.adskip_enabled !== false;
+        // 检查白名单状态是否有变化，只有变化时才输出日志
+        const statusChanged =
+            uploader !== _lastUploaderName ||
+            isUploaderWhitelisted !== _lastWhitelistStatus ||
+            globalSkipEnabled !== _lastGlobalSkipStatus;
 
-            // 检查白名单状态是否有变化，只有变化时才输出日志
-            const statusChanged =
-                uploader !== _lastUploaderName ||
-                isUploaderWhitelisted !== _lastWhitelistStatus ||
-                globalSkipEnabled !== _lastGlobalSkipStatus;
+        // 更新上次状态缓存
+        _lastUploaderName = uploader;
+        _lastWhitelistStatus = isUploaderWhitelisted;
+        _lastGlobalSkipStatus = globalSkipEnabled;
 
-            // 更新上次状态缓存
-            _lastUploaderName = uploader;
-            _lastWhitelistStatus = isUploaderWhitelisted;
-            _lastGlobalSkipStatus = globalSkipEnabled;
-
-            if (isUploaderWhitelisted) {
-                // 只在状态变化时输出日志
-                if (statusChanged) {
-                    adskipUtils.logDebug(`UP主"${uploader}"在白名单中且启用状态，不执行自动跳过 (手动模式：${!globalSkipEnabled ? '是' : '否'})`);
-                }
-                return;
-            }
-
+        if (isUploaderWhitelisted) {
             // 只在状态变化时输出日志
             if (statusChanged) {
-                adskipUtils.logDebug(`当前视频UP主："${uploader}", 白名单状态：${isUploaderWhitelisted ? '启用' : '未启用/不在白名单'}, 全局跳过：${globalSkipEnabled ? '开启' : '关闭'}`);
+                adskipUtils.logDebug(`UP主"${uploader}"在白名单中且启用状态，不执行自动跳过 (手动模式：${!globalSkipEnabled ? '是' : '否'})`);
             }
-
-            // 以下是检查和跳过广告的实际逻辑
-            let lastCheckTime = 0;
-
-            // 查找视频播放器
-            const videoPlayer = adskipUtils.findVideoPlayer();
-
-            if (!videoPlayer) {
-                // 使用节流控制，1秒内不重复输出相同消息
-                adskipUtils.logDebug('未找到视频播放器', { throttle: 1000 });
-                return;
-            }
-
-            // 设置seeking事件监听
-            if (videoPlayer) {
-                // 使用命名函数，避免重复添加匿名事件监听器
-                if (!videoPlayer._adskipSeekingHandler) {
-                    videoPlayer._adskipSeekingHandler = function(e) {
-                        if (scriptInitiatedSeek) {
-                            adskipUtils.logDebug("这是脚本引起的seeking事件，忽略");
-                            scriptInitiatedSeek = false;
-                        }
-                    };
-
-                    videoPlayer.addEventListener('seeking', videoPlayer._adskipSeekingHandler);
-                }
-            }
-
-            if (videoPlayer.paused || videoPlayer.ended) return;
-
-            const currentTime = videoPlayer.currentTime;
-
-            // 更新时间缓存
-            lastKnownPlaybackTime = currentTime;
-            lastPlaybackTimeUpdate = Date.now();
-
-            // 检查视频ID是否变化
-            const newVideoId = adskipUtils.getCurrentVideoId();
-            if (newVideoId !== currentVideoId && newVideoId !== '') {
-                adskipUtils.logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
-                lastVideoId = currentVideoId;
-                currentVideoId = newVideoId;
-                reinitialize();
-                return;
-            }
-
-            // 记录时间跳跃情况，使用节流避免频繁日志
-            if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
-                adskipUtils.logDebug(`检测到大幅时间跳跃: ${lastCheckTime.toFixed(2)} -> ${currentTime.toFixed(2)}`, { throttle: 500 });
-            }
-            lastCheckTime = currentTime;
-
-            // 广告检测逻辑：使用百分比计算
-            for (const ad of currentAdTimestamps) {
-                // 计算广告时长
-                const adDuration = ad.end_time - ad.start_time;
-
-                // 根据百分比计算跳过点，但至少跳过1秒
-                const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
-
-                // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
-                const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
-
-                // 如果在广告开始区域，直接跳到结束
-                if (currentTime >= ad.start_time && currentTime < adStartRange) {
-                    adskipUtils.logDebug(`检测到在广告开始区域 [${ad.start_time.toFixed(1)}s-${adStartRange.toFixed(1)}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time.toFixed(1)}s`);
-
-                    // 标记为脚本操作并跳转
-                    scriptInitiatedSeek = true;
-                    videoPlayer.currentTime = ad.end_time;
-                    adskipUtils.logDebug(`已跳过广告: ${ad.start_time.toFixed(1)}s-${ad.end_time.toFixed(1)}s`);
-                    break;
-                }
-            }
-        });
-    } catch(e) {
-        // 捕获任何可能的错误
-        if (e.message && e.message.includes('Extension context invalidated')) {
-            extensionAvailable = false;
-            if (window.adSkipCheckInterval) {
-                clearInterval(window.adSkipCheckInterval);
-                window.adSkipCheckInterval = null;
-            }
-            console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
-        } else {
-            console.error("Bilibili广告跳过插件错误:", e);
+            return;
         }
-    }
+
+        // 只在状态变化时输出日志
+        if (statusChanged) {
+            adskipUtils.logDebug(`当前视频UP主："${uploader}", 白名单状态：${isUploaderWhitelisted ? '启用' : '未启用/不在白名单'}, 全局跳过：${globalSkipEnabled ? '开启' : '关闭'}`);
+        }
+
+        // 以下是检查和跳过广告的实际逻辑
+        let lastCheckTime = 0;
+
+        // 查找视频播放器
+        const videoPlayer = adskipUtils.findVideoPlayer();
+
+        if (!videoPlayer) {
+            // 使用节流控制，1秒内不重复输出相同消息
+            adskipUtils.logDebug('未找到视频播放器', { throttle: 1000 });
+            return;
+        }
+
+        // 设置seeking事件监听
+        if (videoPlayer) {
+            // 使用命名函数，避免重复添加匿名事件监听器
+            if (!videoPlayer._adskipSeekingHandler) {
+                videoPlayer._adskipSeekingHandler = function(e) {
+                    if (scriptInitiatedSeek) {
+                        adskipUtils.logDebug("这是脚本引起的seeking事件，忽略");
+                        scriptInitiatedSeek = false;
+                    }
+                };
+
+                videoPlayer.addEventListener('seeking', videoPlayer._adskipSeekingHandler);
+            }
+        }
+
+        if (videoPlayer.paused || videoPlayer.ended) return;
+
+        const currentTime = videoPlayer.currentTime;
+
+        // 更新时间缓存
+        lastKnownPlaybackTime = currentTime;
+        lastPlaybackTimeUpdate = Date.now();
+
+        // 检查视频ID是否变化
+        const newVideoId = adskipUtils.getCurrentVideoId();
+        if (newVideoId !== currentVideoId && newVideoId !== '') {
+            adskipUtils.logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
+            lastVideoId = currentVideoId;
+            currentVideoId = newVideoId;
+            reinitialize();
+            return;
+        }
+
+        // 记录时间跳跃情况，使用节流避免频繁日志
+        if (Math.abs(currentTime - lastCheckTime) > 3 && lastCheckTime > 0) {
+            adskipUtils.logDebug(`检测到大幅时间跳跃: ${lastCheckTime.toFixed(2)} -> ${currentTime.toFixed(2)}`, { throttle: 500 });
+        }
+        lastCheckTime = currentTime;
+
+        // 广告检测逻辑：使用百分比计算
+        for (const ad of currentAdTimestamps) {
+            // 计算广告时长
+            const adDuration = ad.end_time - ad.start_time;
+
+            // 根据百分比计算跳过点，但至少跳过1秒
+            const skipDuration = Math.max(1, (adDuration * adSkipPercentage / 100));
+
+            // 确定广告的"开始区域"：从开始到min(开始+跳过时长,结束)
+            const adStartRange = Math.min(ad.start_time + skipDuration, ad.end_time);
+
+            // 如果在广告开始区域，直接跳到结束
+            if (currentTime >= ad.start_time && currentTime < adStartRange) {
+                adskipUtils.logDebug(`检测到在广告开始区域 [${ad.start_time.toFixed(1)}s-${adStartRange.toFixed(1)}s]，应用跳过范围:前${adSkipPercentage}%，跳过至${ad.end_time.toFixed(1)}s`);
+
+                // 标记为脚本操作并跳转
+                scriptInitiatedSeek = true;
+                videoPlayer.currentTime = ad.end_time;
+                adskipUtils.logDebug(`已跳过广告: ${ad.start_time.toFixed(1)}s-${ad.end_time.toFixed(1)}s`);
+                break;
+            }
+        }
+    });
 }
 
 /**
