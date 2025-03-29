@@ -213,7 +213,7 @@ function showAdminPanel() {
         </div>
 
         <div class="adskip-admin-footer">
-            <button id="adskip-clear-all" class="adskip-danger-btn">清除所有数据</button>
+            <button id="adskip-clear-data" class="adskip-danger-btn">清除所有数据</button>
             <button id="adskip-export" class="adskip-info-btn">导出数据</button>
             <button id="adskip-logout" class="adskip-warn-btn">退出登录</button>
         </div>
@@ -274,49 +274,73 @@ function showAdminPanel() {
 
     // 退出登录按钮事件
     document.getElementById('adskip-logout').addEventListener('click', function() {
-        if (confirm('确定要退出管理员登录状态吗？')) {
-            chrome.storage.local.remove('adskip_admin_authorized', function() {
-                isAdminAuthorized = false;
-                adskipUtils.logDebug('已退出管理员登录状态');
-                adminPanel.remove();
-                const mainPanel = document.getElementById('adskip-panel');
-                if (mainPanel) {
-                    mainPanel.remove();
-                    adskipUI.createLinkGenerator();
-                    document.getElementById('adskip-button').click();
-                }
+        if (confirm('确定要退出管理员登录吗？')) {
+            // 使用adskipStorage接口
+            adskipStorage.removeKeys([adskipStorage.KEYS.ADMIN_AUTH]).then(() => {
+                adskipUtils.logDebug('已退出管理员登录');
+
+                // 关闭管理面板
+                document.getElementById('adskip-admin-panel').remove();
+
+                // 重置UI状态
+                document.getElementById('adskip-admin').remove();
+
+                // 重新创建登录按钮并添加事件监听器
+                const loginButton = document.createElement('button');
+                loginButton.id = 'adskip-login';
+                loginButton.classList.add('adskip-admin-btn');
+                loginButton.textContent = '🔑 管理员登录';
+
+                // 为新创建的按钮添加事件监听器
+                loginButton.addEventListener('click', function() {
+                    const apiKey = prompt('请输入管理员API密钥:');
+                    if (!apiKey) return;
+
+                    if (adskipStorage.verifyAdminAccess(apiKey)) {
+                        adskipUI.updateStatusDisplay('验证成功，已获得管理员权限', 'success');
+                        // 重新加载面板以显示管理员选项
+                        document.getElementById('adskip-panel').remove();
+                        adskipUI.createLinkGenerator();
+                        document.getElementById('adskip-button').click();
+                    } else {
+                        adskipUI.updateStatusDisplay('API密钥无效', 'error');
+                    }
+                });
+
+                document.querySelector('.adskip-admin-container').appendChild(loginButton);
             });
         }
     });
 
-    // 清除所有数据按钮事件
-    document.getElementById('adskip-clear-all').addEventListener('click', function() {
+    // 清空数据按钮事件（保留管理员状态）
+    document.getElementById('adskip-clear-data').addEventListener('click', function() {
         if (!confirm('⚠️ 即将清除所有扩展数据（保留管理员状态）\n\n此操作不可撤销！确定继续吗？')) {
             return;
         }
 
-        chrome.storage.local.get(null, (items) => {
-            const keysToRemove = Object.keys(items).filter(
-                key => key !== 'adskip_admin_authorized'
-            );
+        // 获取所有键并筛选，保留管理员状态
+        adskipStorage.getAdminResetKeys().then(keysToRemove => {
 
             if (keysToRemove.length) {
-                chrome.storage.local.remove(keysToRemove, () => {
-                    // 重置必要默认值
-                    chrome.storage.local.set({
-                        'adskip_enabled': true,
-                        'adskip_percentage': 5,
-                        'adskip_debug_mode': false,
-                        'adskip_uploader_whitelist': '[]'
-                    }, () => {
-                        window.adskipStorage.setDebugMode(false);
+                adskipStorage.removeKeys(keysToRemove).then(() => {
+                    // 重置必要默认值 - 使用Promise链处理一系列设置操作
+                    Promise.all([
+                        adskipStorage.setEnabled(true),
+                        adskipStorage.saveAdSkipPercentage(5),
+                        adskipStorage.setDebugMode(false),
+                        adskipStorage.saveUploaderWhitelist([])
+                    ]).then(() => {
+                        // 更新调试模式开关UI
                         adskipStorage.updateDebugModeToggle();
+
+                        // 显示状态信息
                         if (typeof adskipUI !== 'undefined' && adskipUI.updateStatusDisplay) {
                             adskipUI.updateStatusDisplay('所有数据已重置完成！', 'success');
                         } else {
                             alert('所有数据已重置完成！');
                         }
-                        // 重新加载页面以应用更改
+
+                        // 重新加载面板以应用更改
                         adminPanel.remove();
                         showAdminPanel();
                     });
@@ -327,31 +351,25 @@ function showAdminPanel() {
 
     // 导出数据按钮事件
     document.getElementById('adskip-export').addEventListener('click', function() {
-        chrome.storage.local.get(null, function(items) {
-            const allKeys = Object.keys(items);
-            const adskipKeys = allKeys.filter(key =>
-                key.startsWith('adskip_') &&
-                key !== 'adskip_debug_mode' &&
-                key !== 'adskip_enabled' &&
-                key !== 'adskip_percentage' &&
-                key !== 'adskip_admin_authorized' &&
-                key !== 'adskip_uploader_whitelist'
-            );
+        // 使用adskipStorage接口
+        adskipStorage.getVideoDataKeys().then(adskipKeys => {
+            // 获取所有项目数据
+            chrome.storage.local.get(adskipKeys, function(items) {
+                const exportData = {};
+                for (const key of adskipKeys) {
+                    exportData[key] = items[key];
+                }
 
-            const exportData = {};
-            for (const key of adskipKeys) {
-                exportData[key] = items[key];
-            }
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
 
-            const dataStr = JSON.stringify(exportData, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-
-            const exportLink = document.createElement('a');
-            exportLink.setAttribute('href', dataUri);
-            exportLink.setAttribute('download', 'bilibili_adskip_data.json');
-            document.body.appendChild(exportLink);
-            exportLink.click();
-            document.body.removeChild(exportLink);
+                const exportLink = document.createElement('a');
+                exportLink.setAttribute('href', dataUri);
+                exportLink.setAttribute('download', 'bilibili_adskip_data.json');
+                document.body.appendChild(exportLink);
+                exportLink.click();
+                document.body.removeChild(exportLink);
+            });
         });
     });
 
@@ -367,134 +385,129 @@ function showAdminPanel() {
 function loadVideoData() {
     const videoListContainer = document.getElementById('adskip-video-list');
 
-    chrome.storage.local.get(null, function(items) {
-        const allKeys = Object.keys(items);
-        const adskipKeys = allKeys.filter(key =>
-            key.startsWith('adskip_') &&
-            key !== 'adskip_debug_mode' &&
-            key !== 'adskip_enabled' &&
-            key !== 'adskip_percentage' &&
-            key !== 'adskip_admin_authorized' &&
-            key !== 'adskip_uploader_whitelist'
-        );
+    // 使用adskipStorage接口
+    adskipStorage.getVideoDataKeys().then(adskipKeys => {
+        // 获取所有视频数据
+        chrome.storage.local.get(adskipKeys, function(items) {
+            const videoData = [];
 
-        const videoData = [];
+            for (const key of adskipKeys) {
+                try {
+                    const videoId = key.replace(adskipStorage.KEYS.PREFIX, '');
+                    const data = items[key];
+                    const parsedData = JSON.parse(data);
 
-        for (const key of adskipKeys) {
-            try {
-                const videoId = key.replace('adskip_', '');
-                const data = items[key];
-                const parsedData = JSON.parse(data);
+                    const timestamps = parsedData.timestamps || [];
+                    const savedAt = parsedData.savedAt || Date.now();
 
-                const timestamps = parsedData.timestamps || [];
-                const savedAt = parsedData.savedAt || Date.now();
+                    if (Array.isArray(timestamps) && timestamps.length > 0) {
+                        let videoTitle = '未知视频';
+                        let uploader = '未知UP主';
 
-                if (Array.isArray(timestamps) && timestamps.length > 0) {
-                    let videoTitle = '未知视频';
-                    let uploader = '未知UP主';
-
-                    if (parsedData.videoInfo) {
-                        videoTitle = parsedData.videoInfo.title || '未知视频';
-                        uploader = parsedData.videoInfo.uploader || '未知UP主';
-                    }
-
-                    videoData.push({
-                        videoId,
-                        timestamps,
-                        timeString: adskipUtils.timestampsToString(timestamps),
-                        displayTime: adskipUtils.formatTimestampsForDisplay(timestamps),
-                        videoTitle,
-                        uploader,
-                        savedAt
-                    });
-                } else {
-                    adskipUtils.logDebug(`数据格式错误或空数据: ${key}`, { throttle: 5000 });
-                }
-            } catch (e) {
-                adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
-            }
-        }
-
-        // 按保存时间排序，最新的在前面
-        videoData.sort((a, b) => b.savedAt - a.savedAt);
-
-        // 更新视频数量统计
-        document.getElementById('video-data-count').textContent = `(${videoData.length})`;
-
-        // 生成视频列表HTML
-        let videoListHTML = '';
-        if (videoData.length > 0) {
-            videoData.forEach((item, index) => {
-                let videoLink;
-                if (item.videoId.startsWith('ep')) {
-                    videoLink = `https://www.bilibili.com/bangumi/play/${item.videoId}?adskip=${item.timeString}`;
-                } else {
-                    videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
-                }
-
-                const savedDate = new Date(item.savedAt);
-                const formattedDate = `${savedDate.getFullYear()}-${(savedDate.getMonth()+1).toString().padStart(2, '0')}-${savedDate.getDate().toString().padStart(2, '0')} ${savedDate.getHours().toString().padStart(2, '0')}:${savedDate.getMinutes().toString().padStart(2, '0')}`;
-
-                videoListHTML += `
-                    <div class="adskip-video-item">
-                        <div class="adskip-video-title" title="${item.videoTitle}">
-                            ${item.videoTitle}
-                        </div>
-                        <div class="adskip-video-info">
-                            <span>UP主: ${item.uploader}</span>
-                            <span>ID: ${item.videoId}</span>
-                            <span>保存: ${formattedDate}</span>
-                        </div>
-                        <div class="adskip-video-footer">
-                            <span class="adskip-video-time">广告时间: ${item.displayTime}</span>
-                            <div class="adskip-action-buttons">
-                                <button class="adskip-goto-btn" data-url="${videoLink}" title="跳转到视频">🔗 跳转</button>
-                                <button class="adskip-delete-btn" data-video-id="${item.videoId}" title="删除这条广告跳过设置记录">🗑️ 删除</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-        } else {
-            videoListHTML = '<div class="adskip-no-data">没有保存的广告跳过数据</div>';
-        }
-
-        videoListContainer.innerHTML = videoListHTML;
-
-        // 绑定跳转按钮事件
-        const gotoButtons = document.querySelectorAll('.adskip-goto-btn');
-        gotoButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const url = this.getAttribute('data-url');
-                if (url) {
-                    window.open(url, '_blank');
-                    document.getElementById('adskip-admin-panel').remove();
-                }
-            });
-        });
-
-        // 绑定删除按钮事件
-        const deleteButtons = document.querySelectorAll('.adskip-delete-btn');
-        deleteButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const videoId = this.getAttribute('data-video-id');
-
-                if (confirm(`确定要删除 ${videoId} 的广告跳过设置吗？`)) {
-                    chrome.storage.local.remove(`adskip_${videoId}`, function() {
-                        adskipUtils.logDebug(`已删除视频 ${videoId} 的广告跳过设置`);
-
-                        if (videoId === currentVideoId) {
-                            currentAdTimestamps = [];
-                            const inputElement = document.getElementById('adskip-input');
-                            if (inputElement) {
-                                inputElement.value = '';
-                            }
+                        if (parsedData.videoInfo) {
+                            videoTitle = parsedData.videoInfo.title || '未知视频';
+                            uploader = parsedData.videoInfo.uploader || '未知UP主';
                         }
 
-                        // 重新加载视频数据
-                        loadVideoData();
-                    });
+                        videoData.push({
+                            videoId,
+                            timestamps,
+                            timeString: adskipUtils.timestampsToString(timestamps),
+                            displayTime: adskipUtils.formatTimestampsForDisplay(timestamps),
+                            videoTitle,
+                            uploader,
+                            savedAt
+                        });
+                    } else {
+                        adskipUtils.logDebug(`数据格式错误或空数据: ${key}`, { throttle: 5000 });
+                    }
+                } catch (e) {
+                    adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
                 }
+            }
+
+            // 按保存时间排序，最新的在前面
+            videoData.sort((a, b) => b.savedAt - a.savedAt);
+
+            // 更新视频数量统计
+            document.getElementById('video-data-count').textContent = `(${videoData.length})`;
+
+            // 生成视频列表HTML
+            let videoListHTML = '';
+            if (videoData.length > 0) {
+                videoData.forEach((item, index) => {
+                    let videoLink;
+                    if (item.videoId.startsWith('ep')) {
+                        videoLink = `https://www.bilibili.com/bangumi/play/${item.videoId}?adskip=${item.timeString}`;
+                    } else {
+                        videoLink = `https://www.bilibili.com/video/${item.videoId}/?adskip=${item.timeString}`;
+                    }
+
+                    const savedDate = new Date(item.savedAt);
+                    const formattedDate = `${savedDate.getFullYear()}-${(savedDate.getMonth()+1).toString().padStart(2, '0')}-${savedDate.getDate().toString().padStart(2, '0')} ${savedDate.getHours().toString().padStart(2, '0')}:${savedDate.getMinutes().toString().padStart(2, '0')}`;
+
+                    videoListHTML += `
+                        <div class="adskip-video-item">
+                            <div class="adskip-video-title" title="${item.videoTitle}">
+                                ${item.videoTitle}
+                            </div>
+                            <div class="adskip-video-info">
+                                <span>UP主: ${item.uploader}</span>
+                                <span>ID: ${item.videoId}</span>
+                                <span>保存: ${formattedDate}</span>
+                            </div>
+                            <div class="adskip-video-footer">
+                                <span class="adskip-video-time">广告时间: ${item.displayTime}</span>
+                                <div class="adskip-action-buttons">
+                                    <button class="adskip-goto-btn" data-url="${videoLink}" title="跳转到视频">🔗 跳转</button>
+                                    <button class="adskip-delete-btn" data-video-id="${item.videoId}" title="删除这条广告跳过设置记录">🗑️ 删除</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                videoListHTML = '<div class="adskip-no-data">没有保存的广告跳过数据</div>';
+            }
+
+            videoListContainer.innerHTML = videoListHTML;
+
+            // 绑定跳转按钮事件
+            const gotoButtons = document.querySelectorAll('.adskip-goto-btn');
+            gotoButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    if (url) {
+                        window.open(url, '_blank');
+                        document.getElementById('adskip-admin-panel').remove();
+                    }
+                });
+            });
+
+            // 绑定删除按钮事件
+            const deleteButtons = document.querySelectorAll('.adskip-delete-btn');
+            deleteButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const videoId = this.getAttribute('data-video-id');
+
+                    if (confirm(`确定要删除 ${videoId} 的广告跳过设置吗？`)) {
+                        // 使用adskipStorage接口
+                        adskipStorage.removeKeys([`${adskipStorage.KEYS.PREFIX}${videoId}`]).then(() => {
+                            adskipUtils.logDebug(`已删除视频 ${videoId} 的广告跳过设置`);
+
+                            if (videoId === currentVideoId) {
+                                currentAdTimestamps = [];
+                                const inputElement = document.getElementById('adskip-input');
+                                if (inputElement) {
+                                    inputElement.value = '';
+                                }
+                            }
+
+                            // 重新加载视频数据
+                            loadVideoData();
+                        });
+                    }
+                });
             });
         });
     });

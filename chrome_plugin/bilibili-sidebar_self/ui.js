@@ -104,9 +104,7 @@ function createLinkGenerator() {
         const isAdmin = await adskipStorage.checkAdminStatus();
 
         // 检查是否启用广告跳过功能
-        chrome.storage.local.get('adskip_enabled', function(result) {
-            const globalSkipEnabled = result.adskip_enabled !== false;
-
+        adskipStorage.getEnabled().then(function(globalSkipEnabled) {
             // 生成白名单UP主管理相关元素
             let whitelistControls = '';
             if (currentUploader && currentUploader !== '未知UP主') {
@@ -279,7 +277,7 @@ function createLinkGenerator() {
             // 开关逻辑
             document.getElementById('adskip-toggle').addEventListener('change', function() {
                 const isEnabled = this.checked;
-                chrome.storage.local.set({'adskip_enabled': isEnabled}, function() {
+                adskipStorage.setEnabled(isEnabled).then(() => {
                     // 更新开关描述
                     const toggleDesc = document.querySelector('.adskip-toggle-desc');
                     if (toggleDesc) {
@@ -388,8 +386,8 @@ function createLinkGenerator() {
                 adskipStorage.saveAdSkipPercentage(newValue);
 
                 // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
-                chrome.storage.local.get('adskip_enabled', function(result) {
-                    if (result.adskip_enabled !== false && currentAdTimestamps.length > 0) {
+                adskipStorage.getEnabled().then(function(globalSkipEnabled) {
+                    if (globalSkipEnabled && currentAdTimestamps.length > 0) {
                         adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
                     }
 
@@ -411,8 +409,8 @@ function createLinkGenerator() {
                     adskipStorage.saveAdSkipPercentage(presetValue);
 
                     // 如果当前已启用广告跳过且有广告时间段，则重新应用设置
-                    chrome.storage.local.get('adskip_enabled', function(result) {
-                        if (result.adskip_enabled !== false && currentAdTimestamps.length > 0) {
+                    adskipStorage.getEnabled().then(function(globalSkipEnabled) {
+                        if (globalSkipEnabled && currentAdTimestamps.length > 0) {
                             adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
                         }
 
@@ -509,22 +507,11 @@ function createLinkGenerator() {
             }
             // 重置按钮 - 清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                // 只获取视频ID相关的存储键，排除白名单和设置
-                chrome.storage.local.get(null, function(items) {
-                    const allKeys = Object.keys(items);
-                    // 过滤出只与视频ID相关的键，排除所有设置键和白名单
-                    const videoKeys = allKeys.filter(key =>
-                        key.startsWith('adskip_') &&
-                        key !== 'adskip_debug_mode' &&
-                        key !== 'adskip_enabled' &&
-                        key !== 'adskip_percentage' &&
-                        key !== 'adskip_admin_authorized' &&
-                        key !== 'adskip_uploader_whitelist'
-                    );
-
+                // 使用storage模块的集中式方法，获取视频数据键
+                adskipStorage.getVideoDataKeys().then(function(videoKeys) {
                     if (videoKeys.length > 0) {
                         if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
-                            chrome.storage.local.remove(videoKeys, function() {
+                            adskipStorage.removeKeys(videoKeys).then(() => {
                                 // 清空当前设置
                                 currentAdTimestamps = [];
                                 urlAdTimestamps = [];
@@ -559,18 +546,18 @@ function createLinkGenerator() {
 chrome.storage.onChanged.addListener(function(changes, namespace) {
     if (namespace !== 'local') return;
 
-    // 监听广告跳过功能开关变化
-    if (changes.adskip_enabled !== undefined) {
-        const globalSkipEnabled = changes.adskip_enabled.newValue !== false;
+    // 监听广告跳过功能开关变化，使用adskipStorage.KEYS常量
+    if (changes[adskipStorage.KEYS.ENABLED] !== undefined) {
+        const globalSkipEnabled = changes[adskipStorage.KEYS.ENABLED].newValue !== false;
         const toggleButton = document.getElementById('adskip-toggle');
         if (toggleButton) {
             toggleButton.checked = globalSkipEnabled;
         }
     }
 
-    // 监听广告跳过百分比变化
-    if (changes.adskip_percentage !== undefined) {
-        const newPercentage = changes.adskip_percentage.newValue;
+    // 监听广告跳过百分比变化，使用adskipStorage.KEYS常量
+    if (changes[adskipStorage.KEYS.PERCENTAGE] !== undefined) {
+        const newPercentage = changes[adskipStorage.KEYS.PERCENTAGE].newValue;
 
         // 更新滑块和显示值
         const percentageSlider = document.getElementById('adskip-percentage-slider');
@@ -582,8 +569,8 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
         }
     }
 
-    // 监听白名单变化
-    if (changes.adskip_uploader_whitelist !== undefined) {
+    // 监听白名单变化，使用adskipStorage.KEYS常量
+    if (changes[adskipStorage.KEYS.UPLOADER_WHITELIST] !== undefined) {
         adskipStorage.getCurrentVideoUploader().then(({uploader: currentUploader}) => {
             if (!currentUploader || currentUploader === '未知UP主') return;
 

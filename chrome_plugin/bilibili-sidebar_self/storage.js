@@ -7,17 +7,99 @@
 
 // 存储键名常量定义
 const STORAGE_KEYS = {
+    PREFIX: 'adskip_',
     DEBUG_MODE: 'adskip_debug_mode',
     ENABLED: 'adskip_enabled',
     PERCENTAGE: 'adskip_percentage',
     ADMIN_AUTH: 'adskip_admin_authorized',
     UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
-    VIDEO_PREFIX: 'adskip_'
+    VIDEO_PREFIX: 'adskip_',
+    VIDEO_WHITELIST: 'adskip_video_whitelist',
+
+    // 分类集合，用于过滤操作
+    CONFIG_KEYS: [
+        'adskip_debug_mode',
+        'adskip_enabled',
+        'adskip_percentage',
+        'adskip_admin_authorized'
+    ],
+    WHITELIST_KEYS: [
+        'adskip_uploader_whitelist'
+    ],
+    // 所有保留的键（不会被数据清除操作删除的键）
+    RESERVED_KEYS: function() {
+        return [...this.CONFIG_KEYS, ...this.WHITELIST_KEYS];
+    }
 };
 
 // 模块私有变量
 let debugMode = false; // 私有变量，只在本模块内使用
 let lastWhitelistHash = ''; // 白名单缓存哈希
+
+
+/**
+ * 获取所有管理员重置相关的键（排除配置键和白名单键）
+ * @returns {Promise<Array>} 过滤后的键名数组
+ */
+function getAdminResetKeys() {
+    return getAllKeys().then(allKeys => {
+        return allKeys.filter(
+            key => key !== adskipStorage.KEYS.ADMIN_AUTH &&
+            key !== adskipStorage.KEYS.VIDEO_WHITELIST
+        );
+    });
+}
+
+
+/**
+ * 获取所有视频数据相关的键（排除配置键和白名单键）
+ * @returns {Promise<Array>} 过滤后的键名数组
+ */
+function getVideoDataKeys() {
+    return getAllKeys().then(allKeys => {
+        return allKeys.filter(key =>
+            key.startsWith(STORAGE_KEYS.PREFIX) &&
+            !STORAGE_KEYS.RESERVED_KEYS().includes(key)
+        );
+    });
+}
+
+/**
+ * 获取所有配置相关的键
+ * @returns {Promise<Array>} 配置键名数组
+ */
+function getConfigKeys() {
+    return Promise.resolve([...STORAGE_KEYS.CONFIG_KEYS]);
+}
+
+/**
+ * 获取所有白名单相关的键
+ * @returns {Promise<Array>} 白名单键名数组
+ */
+function getWhitelistKeys() {
+    return Promise.resolve([...STORAGE_KEYS.WHITELIST_KEYS]);
+}
+
+/**
+ * 获取所有保留的键（不会被清除的键）
+ * @returns {Promise<Array>} 保留键名数组
+ */
+function getReservedKeys() {
+    return Promise.resolve(STORAGE_KEYS.RESERVED_KEYS());
+}
+
+/**
+ * 删除所有视频数据，保留配置和白名单
+ * @returns {Promise<void>}
+ */
+function clearAllVideoData() {
+    return getVideoDataKeys().then(videoKeys => {
+        if (videoKeys.length === 0) {
+            return Promise.resolve();
+        }
+        return removeKeys(videoKeys);
+    });
+}
 
 /**
  * 加载指定视频ID的广告时间戳
@@ -82,31 +164,44 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
             };
         }
 
-        // 3. 获取所有存储的视频时间戳数据(除了当前视频和设置)
-        const allItems = await new Promise(resolve => {
-            chrome.storage.local.get(null, items => resolve(items));
-        });
-
-        // 4. 过滤出视频时间戳相关的键
-        const allKeys = Object.keys(allItems);
-        const videoKeys = allKeys.filter(key =>
-            key.startsWith(STORAGE_KEYS.VIDEO_PREFIX) &&
-            key !== `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}` &&
-            key !== STORAGE_KEYS.DEBUG_MODE &&
-            key !== STORAGE_KEYS.ENABLED &&
-            key !== STORAGE_KEYS.PERCENTAGE &&
-            key !== STORAGE_KEYS.ADMIN_AUTH &&
-            key !== STORAGE_KEYS.UPLOADER_WHITELIST
+        // 3. 获取所有视频相关的键（排除当前视频和所有设置/白名单键）
+        const videoKeys = await getVideoDataKeys();
+        // 过滤掉当前视频
+        const otherVideoKeys = videoKeys.filter(key =>
+            key !== `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`
         );
 
-        // 5. 检查URL时间戳是否与其他视频的时间戳匹配(污染检测)
+        // 4. 如果没有其他视频数据，不需要进行污染检测
+        if (otherVideoKeys.length === 0) {
+            // 无需检查污染，直接使用存储时间戳或URL时间戳
+            if (savedTimestamps.length > 0) {
+                return {
+                    timestamps: savedTimestamps,
+                    fromUrl: false,
+                    isPolluted: false
+                };
+            } else {
+                return {
+                    timestamps: urlTimestamps,
+                    fromUrl: true,
+                    isPolluted: false
+                };
+            }
+        }
+
+        // 5. 获取其他视频的数据进行比对
+        const allItems = await new Promise(resolve => {
+            chrome.storage.local.get(otherVideoKeys, items => resolve(items));
+        });
+
+        // 6. 检查URL时间戳是否与其他视频的时间戳匹配(污染检测)
         const urlTimeString = adskipUtils.timestampsToString(urlTimestamps);
         let isPolluted = false;
         let matchedVideoId = null;
 
         adskipUtils.logDebug(`检查URL参数 [${urlTimeString}] 是否与其他视频的广告时间戳匹配`, { throttle: 1000 });
 
-        for (const key of videoKeys) {
+        for (const key of otherVideoKeys) {
             try {
                 const data = allItems[key];
                 const parsed = JSON.parse(data);
@@ -126,7 +221,7 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
             }
         }
 
-        // 6. 根据检测结果返回适当的时间戳
+        // 7. 根据检测结果返回适当的时间戳
         if (isPolluted) {
             adskipUtils.logDebug('URL时间戳已被污染，改用保存的时间戳');
             return {
@@ -839,6 +934,161 @@ function setEnabled(enabled) {
     });
 }
 
+/**
+ * 获取存储中的所有键名
+ * @returns {Promise<Array>} 所有键名数组
+ */
+function getAllKeys() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(null, function(items) {
+            resolve(Object.keys(items));
+        });
+    });
+}
+
+/**
+ * 移除指定的键
+ * @param {Array} keys 要移除的键数组
+ * @returns {Promise<void>}
+ */
+function removeKeys(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.remove(keys, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            adskipUtils.logDebug(`已移除 ${keys.length} 个存储键`);
+            resolve();
+        });
+    });
+}
+
+/**
+ * 加载视频ID白名单
+ * @returns {Promise<Array>} 视频ID白名单数组
+ */
+function loadVideoWhitelist() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(STORAGE_KEYS.VIDEO_WHITELIST, (result) => {
+            if (result[STORAGE_KEYS.VIDEO_WHITELIST]) {
+                try {
+                    const whitelist = JSON.parse(result[STORAGE_KEYS.VIDEO_WHITELIST]);
+                    adskipUtils.logDebug('已加载视频白名单', { data: whitelist, throttle: 5000 });
+                    resolve(whitelist);
+                } catch (e) {
+                    console.error('解析视频白名单失败', e);
+                    resolve([]);
+                }
+            } else {
+                adskipUtils.logDebug('未找到视频白名单，返回空列表', { throttle: 5000 });
+                resolve([]);
+            }
+        });
+    });
+}
+
+/**
+ * 保存视频ID白名单
+ * @param {Array} whitelist 视频ID白名单数组
+ * @returns {Promise<Array>} 保存的白名单数组
+ */
+function saveVideoWhitelist(whitelist) {
+    return new Promise((resolve, reject) => {
+        if (!Array.isArray(whitelist)) {
+            reject(new Error('视频白名单必须是数组'));
+            return;
+        }
+
+        // 确保白名单中的项目格式统一
+        const formattedWhitelist = whitelist.map(item => {
+            if (typeof item === 'string') {
+                return {
+                    bvid: item,
+                    addedAt: Date.now()
+                };
+            }
+            return {
+                ...item,
+                addedAt: item.addedAt || Date.now()
+            };
+        });
+
+        chrome.storage.local.set({ [STORAGE_KEYS.VIDEO_WHITELIST]: JSON.stringify(formattedWhitelist) }, () => {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+            } else {
+                adskipUtils.logDebug('已保存视频白名单', { data: formattedWhitelist, throttle: 5000 });
+                resolve(formattedWhitelist);
+            }
+        });
+    });
+}
+
+/**
+ * 检查视频ID是否在白名单中
+ * @param {string} videoId 视频ID
+ * @returns {Promise<boolean>} 是否在白名单中
+ */
+async function checkVideoInWhitelist(videoId) {
+    if (!videoId) return false;
+
+    const whitelist = await loadVideoWhitelist();
+    return whitelist.some(item =>
+        (typeof item === 'string' && item === videoId) ||
+        (item.bvid === videoId)
+    );
+}
+
+/**
+ * 添加视频ID到白名单
+ * @param {string} videoId 视频ID
+ * @returns {Promise<Array>} 更新后的白名单
+ */
+async function addVideoToWhitelist(videoId) {
+    if (!videoId) return Promise.reject(new Error('视频ID不能为空'));
+
+    const whitelist = await loadVideoWhitelist();
+
+    // 检查是否已存在
+    const exists = whitelist.some(item =>
+        (typeof item === 'string' && item === videoId) ||
+        (item.bvid === videoId)
+    );
+
+    if (!exists) {
+        whitelist.push({
+            bvid: videoId,
+            addedAt: Date.now()
+        });
+        return saveVideoWhitelist(whitelist);
+    }
+
+    return whitelist;
+}
+
+/**
+ * 从白名单移除视频ID
+ * @param {string} videoId 视频ID
+ * @returns {Promise<Array>} 更新后的白名单
+ */
+async function removeVideoFromWhitelist(videoId) {
+    if (!videoId) return Promise.reject(new Error('视频ID不能为空'));
+
+    const whitelist = await loadVideoWhitelist();
+
+    const newWhitelist = whitelist.filter(item =>
+        !(typeof item === 'string' && item === videoId) &&
+        !(item.bvid === videoId)
+    );
+
+    if (newWhitelist.length !== whitelist.length) {
+        return saveVideoWhitelist(newWhitelist);
+    }
+
+    return whitelist;
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -878,5 +1128,24 @@ window.adskipStorage = {
 
     // 功能开关状态
     getEnabled,
-    setEnabled
+    setEnabled,
+
+    // 存储管理
+    getAllKeys,
+    removeKeys,
+
+    // 新添加的函数
+    getVideoDataKeys,
+    getConfigKeys,
+    getWhitelistKeys,
+    getReservedKeys,
+    getAdminResetKeys,
+    clearAllVideoData,
+
+    // 视频白名单管理
+    loadVideoWhitelist,
+    saveVideoWhitelist,
+    checkVideoInWhitelist,
+    addVideoToWhitelist,
+    removeVideoFromWhitelist
 };

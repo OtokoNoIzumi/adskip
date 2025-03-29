@@ -1,3 +1,129 @@
+// 全局变量
+let whitelistData = [];
+
+// 加载白名单数据，使用adskipStorage接口
+function loadWhitelistData() {
+  adskipStorage.loadUploaderWhitelist().then(function(whitelist) {
+    whitelistData = whitelist;
+    renderWhitelist();
+  }).catch(function(error) {
+    console.error('解析白名单数据失败', error);
+    whitelistData = [];
+    renderWhitelist();
+  });
+}
+
+// 渲染白名单列表
+function renderWhitelist() {
+  const container = document.getElementById('whitelist-list');
+  const countElement = document.getElementById('whitelist-count');
+
+  // 更新计数
+  const enabledCount = whitelistData.filter(item =>
+    typeof item === 'string' || item.enabled !== false
+  ).length;
+
+  if (countElement) {
+    countElement.textContent = enabledCount;
+  }
+
+  // 清空容器
+  if (!container) return;
+  container.innerHTML = '';
+
+  // 如果白名单为空，显示提示
+  if (whitelistData.length === 0) {
+    container.innerHTML = '<div class="whitelist-empty">白名单为空，您可以在视频页面将UP主添加到白名单</div>';
+    return;
+  }
+
+  // 创建列表项
+  whitelistData.forEach(function(item, index) {
+    const itemName = typeof item === 'string' ? item : item.name;
+    const isEnabled = typeof item === 'string' ? true : (item.enabled !== false);
+    const addedAt = typeof item === 'string' ? null : item.addedAt;
+
+    const itemElement = document.createElement('div');
+    itemElement.className = 'whitelist-item';
+
+    // 格式化日期
+    let dateString = '';
+    if (addedAt) {
+      const date = new Date(addedAt);
+      dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+    }
+
+    itemElement.innerHTML = `
+      <div class="whitelist-item-name">${itemName}</div>
+      ${dateString ? `<div class="whitelist-item-date">添加于: ${dateString}</div>` : ''}
+      <div class="whitelist-item-actions">
+        ${isEnabled
+          ? `<button class="whitelist-btn whitelist-btn-disable" data-index="${index}">禁用</button>`
+          : `<button class="whitelist-btn whitelist-btn-enable" data-index="${index}">启用</button>`}
+        <button class="whitelist-btn whitelist-btn-delete" data-index="${index}">删除</button>
+      </div>
+    `;
+
+    container.appendChild(itemElement);
+  });
+
+  // 添加事件监听
+  container.querySelectorAll('.whitelist-btn-enable').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      toggleWhitelistItem(index, true);
+    });
+  });
+
+  container.querySelectorAll('.whitelist-btn-disable').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      toggleWhitelistItem(index, false);
+    });
+  });
+
+  container.querySelectorAll('.whitelist-btn-delete').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      deleteWhitelistItem(index);
+    });
+  });
+}
+
+// 切换白名单项目的启用状态，使用adskipStorage接口
+function toggleWhitelistItem(index, enabled) {
+  if (index < 0 || index >= whitelistData.length) return;
+
+  const item = whitelistData[index];
+  const itemName = typeof item === 'string' ? item : item.name;
+
+  // 使用adskipStorage接口
+  if (enabled) {
+    adskipStorage.enableUploaderInWhitelist(itemName).then(function() {
+      loadWhitelistData(); // 重新加载数据以更新UI
+    });
+  } else {
+    adskipStorage.disableUploaderInWhitelist(itemName).then(function() {
+      loadWhitelistData(); // 重新加载数据以更新UI
+    });
+  }
+}
+
+// 删除白名单项目，使用adskipStorage接口
+function deleteWhitelistItem(index) {
+  if (index < 0 || index >= whitelistData.length) return;
+
+  const item = whitelistData[index];
+  const itemName = typeof item === 'string' ? item : item.name;
+
+  if (confirm(`确定要从白名单中删除"${itemName}"吗？`)) {
+    adskipStorage.removeUploaderFromWhitelist(itemName).then(function() {
+      loadWhitelistData(); // 重新加载数据以更新UI
+      showStatus('白名单已更新');
+    });
+  }
+}
+
 // 初始化选项页面
 document.addEventListener('DOMContentLoaded', function() {
   // 加载存储的设置
@@ -84,28 +210,21 @@ document.addEventListener('DOMContentLoaded', function() {
   const resetButton = document.getElementById('reset-data');
   resetButton.addEventListener('click', function() {
     if (confirm('确定要重置所有数据吗？此操作无法撤销。\n\n此操作将清除：\n- 所有已保存的广告跳过时间段\n- UP主白名单数据\n- 其他插件数据')) {
-      // 这里仍需使用chrome.storage.local.get(null)来获取所有键
-      chrome.storage.local.get(null, function(items) {
-        const allKeys = Object.keys(items);
+      // 使用adskipStorage模块的集中式方法
+      adskipStorage.getVideoDataKeys().then(function(adskipDataKeys) {
+        // 添加白名单键，一起清除
+        adskipStorage.getWhitelistKeys().then(function(whitelistKeys) {
+          const allKeysToRemove = [...adskipDataKeys, ...whitelistKeys];
 
-        // 过滤出广告跳过相关的键，但排除核心配置项
-        // 使用adskipStorage.KEYS常量
-        const adskipDataKeys = allKeys.filter(key =>
-          key.startsWith('adskip_') &&
-          key !== adskipStorage.KEYS.DEBUG_MODE &&
-          key !== adskipStorage.KEYS.ENABLED &&
-          key !== adskipStorage.KEYS.PERCENTAGE &&
-          key !== adskipStorage.KEYS.ADMIN_AUTH
-        );
+          // 移除所有广告跳过数据和白名单
+          adskipStorage.removeKeys(allKeysToRemove).then(function() {
+            showStatus('已重置所有广告跳过数据，包括UP主白名单');
 
-        // 移除所有广告跳过数据
-        chrome.storage.local.remove(adskipDataKeys, function() {
-          showStatus('已重置所有广告跳过数据，包括UP主白名单');
-
-          // 如果当前在白名单选项卡，刷新白名单列表
-          if (window.location.hash === '#whitelist') {
-            loadWhitelistData();
-          }
+            // 如果当前在白名单选项卡，刷新白名单列表
+            if (window.location.hash === '#whitelist') {
+              loadWhitelistData();
+            }
+          });
         });
       });
     }
@@ -156,136 +275,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
-
-  // 白名单管理功能
-  let whitelistData = [];
-
-  // 加载白名单数据，使用adskipStorage接口
-  function loadWhitelistData() {
-    adskipStorage.loadUploaderWhitelist().then(function(whitelist) {
-      whitelistData = whitelist;
-      renderWhitelist();
-    }).catch(function(error) {
-      console.error('解析白名单数据失败', error);
-      whitelistData = [];
-      renderWhitelist();
-    });
-  }
-
-  // 渲染白名单列表
-  function renderWhitelist() {
-    const container = document.getElementById('whitelist-list');
-    const countElement = document.getElementById('whitelist-count');
-
-    // 更新计数
-    const enabledCount = whitelistData.filter(item =>
-      typeof item === 'string' || item.enabled !== false
-    ).length;
-    countElement.textContent = enabledCount;
-
-    // 清空容器
-    container.innerHTML = '';
-
-    // 如果白名单为空，显示提示
-    if (whitelistData.length === 0) {
-      container.innerHTML = '<div class="whitelist-empty">白名单为空，您可以在视频页面将UP主添加到白名单</div>';
-      return;
-    }
-
-    // 创建列表项
-    whitelistData.forEach(function(item, index) {
-      const itemName = typeof item === 'string' ? item : item.name;
-      const isEnabled = typeof item === 'string' ? true : (item.enabled !== false);
-      const addedAt = typeof item === 'string' ? null : item.addedAt;
-
-      const itemElement = document.createElement('div');
-      itemElement.className = 'whitelist-item';
-
-      // 格式化日期
-      let dateString = '';
-      if (addedAt) {
-        const date = new Date(addedAt);
-        dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
-      }
-
-      itemElement.innerHTML = `
-        <div class="whitelist-item-name">${itemName}</div>
-        ${dateString ? `<div class="whitelist-item-date">添加于: ${dateString}</div>` : ''}
-        <div class="whitelist-item-actions">
-          ${isEnabled
-            ? `<button class="whitelist-btn whitelist-btn-disable" data-index="${index}">禁用</button>`
-            : `<button class="whitelist-btn whitelist-btn-enable" data-index="${index}">启用</button>`}
-          <button class="whitelist-btn whitelist-btn-delete" data-index="${index}">删除</button>
-        </div>
-      `;
-
-      container.appendChild(itemElement);
-    });
-
-    // 添加事件监听
-    container.querySelectorAll('.whitelist-btn-enable').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const index = parseInt(this.getAttribute('data-index'));
-        toggleWhitelistItem(index, true);
-      });
-    });
-
-    container.querySelectorAll('.whitelist-btn-disable').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const index = parseInt(this.getAttribute('data-index'));
-        toggleWhitelistItem(index, false);
-      });
-    });
-
-    container.querySelectorAll('.whitelist-btn-delete').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const index = parseInt(this.getAttribute('data-index'));
-        deleteWhitelistItem(index);
-      });
-    });
-  }
-
-  // 切换白名单项目的启用状态，使用adskipStorage接口
-  function toggleWhitelistItem(index, enabled) {
-    if (index < 0 || index >= whitelistData.length) return;
-
-    const item = whitelistData[index];
-    const itemName = typeof item === 'string' ? item : item.name;
-
-    // 使用adskipStorage接口
-    if (enabled) {
-      adskipStorage.enableUploaderInWhitelist(itemName).then(function() {
-        loadWhitelistData(); // 重新加载数据以更新UI
-      });
-    } else {
-      adskipStorage.disableUploaderInWhitelist(itemName).then(function() {
-        loadWhitelistData(); // 重新加载数据以更新UI
-      });
-    }
-  }
-
-  // 删除白名单项目，使用adskipStorage接口
-  function deleteWhitelistItem(index) {
-    if (index < 0 || index >= whitelistData.length) return;
-
-    const item = whitelistData[index];
-    const itemName = typeof item === 'string' ? item : item.name;
-
-    if (confirm(`确定要从白名单中删除"${itemName}"吗？`)) {
-      adskipStorage.removeUploaderFromWhitelist(itemName).then(function() {
-        loadWhitelistData(); // 重新加载数据以更新UI
-        showStatus('白名单已更新');
-      });
-    }
-  }
-
-  // 保存白名单到存储，使用adskipStorage接口
-  function saveWhitelist() {
-    adskipStorage.saveUploaderWhitelist(whitelistData).then(function() {
-      renderWhitelist();
-      showStatus('白名单已更新');
-    });
-  }
 
   // 导入白名单按钮
   document.getElementById('whitelist-import').addEventListener('click', function() {
@@ -396,6 +385,11 @@ function showStatus(message, type = 'success') {
 chrome.storage.onChanged.addListener(function(changes, namespace) {
   if (namespace !== 'local') return;
 
+  console.log('changes', changes);
+  console.log('namespace', namespace);
+  console.log('typeof loadWhitelistData', typeof loadWhitelistData);
+  console.log('window.location.hash', window.location.hash);
+
   // 监听广告跳过功能开关变化，使用adskipStorage.KEYS常量
   if (changes[adskipStorage.KEYS.ENABLED] !== undefined) {
     const adskipToggle = document.getElementById('enable-adskip');
@@ -426,7 +420,7 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
 
   // 监听白名单变化，使用adskipStorage.KEYS常量
   if (changes[adskipStorage.KEYS.UPLOADER_WHITELIST] !== undefined) {
-    if (typeof loadWhitelistData === 'function' && window.location.hash === '#whitelist') {
+    if (window.location.hash === '#whitelist') {
       loadWhitelistData();
     }
   }
