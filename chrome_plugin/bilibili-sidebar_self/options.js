@@ -19,9 +19,7 @@ function renderWhitelist() {
   const countElement = document.getElementById('whitelist-count');
 
   // 更新计数
-  const enabledCount = whitelistData.filter(item =>
-    typeof item === 'string' || item.enabled !== false
-  ).length;
+  const enabledCount = whitelistData.filter(item => item.enabled !== false).length;
 
   if (countElement) {
     countElement.textContent = enabledCount;
@@ -39,9 +37,9 @@ function renderWhitelist() {
 
   // 创建列表项
   whitelistData.forEach(function(item, index) {
-    const itemName = typeof item === 'string' ? item : item.name;
-    const isEnabled = typeof item === 'string' ? true : (item.enabled !== false);
-    const addedAt = typeof item === 'string' ? null : item.addedAt;
+    const itemName = item.name;
+    const isEnabled = item.enabled !== false;
+    const addedAt = item.addedAt;
 
     const itemElement = document.createElement('div');
     itemElement.className = 'whitelist-item';
@@ -95,7 +93,7 @@ function toggleWhitelistItem(index, enabled) {
   if (index < 0 || index >= whitelistData.length) return;
 
   const item = whitelistData[index];
-  const itemName = typeof item === 'string' ? item : item.name;
+  const itemName = item.name;
 
   // 使用adskipStorage接口
   if (enabled) {
@@ -114,7 +112,7 @@ function deleteWhitelistItem(index) {
   if (index < 0 || index >= whitelistData.length) return;
 
   const item = whitelistData[index];
-  const itemName = typeof item === 'string' ? item : item.name;
+  const itemName = item.name;
 
   if (confirm(`确定要从白名单中删除"${itemName}"吗？`)) {
     adskipStorage.removeUploaderFromWhitelist(itemName).then(function() {

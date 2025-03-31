@@ -346,24 +346,6 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
             const key = `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`;
             adskipUtils.logDebug(`使用存储键: ${key}`);
 
-            // 获取视频信息辅助函数
-            function getVideoMeta() {
-                try {
-                    // 从页面中提取视频标题
-                    const titleElement = document.querySelector('.video-title, .tit, h1.title');
-                    const title = titleElement ? titleElement.textContent.trim() : '未知视频';
-
-                    // 从页面中提取UP主名称
-                    const upElement = document.querySelector('.up-name, .name .username, a.up-name');
-                    const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
-
-                    return { title, uploader };
-                } catch (e) {
-                    adskipUtils.logDebug('提取视频信息失败', e);
-                    return { title: '未知视频', uploader: '未知UP主' };
-                }
-            }
-
             const videoMeta = getVideoMeta();
 
             const data = JSON.stringify({
@@ -615,11 +597,11 @@ function loadUploaderWhitelist() {
                     const whitelist = JSON.parse(result[STORAGE_KEYS.UPLOADER_WHITELIST]);
 
                     // 计算当前白名单的哈希值（简单方法：长度+第一项名称）
-                    const simpleHash = `${whitelist.length}_${whitelist.length > 0 ? (typeof whitelist[0] === 'string' ? whitelist[0] : whitelist[0]?.name || '') : ''}`;
+                    const simpleHash = `${whitelist.length}_${whitelist.length > 0 ? (whitelist[0]?.name || '') : ''}`;
 
                     // 只有当白名单内容变化时才输出日志
                     if (simpleHash !== lastWhitelistHash) {
-                        adskipUtils.logDebug('已加载UP主白名单', { data: whitelist, throttle: 5000 }); // 使用新的配置对象格式
+                        adskipUtils.logDebug('已加载UP主白名单', { data: whitelist, throttle: 5000 });
                         lastWhitelistHash = simpleHash;
                     }
 
@@ -631,7 +613,7 @@ function loadUploaderWhitelist() {
             } else {
                 // 同样使用节流，避免反复输出"未找到白名单"
                 if (lastWhitelistHash !== 'empty') {
-                    adskipUtils.logDebug('未找到UP主白名单，返回空列表', { throttle: 5000 }); // 使用新的配置对象格式
+                    adskipUtils.logDebug('未找到UP主白名单，返回空列表', { throttle: 5000 });
                     lastWhitelistHash = 'empty';
                 }
                 resolve([]);
@@ -654,13 +636,6 @@ function saveUploaderWhitelist(whitelist) {
 
         // 确保白名单中的项目格式统一
         const formattedWhitelist = whitelist.map(item => {
-            if (typeof item === 'string') {
-                return {
-                    name: item,
-                    addedAt: item.addedAt || Date.now(),
-                    enabled: item.enabled !== undefined ? item.enabled : true
-                };
-            }
             return {
                 ...item,
                 addedAt: item.addedAt || Date.now(),
@@ -690,10 +665,7 @@ async function checkUploaderInWhitelist(uploaderName) {
     if (!uploaderName) return false;
 
     const whitelist = await loadUploaderWhitelist();
-    const match = whitelist.find(item =>
-        (typeof item === 'string' && item === uploaderName) ||
-        (item.name === uploaderName && item.enabled !== false)
-    );
+    const match = whitelist.find(item => item.name === uploaderName && item.enabled !== false);
 
     return !!match;
 }
@@ -708,17 +680,11 @@ async function addUploaderToWhitelist(uploader) {
     try {
         const whitelist = await loadUploaderWhitelist();
         // 检查是否已存在
-        const existingIndex = whitelist.findIndex(item =>
-            (typeof item === 'string' && item === uploader) ||
-            (typeof item === 'object' && item.name === uploader)
-        );
+        const existingIndex = whitelist.findIndex(item => item.name === uploader);
 
         if (existingIndex >= 0) {
             // 如果已存在但可能被禁用，确保启用
-            if (typeof whitelist[existingIndex] === 'object') {
-                whitelist[existingIndex].enabled = true;
-            }
-            // 已存在且为字符串形式或已启用，无需修改
+            whitelist[existingIndex].enabled = true;
         } else {
             // 添加新条目，使用完整对象格式
             whitelist.push({
@@ -762,18 +728,8 @@ async function disableUploaderInWhitelist(uploader) {
         // 查找并禁用
         for (let i = 0; i < whitelist.length; i++) {
             const item = whitelist[i];
-            if ((typeof item === 'string' && item === uploader) ||
-                (typeof item === 'object' && item.name === uploader)) {
-                // 转换为对象形式并禁用
-                if (typeof item === 'string') {
-                    whitelist[i] = {
-                        name: uploader,
-                        addedAt: Date.now(),
-                        enabled: false
-                    };
-                } else {
-                    whitelist[i].enabled = false;
-                }
+            if (item.name === uploader) {
+                whitelist[i].enabled = false;
                 modified = true;
                 break;
             }
@@ -814,13 +770,9 @@ async function enableUploaderInWhitelist(uploader) {
         // 查找并启用
         for (let i = 0; i < whitelist.length; i++) {
             const item = whitelist[i];
-            if ((typeof item === 'string' && item === uploader) ||
-                (typeof item === 'object' && item.name === uploader)) {
-                // 如果是字符串形式，已默认启用
-                if (typeof item === 'object') {
-                    whitelist[i].enabled = true;
-                    modified = true;
-                }
+            if (item.name === uploader) {
+                whitelist[i].enabled = true;
+                modified = true;
                 break;
             }
         }
@@ -858,10 +810,7 @@ async function removeUploaderFromWhitelist(uploader) {
         const initialLength = whitelist.length;
 
         // 过滤掉要移除的UP主
-        const newWhitelist = whitelist.filter(item =>
-            !(typeof item === 'string' && item === uploader) &&
-            !(typeof item === 'object' && item.name === uploader)
-        );
+        const newWhitelist = whitelist.filter(item => item.name !== uploader);
 
         if (newWhitelist.length < initialLength) {
             // 保存更新后的白名单并确保触发事件
@@ -912,13 +861,12 @@ async function importUploaderWhitelist(whitelistText) {
     uploaderNames.forEach(name => {
         // 检查是否已存在
         const existingIndex = newWhitelist.findIndex(item =>
-            (typeof item === 'string' && item === name) ||
-            (item.name === name)
+            item.name === name
         );
 
         if (existingIndex >= 0) {
             // 如果存在但被禁用，则重新启用
-            if (typeof newWhitelist[existingIndex] !== 'string' && newWhitelist[existingIndex].enabled === false) {
+            if (newWhitelist[existingIndex].enabled === false) {
                 newWhitelist[existingIndex].enabled = true;
             }
         } else {
@@ -944,15 +892,31 @@ async function exportUploaderWhitelist() {
 
     // 将白名单转换为文本（仅包含启用的UP主）
     const whitelistText = whitelist
-        .filter(item =>
-            typeof item === 'string' ||
-            item.enabled !== false
-        )
-        .map(item => typeof item === 'string' ? item : item.name)
+        .filter(item => item.enabled !== false)
+        .map(item => item.name)
         .join('\n');
 
     adskipUtils.logDebug('已导出UP主白名单');
     return whitelistText;
+}
+
+
+// 获取视频信息辅助函数
+function getVideoMeta() {
+    try {
+        // 从页面中提取视频标题
+        const titleElement = document.querySelector('.video-title, .tit, h1.title');
+        const title = titleElement ? titleElement.textContent.trim() : '未知视频';
+
+        // 从页面中提取UP主名称
+        const upElement = document.querySelector('.up-name, .name .username, a.up-name');
+        const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
+
+        return { title, uploader };
+    } catch (e) {
+        adskipUtils.logDebug('提取视频信息失败', e);
+        return { title: '未知视频', uploader: '未知UP主' };
+    }
 }
 
 /**
@@ -992,10 +956,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
     try {
         const whitelist = await loadUploaderWhitelist();
 
-        const index = whitelist.findIndex(item =>
-            (typeof item === 'string' && item === uploaderName) ||
-            (typeof item === 'object' && item.name === uploaderName)
-        );
+        const index = whitelist.findIndex(item => item.name === uploaderName);
 
         if (index >= 0) {
             // 如果是字符串形式，转换为对象

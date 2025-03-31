@@ -83,15 +83,11 @@ function createLinkGenerator() {
         const { uploader: currentUploader, title: currentTitle } = await adskipStorage.getCurrentVideoUploader();
 
         // 检查UP主是否在白名单中及其状态
-        const whitelistItem = await adskipStorage.loadUploaderWhitelist()
-            .then(list => list.find(item =>
-                (typeof item === 'string' && item === currentUploader) ||
-                (typeof item === 'object' && item.name === currentUploader)
-            ));
+        const whitelistItem = adskipStorage.loadUploaderWhitelist()
+            .then(list => list.find(item => item.name === currentUploader));
 
         const isInWhitelist = !!whitelistItem;
-        const isWhitelistEnabled = typeof whitelistItem === 'string' ||
-                         (whitelistItem && whitelistItem.enabled !== false);
+        const isWhitelistEnabled = whitelistItem && whitelistItem.enabled !== false;
 
         const panel = document.createElement('div');
         panel.id = 'adskip-panel';
@@ -319,15 +315,11 @@ function createLinkGenerator() {
 
                         // 尝试重新获取最新的白名单状态（以防白名单在其他页面被删除）
                         const freshWhitelistItem = await adskipStorage.loadUploaderWhitelist()
-                            .then(list => list.find(item =>
-                                (typeof item === 'string' && item === currentUploader) ||
-                                (typeof item === 'object' && item.name === currentUploader)
-                            ));
+                            .then(list => list.find(item => item.name === currentUploader));
 
                         // 刷新白名单状态变量
                         const freshIsInWhitelist = !!freshWhitelistItem;
-                        const freshIsWhitelistEnabled = typeof freshWhitelistItem === 'string' ||
-                                     (freshWhitelistItem && freshWhitelistItem.enabled !== false);
+                        const freshIsWhitelistEnabled = freshWhitelistItem && freshWhitelistItem.enabled !== false;
 
                         // 根据当前最新状态和开关操作执行响应动作
                         if (isChecked) {
