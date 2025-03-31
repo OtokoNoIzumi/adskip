@@ -323,9 +323,9 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
 }
 
 /**
- * 保存指定视频的广告时间戳到本地存储
+ * 保存视频广告时间段
  * @param {string} videoId 视频ID
- * @param {Array} timestamps 广告时间戳数组
+ * @param {Array} timestamps 时间戳数组
  * @returns {Promise<boolean>} 保存是否成功
  */
 function saveAdTimestampsForVideo(videoId, timestamps) {
@@ -341,12 +341,13 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
 
     adskipUtils.logDebug(`准备保存 ${timestamps.length} 个广告时间段到视频 ${videoId}`);
 
-    return new Promise(resolve => {
+    return new Promise(async resolve => {
         try {
             const key = `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`;
             adskipUtils.logDebug(`使用存储键: ${key}`);
 
-            const videoMeta = getVideoMeta();
+            // 使用getCurrentVideoUploader代替getVideoMeta
+            const videoMeta = await getCurrentVideoUploader();
 
             const data = JSON.stringify({
                 videoInfo: videoMeta,
@@ -898,25 +899,6 @@ async function exportUploaderWhitelist() {
 
     adskipUtils.logDebug('已导出UP主白名单');
     return whitelistText;
-}
-
-
-// 获取视频信息辅助函数
-function getVideoMeta() {
-    try {
-        // 从页面中提取视频标题
-        const titleElement = document.querySelector('.video-title, .tit, h1.title');
-        const title = titleElement ? titleElement.textContent.trim() : '未知视频';
-
-        // 从页面中提取UP主名称
-        const upElement = document.querySelector('.up-name, .name .username, a.up-name');
-        const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
-
-        return { title, uploader };
-    } catch (e) {
-        adskipUtils.logDebug('提取视频信息失败', e);
-        return { title: '未知视频', uploader: '未知UP主' };
-    }
 }
 
 /**
