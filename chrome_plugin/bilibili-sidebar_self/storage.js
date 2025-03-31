@@ -55,13 +55,40 @@ function getAdminResetKeys() {
  * 获取所有视频数据相关的键（排除配置键和白名单键）
  * @returns {Promise<Array>} 过滤后的键名数组
  */
-function getVideoDataKeys() {
-    return getAllKeys().then(allKeys => {
-        return allKeys.filter(key =>
-            key.startsWith(STORAGE_KEYS.PREFIX) &&
-            !STORAGE_KEYS.RESERVED_KEYS().includes(key)
-        );
-    });
+async function getVideoDataKeys() {
+    adskipUtils.logDebug('开始获取所有视频数据键');
+
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.get(null, allData => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`获取所有存储键失败: ${chrome.runtime.lastError.message}`);
+                    resolve([]);
+                    return;
+                }
+
+                // 过滤出视频数据键（以STORAGE_KEYS.VIDEO_PREFIX开头）
+                const allKeys = Object.keys(allData || {});
+                const videoPrefix = STORAGE_KEYS.VIDEO_PREFIX;
+                const videoKeys = allKeys.filter(key =>
+                    key.startsWith(videoPrefix) &&
+                    !STORAGE_KEYS.RESERVED_KEYS().includes(key)
+                );
+
+                adskipUtils.logDebug(`找到 ${allKeys.length} 个存储键，其中 ${videoKeys.length} 个是视频数据键`);
+
+                if (videoKeys.length > 0) {
+                    adskipUtils.logDebug(`视频数据键示例: ${videoKeys.slice(0, 3).join(', ')}${videoKeys.length > 3 ? '...' : ''}`);
+                }
+
+                resolve(videoKeys);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`获取视频数据键时发生异常: ${e.message}`);
+        console.error('获取视频数据键时发生异常:', e);
+        return [];
+    }
 }
 
 /**
@@ -89,16 +116,42 @@ function getReservedKeys() {
 }
 
 /**
- * 删除所有视频数据，保留配置和白名单
- * @returns {Promise<void>}
+ * 清空所有视频数据（广告时间戳）
+ * @returns {Promise<boolean>} 是否成功清空数据
  */
-function clearAllVideoData() {
-    return getVideoDataKeys().then(videoKeys => {
-        if (videoKeys.length === 0) {
-            return Promise.resolve();
+async function clearAllVideoData() {
+    try {
+        adskipUtils.logDebug('开始清空所有视频广告时间戳数据');
+
+        // 获取所有与视频相关的键
+        const videoKeys = await getVideoDataKeys();
+        const keyCount = videoKeys.length;
+
+        adskipUtils.logDebug(`找到 ${keyCount} 个视频数据键需要清除`);
+
+        if (keyCount === 0) {
+            adskipUtils.logDebug('没有找到视频数据，无需清除');
+            return true;
         }
-        return removeKeys(videoKeys);
-    });
+
+        // 执行清空操作
+        return new Promise(resolve => {
+            chrome.storage.local.remove(videoKeys, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug(`成功清除 ${keyCount} 个视频的广告时间戳数据`);
+                } else {
+                    adskipUtils.logDebug(`清除视频数据失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
+                    console.error('清除视频数据失败:', chrome.runtime.lastError);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`清除视频数据时发生异常: ${e.message}`);
+        console.error('清除视频数据时发生异常:', e);
+        return false;
+    }
 }
 
 /**
@@ -107,6 +160,8 @@ function clearAllVideoData() {
  * @returns {Promise<Array>} 广告时间戳数组
  */
 function loadAdTimestampsForVideo(videoId) {
+    adskipUtils.logDebug(`尝试加载视频 ${videoId} 的广告时间戳`);
+
     return new Promise((resolve) => {
         if (!videoId) {
             adskipUtils.logDebug('视频ID为空，无法加载广告时间段');
@@ -115,22 +170,33 @@ function loadAdTimestampsForVideo(videoId) {
         }
 
         try {
-            chrome.storage.local.get(`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`, (result) => {
-                const savedData = result[`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`];
+            const storageKey = `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`;
+            adskipUtils.logDebug(`查询存储键: ${storageKey}`);
+
+            chrome.storage.local.get(storageKey, (result) => {
+                const savedData = result[storageKey];
                 if (!savedData) {
                     adskipUtils.logDebug(`没有找到视频 ${videoId} 的保存数据`);
                     resolve([]);
                     return;
                 }
 
-                const parsed = JSON.parse(savedData);
-                adskipUtils.logDebug(`成功加载视频 ${videoId} 的广告时间段:`, parsed);
+                try {
+                    const parsed = JSON.parse(savedData);
+                    const hasTimestamps = parsed.timestamps && Array.isArray(parsed.timestamps);
+                    adskipUtils.logDebug(`成功加载视频 ${videoId} 的广告时间段，包含 ${hasTimestamps ? parsed.timestamps.length : 0} 个时间段`,
+                        hasTimestamps ? parsed.timestamps : null);
 
-                // 直接使用timestamps数组
-                const timestamps = parsed.timestamps || [];
-                resolve(timestamps);
+                    // 直接使用timestamps数组
+                    const timestamps = parsed.timestamps || [];
+                    resolve(timestamps);
+                } catch (parseError) {
+                    adskipUtils.logDebug(`解析视频 ${videoId} 数据时出错: ${parseError.message}`);
+                    resolve([]);
+                }
             });
         } catch (e) {
+            adskipUtils.logDebug(`加载视频 ${videoId} 广告数据失败: ${e.message}`);
             console.error(`加载视频 ${videoId} 广告数据失败:`, e);
             resolve([]);
         }
@@ -150,9 +216,12 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
         return { timestamps: [], fromUrl: false, isPolluted: false };
     }
 
+    adskipUtils.logDebug(`开始加载和验证广告时间戳 - 视频ID: ${videoId}, URL参数数量: ${urlTimestamps?.length || 0}`);
+
     try {
         // 1. 加载当前视频的存储时间戳
         const savedTimestamps = await loadAdTimestampsForVideo(videoId);
+        adskipUtils.logDebug(`当前视频已存储的时间戳数量: ${savedTimestamps.length}`);
 
         // 2. 如果没有URL时间戳，直接返回存储的时间戳
         if (!urlTimestamps || !Array.isArray(urlTimestamps) || urlTimestamps.length === 0) {
@@ -171,25 +240,20 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
             key !== `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`
         );
 
+        adskipUtils.logDebug(`找到 ${otherVideoKeys.length} 个其他视频的数据用于污染检测`);
+
         // 4. 如果没有其他视频数据，不需要进行污染检测
         if (otherVideoKeys.length === 0) {
-            // 无需检查污染，直接使用存储时间戳或URL时间戳
-            if (savedTimestamps.length > 0) {
-                return {
-                    timestamps: savedTimestamps,
-                    fromUrl: false,
-                    isPolluted: false
-                };
-            } else {
-                return {
-                    timestamps: urlTimestamps,
-                    fromUrl: true,
-                    isPolluted: false
-                };
-            }
+            adskipUtils.logDebug('没有其他视频数据，使用URL时间戳');
+            return {
+                timestamps: urlTimestamps,
+                fromUrl: true,
+                isPolluted: false
+            };
         }
 
         // 5. 获取其他视频的数据进行比对
+        adskipUtils.logDebug('开始获取其他视频数据进行污染检测');
         const allItems = await new Promise(resolve => {
             chrome.storage.local.get(otherVideoKeys, items => resolve(items));
         });
@@ -199,25 +263,36 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
         let isPolluted = false;
         let matchedVideoId = null;
 
-        adskipUtils.logDebug(`检查URL参数 [${urlTimeString}] 是否与其他视频的广告时间戳匹配`, { throttle: 1000 });
+        adskipUtils.logDebug(`检查URL参数 [${urlTimeString}] 是否与其他视频的广告时间戳匹配`);
 
+        let checkCount = 0;
         for (const key of otherVideoKeys) {
+            checkCount++;
             try {
                 const data = allItems[key];
+                if (!data) {
+                    adskipUtils.logDebug(`视频键 ${key} 没有数据，跳过`);
+                    continue;
+                }
+
                 const parsed = JSON.parse(data);
                 const timestamps = parsed.timestamps || parsed;
 
                 if (Array.isArray(timestamps) && timestamps.length > 0) {
                     const savedTimeString = adskipUtils.timestampsToString(timestamps);
+                    adskipUtils.logDebug(`比对视频 #${checkCount}: ${key.replace(STORAGE_KEYS.VIDEO_PREFIX, '')}, 时间戳字符串: ${savedTimeString}`);
+
                     if (urlTimeString === savedTimeString) {
                         isPolluted = true;
                         matchedVideoId = key.replace(STORAGE_KEYS.VIDEO_PREFIX, '');
-                        adskipUtils.logDebug(`URL参数污染检测: 视频 ${matchedVideoId} 的时间戳与URL参数相同，判定为视频切换造成的污染`);
+                        adskipUtils.logDebug(`URL参数污染检测: 视频 ${matchedVideoId} 的时间戳与URL参数相同，判定为视频切换造成的污染!`);
                         break;
                     }
+                } else {
+                    adskipUtils.logDebug(`视频 ${key.replace(STORAGE_KEYS.VIDEO_PREFIX, '')} 没有有效的时间戳数据`);
                 }
             } catch (e) {
-                adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
+                adskipUtils.logDebug(`解析存储数据失败: ${key}: ${e.message}`);
             }
         }
 
@@ -230,17 +305,9 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
                 isPolluted: true,
                 pollutionSource: matchedVideoId
             };
-        } else if (savedTimestamps.length > 0) {
-            // 存在保存的时间戳，优先使用存储的
-            adskipUtils.logDebug('URL时间戳未污染，但优先使用已保存的时间戳');
-            return {
-                timestamps: savedTimestamps,
-                fromUrl: false,
-                isPolluted: false
-            };
         } else {
-            // URL参数未污染，且没有保存的时间戳，使用URL参数
-            adskipUtils.logDebug('使用URL时间戳参数（未污染且无保存数据）');
+            // URL参数未污染，使用URL参数
+            adskipUtils.logDebug('使用URL时间戳参数（未污染）');
             return {
                 timestamps: urlTimestamps,
                 fromUrl: true,
@@ -249,138 +316,186 @@ async function loadAndValidateTimestamps(videoId, urlTimestamps = []) {
         }
 
     } catch (e) {
+        adskipUtils.logDebug(`处理视频 ${videoId} 广告数据验证失败: ${e.message}`);
         console.error(`处理视频 ${videoId} 广告数据验证失败:`, e);
         return { timestamps: [], fromUrl: false, isPolluted: false };
     }
 }
 
 /**
- * 保存指定视频ID的广告时间戳
+ * 保存指定视频的广告时间戳到本地存储
  * @param {string} videoId 视频ID
  * @param {Array} timestamps 广告时间戳数组
- * @returns {Promise<Array>} 保存的广告时间戳数组
+ * @returns {Promise<boolean>} 保存是否成功
  */
 function saveAdTimestampsForVideo(videoId, timestamps) {
-    if (!videoId || !Array.isArray(timestamps) || timestamps.length === 0) {
-        return Promise.reject(new Error('无效的参数'));
+    if (!videoId) {
+        adskipUtils.logDebug('视频ID为空，无法保存广告时间段');
+        return Promise.resolve(false);
     }
 
-    // 获取视频信息辅助函数
-    function getVideoInfo() {
+    if (!timestamps || !Array.isArray(timestamps)) {
+        adskipUtils.logDebug(`保存失败：时间戳无效或不是数组 (${typeof timestamps})`);
+        return Promise.resolve(false);
+    }
+
+    adskipUtils.logDebug(`准备保存 ${timestamps.length} 个广告时间段到视频 ${videoId}`);
+
+    return new Promise(resolve => {
         try {
-            // 从页面中提取视频标题
-            const titleElement = document.querySelector('.video-title, .tit, h1.title');
-            const title = titleElement ? titleElement.textContent.trim() : '未知视频';
+            const key = `${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`;
+            adskipUtils.logDebug(`使用存储键: ${key}`);
 
-            // 从页面中提取UP主名称
-            const upElement = document.querySelector('.up-name, .name .username, a.up-name');
-            const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
+            // 获取视频信息辅助函数
+            function getVideoMeta() {
+                try {
+                    // 从页面中提取视频标题
+                    const titleElement = document.querySelector('.video-title, .tit, h1.title');
+                    const title = titleElement ? titleElement.textContent.trim() : '未知视频';
 
-            return { title, uploader };
+                    // 从页面中提取UP主名称
+                    const upElement = document.querySelector('.up-name, .name .username, a.up-name');
+                    const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
+
+                    return { title, uploader };
+                } catch (e) {
+                    adskipUtils.logDebug('提取视频信息失败', e);
+                    return { title: '未知视频', uploader: '未知UP主' };
+                }
+            }
+
+            const videoMeta = getVideoMeta();
+
+            const data = JSON.stringify({
+                videoInfo: videoMeta,
+                timestamps: timestamps,
+                savedAt: new Date().toISOString()
+            });
+
+            const saveObj = {};
+            saveObj[key] = data;
+
+            chrome.storage.local.set(saveObj, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug(`成功保存广告时间段：${timestamps.length} 条时间戳已保存到视频 ${videoId}`);
+                } else {
+                    adskipUtils.logDebug(`保存广告时间段失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
+                    console.error('保存广告时间段失败:', chrome.runtime.lastError);
+                }
+                resolve(success);
+            });
         } catch (e) {
-            adskipUtils.logDebug('提取视频信息失败', e);
-            return { title: '未知视频', uploader: '未知UP主' };
+            adskipUtils.logDebug(`保存广告时间段时发生异常: ${e.message}`);
+            console.error('保存广告时间段时发生异常:', e);
+            resolve(false);
         }
+    });
+}
+
+/**
+ * 加载广告跳过百分比配置
+ * @returns {Promise<number>} 广告跳过百分比，默认为80
+ */
+async function loadAdSkipPercentage() {
+    adskipUtils.logDebug('开始加载广告跳过百分比配置');
+
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, data => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`加载广告跳过百分比配置失败: ${chrome.runtime.lastError.message}，使用默认值 80%`);
+                    resolve(80);
+                    return;
+                }
+
+                const skipPercentage = data[STORAGE_KEYS.PERCENTAGE];
+
+                if (skipPercentage === undefined) {
+                    adskipUtils.logDebug('未找到广告跳过百分比配置，使用默认值 80%');
+                    resolve(80);
+                } else {
+                    const percent = parseInt(skipPercentage, 10);
+
+                    if (isNaN(percent) || percent < 0 || percent > 100) {
+                        adskipUtils.logDebug(`广告跳过百分比配置值无效 (${skipPercentage})，使用默认值 80%`);
+                        resolve(80);
+                    } else {
+                        adskipUtils.logDebug(`已加载广告跳过百分比配置: ${percent}%`);
+                        resolve(percent);
+                    }
+                }
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`加载广告跳过百分比时发生异常: ${e.message}，使用默认值 80%`);
+        console.error('加载广告跳过百分比时发生异常:', e);
+        return 80;
+    }
+}
+
+/**
+ * 保存广告跳过百分比配置
+ * @param {number} percentage 广告跳过百分比
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveAdSkipPercentage(percentage) {
+    if (percentage === undefined || percentage === null) {
+        adskipUtils.logDebug('广告跳过百分比参数为空，无法保存');
+        return false;
     }
 
-    const videoInfo = getVideoInfo();
+    // 确保输入是数字并且在有效范围内
+    const percent = parseInt(percentage, 10);
+    if (isNaN(percent) || percent < 0 || percent > 100) {
+        adskipUtils.logDebug(`广告跳过百分比参数无效: ${percentage}，取值应为0-100之间的整数`);
+        return false;
+    }
 
-    // 构建存储数据结构 - 优化版：仅保留必要的时间数据，移除无用的description字段
-    const cleanedTimestamps = timestamps.map(ts => {
-        // 只保留start_time和end_time字段
-        const { start_time, end_time } = ts;
-        return { start_time, end_time };
-    });
+    adskipUtils.logDebug(`准备保存广告跳过百分比配置: ${percent}%`);
 
-    // 优化的数据结构
-    const saveData = {
-        videoInfo: {
-            title: videoInfo.title,
-            uploader: videoInfo.uploader
-        },
-        timestamps: cleanedTimestamps,
-        savedAt: Date.now() // 添加时间戳记录保存时间
-    };
+    try {
+        return new Promise(resolve => {
+            const saveObj = {};
+            saveObj[STORAGE_KEYS.PERCENTAGE] = percent;
 
-    const jsonData = JSON.stringify(saveData);
-
-    return new Promise((resolve, reject) => {
-        chrome.storage.local.set({ [`${STORAGE_KEYS.VIDEO_PREFIX}${videoId}`]: jsonData }, function() {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else {
-                adskipUtils.logDebug(`已保存视频 ${videoId} 的广告时间段:`, timestamps);
-                resolve(timestamps);
-            }
+            chrome.storage.local.set(saveObj, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug(`成功保存广告跳过百分比配置: ${percent}%`);
+                } else {
+                    adskipUtils.logDebug(`保存广告跳过百分比配置失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
+                    console.error('保存广告跳过百分比配置失败:', chrome.runtime.lastError);
+                }
+                resolve(success);
+            });
         });
-    });
+    } catch (e) {
+        adskipUtils.logDebug(`保存广告跳过百分比时发生异常: ${e.message}`);
+        console.error('保存广告跳过百分比时发生异常:', e);
+        return false;
+    }
 }
 
 /**
- * 加载广告跳过百分比设置
- * @returns {Promise<number>} 广告跳过百分比
- */
-function loadAdSkipPercentage() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, function(result) {
-            let percentage = 5; // 默认值
-            if (result[STORAGE_KEYS.PERCENTAGE] !== undefined) {
-                percentage = result[STORAGE_KEYS.PERCENTAGE];
-                adskipUtils.logDebug(`加载广告跳过百分比设置: ${percentage}%`);
-            } else {
-                // 如果没有保存的设置，保存默认设置
-                chrome.storage.local.set({[STORAGE_KEYS.PERCENTAGE]: percentage});
-                adskipUtils.logDebug(`设置默认广告跳过百分比: ${percentage}%`);
-            }
-            resolve(percentage);
-        });
-    });
-}
-
-/**
- * 保存广告跳过百分比设置
- * @param {number} percentage 百分比数值
- * @returns {Promise<number>} 保存的百分比值
- */
-function saveAdSkipPercentage(percentage) {
-    // 转为整数确保一致性
-    percentage = parseInt(percentage, 10);
-
-    return new Promise((resolve, reject) => {
-        chrome.storage.local.set({[STORAGE_KEYS.PERCENTAGE]: percentage}, function() {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-                return;
-            }
-
-            adskipUtils.logDebug(`已保存广告跳过百分比设置: ${percentage}%`);
-            resolve(percentage);
-        });
-    });
-}
-
-/**
- * 验证管理员身份
+ * 验证管理员访问权限
  * @param {string} apiKey API密钥
- * @returns {Promise<boolean>} 验证结果
+ * @returns {Promise<boolean>} 验证是否通过
  */
-function verifyAdminAccess(apiKey) {
-    // 这是一个简单的哈希检查，您可以替换为更安全的方法
-    const validKeyHash = "12d9853b"; // 一个示例哈希
-
-    // 简单哈希函数
-    function simpleHash(str) {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash; // 转换为32位整数
-        }
-        return Math.abs(hash).toString(16).substring(0, 26);
+async function verifyAdminAccess(apiKey) {
+    if (!apiKey) {
+        adskipUtils.logDebug('API密钥为空，管理员验证失败');
+        return false;
     }
 
+    adskipUtils.logDebug('开始验证管理员权限');
+
+    // 简单的哈希检查
+    const validKeyHash = '12d9853b'; // 对应 'adskip521' 的哈希值
     const inputHash = simpleHash(apiKey);
     const isValid = (inputHash === validKeyHash);
+
+    adskipUtils.logDebug(`管理员验证结果: ${isValid ? '通过' : '失败'}`);
 
     return new Promise((resolve) => {
         if (isValid) {
@@ -393,6 +508,23 @@ function verifyAdminAccess(apiKey) {
             resolve(false);
         }
     });
+}
+
+/**
+ * 简单的字符串哈希函数
+ * @param {string} str 需要哈希的字符串
+ * @returns {string} 哈希结果
+ */
+function simpleHash(str) {
+    if (!str) return '0';
+
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // 转换为32位整数
+    }
+    return Math.abs(hash).toString(16).substring(0, 26);
 }
 
 /**

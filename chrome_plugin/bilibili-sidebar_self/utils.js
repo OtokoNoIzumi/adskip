@@ -99,43 +99,61 @@ function logDebug(message, dataOrOptions, throttleTime = 0) {
  */
 function getCurrentVideoId() {
     const pathname = window.location.pathname;
+    const fullUrl = window.location.href;
+
+    logDebug(`开始提取视频ID，当前URL: ${fullUrl}`);
 
     // 检查是否是番剧页面
     const epMatch = pathname.match(/\/bangumi\/play\/(ep[\d]+)/);
     if (epMatch && epMatch[1]) {
-        logDebug(`从番剧路径中提取到EP ID: ${epMatch[1]}`);
-        return epMatch[1]; // 返回EP ID
+        const epId = epMatch[1];
+        logDebug(`✅ 成功从番剧路径中提取到EP ID: ${epId}`);
+        return epId; // 返回EP ID
+    } else {
+        logDebug(`番剧EP ID提取：未匹配 - 路径 "${pathname}" 不包含标准番剧EP格式`);
     }
 
     // 检查是否是普通视频页面
     const bvMatch = pathname.match(/\/video\/(BV[\w]+)/);
     if (bvMatch && bvMatch[1]) {
-        logDebug(`从路径中提取到BV ID: ${bvMatch[1]}`);
-        return bvMatch[1]; // 返回BV ID
+        const bvId = bvMatch[1];
+        logDebug(`✅ 成功从路径中提取到BV ID: ${bvId}`);
+        return bvId; // 返回BV ID
+    } else {
+        logDebug(`BV ID提取：未匹配 - 路径 "${pathname}" 不包含标准视频BV格式`);
     }
 
     // 如果没有BV ID，尝试查找AV ID
     const urlParams = new URLSearchParams(window.location.search);
     const avid = urlParams.get('aid');
     if (avid) {
-        logDebug(`从URL参数中提取到AV ID: av${avid}`);
-        return 'av' + avid;
+        const avId = 'av' + avid;
+        logDebug(`✅ 成功从URL参数中提取到AV ID: ${avId}`);
+        return avId;
+    } else {
+        logDebug(`AV ID提取：URL参数中没有aid参数`);
     }
 
     // 如果没有找到EP/BV/AV ID，尝试从URL中提取番剧ss_id或ep_id
     const ssid = urlParams.get('ss_id');
     if (ssid) {
-        logDebug(`从URL参数中提取到番剧SS ID: ss${ssid}`);
-        return 'ss' + ssid;
+        const ssId = 'ss' + ssid;
+        logDebug(`✅ 成功从URL参数中提取到番剧SS ID: ${ssId}`);
+        return ssId;
+    } else {
+        logDebug(`SS ID提取：URL参数中没有ss_id参数`);
     }
 
     const epid = urlParams.get('ep_id');
     if (epid) {
-        logDebug(`从URL参数中提取到番剧EP ID: ep${epid}`);
-        return 'ep' + epid;
+        const epId = 'ep' + epid;
+        logDebug(`✅ 成功从URL参数中提取到番剧EP ID: ${epId}`);
+        return epId;
+    } else {
+        logDebug(`EP ID参数提取：URL参数中没有ep_id参数`);
     }
 
-    logDebug('无法提取视频ID');
+    logDebug(`⚠️ 无法提取视频ID：已尝试所有已知格式，未找到匹配项`);
     return '';
 }
 
@@ -241,21 +259,46 @@ function findVideoPlayer() {
     // 如果缓存的播放器仍存在于DOM中且未过期，直接使用缓存
     const now = Date.now();
     if (cachedVideoPlayer && document.contains(cachedVideoPlayer) && now - lastPlayerCheck < 5000) {
+        logDebug(`使用缓存的视频播放器元素，缓存时间：${new Date(lastPlayerCheck).toLocaleTimeString()}，有效期内`, { throttle: 5000 });
         return cachedVideoPlayer;
     }
 
     // 重新查找播放器
-    const player = document.querySelector('#bilibili-player video') ||
-                   document.querySelector('.bpx-player-video-area video') ||
-                   document.querySelector('.bpx-player video') ||  // 番剧播放器
-                   document.querySelector('.bilibili-player-video video') || // 额外检查番剧播放器
-                   document.querySelector('video');
+    const selectors = [
+        // '.bpx-player-video video', // 新版播放器-废弃
+        // '.bilibili-player-video video', // 旧版播放器-废弃
+        'video' // 最后尝试所有视频元素
+    ];
 
-    // 更新缓存和时间戳
-    cachedVideoPlayer = player;
+    logDebug(`开始查找视频播放器元素，将尝试 ${selectors.length} 个选择器`);
+
+    for (let i = 0; i < selectors.length; i++) {
+        const player = document.querySelector(selectors[i]);
+        if (player) {
+            logDebug(`✅ 查找视频播放器成功，使用选择器 #${i+1}: ${selectors[i]}`);
+            // 添加播放器信息到日志中
+            try {
+                const duration = player.duration || 0;
+                const isPlaying = !player.paused;
+                const volume = player.volume || 0;
+                logDebug(`播放器信息：时长=${duration.toFixed(1)}秒，状态=${isPlaying ? '播放中' : '已暂停'}，音量=${Math.round(volume * 100)}%`);
+            } catch (e) {
+                logDebug(`获取播放器详情失败: ${e.message}`);
+            }
+
+            // 更新缓存和时间戳
+            cachedVideoPlayer = player;
+            lastPlayerCheck = now;
+            return player;
+        } else {
+            logDebug(`❌ 选择器 #${i+1} 未找到匹配元素: ${selectors[i]}`);
+        }
+    }
+
+    logDebug(`⚠️ 未找到视频播放器，已尝试所有 ${selectors.length} 个选择器`);
+    cachedVideoPlayer = null;
     lastPlayerCheck = now;
-
-    return player;
+    return null;
 }
 
 /**
@@ -266,64 +309,50 @@ function findProgressBar() {
     // 如果缓存的进度条仍存在于DOM中且未过期，直接使用缓存
     const now = Date.now();
     if (cachedProgressBar && document.contains(cachedProgressBar) && now - lastProgressBarCheck < 5000) {
+        logDebug(`使用缓存的进度条容器元素，缓存时间：${new Date(lastProgressBarCheck).toLocaleTimeString()}，有效期内`, { throttle: 5000 });
         return cachedProgressBar;
     }
 
     // 重新查找进度条
-    const progressBar = document.querySelector('.bpx-player-progress-wrap') ||
-                        document.querySelector('.bilibili-player-video-progress-wrap') ||
-                        document.querySelector('.squirtle-progress') || // 番剧进度条
-                        document.querySelector('.bpx-player-progress'); // 番剧新版进度条
+    const selectors = [
+        '.bpx-player-progress-wrap', // 新版进度条
+        // '.bilibili-player-video-progress-wrap', // 旧版进度条-废弃
+        // '.squirtle-progress', // 番剧进度条-废弃
+        // '.bpx-player-progress' // 番剧新版进度条-废弃
+    ];
 
-    // 更新缓存和时间戳
-    cachedProgressBar = progressBar;
-    lastProgressBarCheck = now;
+    logDebug(`开始查找进度条容器元素，将尝试 ${selectors.length} 个选择器`);
 
-    return progressBar;
-}
+    for (let i = 0; i < selectors.length; i++) {
+        const progressBar = document.querySelector(selectors[i]);
+        if (progressBar) {
+            logDebug(`✅ 查找进度条容器成功，使用选择器 #${i+1}: ${selectors[i]}`);
+            // 尝试获取进度条宽度信息
+            try {
+                const width = progressBar.offsetWidth || 0;
+                const rect = progressBar.getBoundingClientRect();
+                logDebug(`进度条信息：宽度=${width}px，位置=左${Math.round(rect.left)}px, 上${Math.round(rect.top)}px`);
+            } catch (e) {
+                logDebug(`获取进度条详情失败: ${e.message}`);
+            }
 
-/**
- * 检查扩展上下文是否有效
- * @returns {boolean} 扩展上下文是否有效
- */
-function checkExtensionContext() {
-    try {
-        // 尝试访问chrome.runtime.id，如果抛出异常，则表示扩展上下文已失效
-        if (chrome && chrome.runtime && chrome.runtime.id) {
-            return true;
+            // 更新缓存和时间戳
+            cachedProgressBar = progressBar;
+            lastProgressBarCheck = now;
+            return progressBar;
         } else {
-            console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
-            return false;
+            logDebug(`❌ 选择器 #${i+1} 未找到匹配元素: ${selectors[i]}`);
         }
-    } catch (e) {
-        console.log("Bilibili广告跳过插件：扩展上下文已失效，请刷新页面");
-        return false;
     }
+
+    logDebug(`⚠️ 未找到进度条容器，已尝试所有 ${selectors.length} 个选择器`);
+    cachedProgressBar = null;
+    lastProgressBarCheck = now;
+    return null;
 }
 
 /**
- * 安全调用API，处理扩展上下文失效情况
- * @param {Function} callback 回调函数
- * @returns {Promise} Promise对象
- */
-function safeApiCall(callback) {
-    return new Promise((resolve, reject) => {
-        if (!checkExtensionContext()) {
-            reject(new Error('Extension context invalidated'));
-            return;
-        }
-
-        try {
-            const result = callback();
-            resolve(result);
-        } catch (e) {
-            reject(e);
-        }
-    });
-}
-
-/**
- * 隐藏部分敏感信息，用于显示
+ * 屏蔽部分敏感信息，用于显示
  * @param {string} text 需要处理的文本
  * @returns {string} 处理后的文本
  */
@@ -344,8 +373,6 @@ window.adskipUtils = {
     isOverlapping,
     findVideoPlayer,
     findProgressBar,
-    checkExtensionContext,
-    safeApiCall,
-    isLogFiltered,
-    maskSensitiveInfo
+    maskSensitiveInfo,
+    isLogFiltered
 };

@@ -17,6 +17,7 @@ let _lastGlobalSkipStatus = true;
 // 添加全局函数，用于获取当前播放时间（优先使用缓存的时间）
 function getCurrentRealPlaybackTime() {
     const now = Date.now();
+    adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 getCurrentRealPlaybackTime');
     const videoPlayer = adskipUtils.findVideoPlayer();
 
     // 如果视频播放器存在，更新缓存的时间
@@ -40,6 +41,7 @@ function setupPlaybackTimeMonitor() {
 
     // 设置新的定时器，定期更新播放时间缓存
     window.playbackTimeMonitorInterval = setInterval(function() {
+        adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 setupPlaybackTimeMonitor');
         const videoPlayer = adskipUtils.findVideoPlayer();
         if (videoPlayer && !videoPlayer.paused && !videoPlayer.ended) {
             lastKnownPlaybackTime = videoPlayer.currentTime;
@@ -108,7 +110,18 @@ function setupAdSkipMonitor(adTimestamps) {
  * @returns {boolean} 如果扩展上下文有效返回true，否则返回false
  */
 function isExtensionContextValid() {
-    return typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
+    try {
+        const isValid = typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
+
+        if (!isValid) {
+            adskipUtils.logDebug('扩展上下文检查失败：chrome.runtime.id不存在或无效');
+        }
+
+        return isValid;
+    } catch (e) {
+        adskipUtils.logDebug(`扩展上下文检查出现异常: ${e.message}`);
+        return false;
+    }
 }
 
 /**
@@ -166,6 +179,7 @@ function checkAndSkip() {
         let lastCheckTime = 0;
 
         // 查找视频播放器
+        adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 checkAndSkip');
         const videoPlayer = adskipUtils.findVideoPlayer();
 
         if (!videoPlayer) {
@@ -264,6 +278,7 @@ function markAdPositionsOnProgressBar() {
     });
 
     // 找到视频元素
+    adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 markAdPositionsOnProgressBar');
     const videoPlayer = adskipUtils.findVideoPlayer();
 
     if (!videoPlayer || !videoPlayer.duration) {
@@ -418,7 +433,7 @@ function markAdPositionsOnProgressBar() {
 }
 
 /**
- * 设置广告标记监控
+ * 设置广告标记监控 - 优化版：移除轮询，仅保留事件监听
  */
 function setupAdMarkerMonitor() {
     // 清除旧监听器
@@ -427,63 +442,23 @@ function setupAdMarkerMonitor() {
         window.adMarkerInterval = null;
     }
 
-    // 定期检查进度条和更新标记
-    window.adMarkerInterval = setInterval(function() {
-        // 如果没有广告时间戳，则不执行任何操作
-        if (!currentAdTimestamps || currentAdTimestamps.length === 0) {
-            return;
-        }
-
-        // 检查视频播放器和进度条是否存在
-        const videoPlayer = adskipUtils.findVideoPlayer();
-        const progressBar = adskipUtils.findProgressBar();
-
-        if (videoPlayer && progressBar) {
-            // 检查是否需要更新标记
-            const markerContainer = document.querySelector('.adskip-marker-container');
-
-            // 检查标记容器是否存在且已更新
-            const currentTimestampsString = adskipUtils.timestampsToString(currentAdTimestamps);
-            const isUpdated = markerContainer &&
-                              markerContainer.getAttribute('data-updated') === currentTimestampsString;
-
-            // 只有当标记不存在或时间戳变化时才更新
-            if (!isUpdated) {
-                adskipUtils.logDebug('广告时间戳变化或进度条更新，重新标记进度条', { throttle: 3000 });
-                markAdPositionsOnProgressBar();
-
-                // 标记容器已更新
-                const updatedContainer = document.querySelector('.adskip-marker-container');
-                if (updatedContainer) {
-                    updatedContainer.setAttribute('data-updated', currentTimestampsString);
-                }
-            }
-        }
-    }, 2000);
-
-    // 视频加载事件，确保获取准确的视频时长
+    // 移除轮询逻辑，仅设置视频事件监听
     function setupVideoEvents() {
+        adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 setupVideoEvents');
         const videoPlayer = adskipUtils.findVideoPlayer();
 
         if (videoPlayer) {
-            // 使用命名函数来避免添加重复的事件监听器
+            // 添加视频元数据加载事件
             if (!videoPlayer._adskipMetadataHandler) {
                 videoPlayer._adskipMetadataHandler = function() {
                     if (currentAdTimestamps && currentAdTimestamps.length > 0) {
                         markAdPositionsOnProgressBar();
+                        adskipUtils.logDebug('视频元数据加载，更新广告标记');
                     }
                 };
                 videoPlayer.addEventListener('loadedmetadata', videoPlayer._adskipMetadataHandler);
             }
 
-            if (!videoPlayer._adskipDurationHandler) {
-                videoPlayer._adskipDurationHandler = function() {
-                    if (currentAdTimestamps && currentAdTimestamps.length > 0) {
-                        markAdPositionsOnProgressBar();
-                    }
-                };
-                videoPlayer.addEventListener('durationchange', videoPlayer._adskipDurationHandler);
-            }
         } else {
             // 如果找不到视频播放器，稍后再试
             setTimeout(setupVideoEvents, 1000);
@@ -493,6 +468,7 @@ function setupAdMarkerMonitor() {
     // 只有在有广告时间戳时才设置视频事件
     if (currentAdTimestamps && currentAdTimestamps.length > 0) {
         setupVideoEvents();
+        adskipUtils.logDebug('已设置广告标记事件监听');
     }
 }
 
