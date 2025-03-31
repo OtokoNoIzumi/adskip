@@ -41,7 +41,7 @@ function setupPlaybackTimeMonitor() {
 
     // 设置新的定时器，定期更新播放时间缓存
     window.playbackTimeMonitorInterval = setInterval(function() {
-        adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 setupPlaybackTimeMonitor');
+        // adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 setupPlaybackTimeMonitor'); // 暂时屏蔽
         const videoPlayer = adskipUtils.findVideoPlayer();
         if (videoPlayer && !videoPlayer.paused && !videoPlayer.ended) {
             lastKnownPlaybackTime = videoPlayer.currentTime;
@@ -179,7 +179,7 @@ function checkAndSkip() {
         let lastCheckTime = 0;
 
         // 查找视频播放器
-        adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 checkAndSkip');
+        // adskipUtils.logDebug('PlaybackMonitor: 刷新播放器引用，来自 checkAndSkip'); // 暂时屏蔽
         const videoPlayer = adskipUtils.findVideoPlayer();
 
         if (!videoPlayer) {

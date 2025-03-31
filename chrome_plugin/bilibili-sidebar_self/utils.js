@@ -101,7 +101,7 @@ function getCurrentVideoId() {
     const pathname = window.location.pathname;
     const fullUrl = window.location.href;
 
-    logDebug(`开始提取视频ID，当前URL: ${fullUrl}`);
+    // logDebug(`开始提取视频ID，当前URL: ${fullUrl}`); // 暂时屏蔽
 
     // 获取URL参数
     const urlParams = new URLSearchParams(window.location.search);
@@ -110,7 +110,7 @@ function getCurrentVideoId() {
     // 检查播放列表URL中的bvid参数（常规视频）
     const bvidParam = urlParams.get('bvid');
     if (bvidParam) {
-        logDebug(`✅ 成功从播放列表URL参数中提取到BV ID: ${bvidParam}`);
+        // logDebug(`✅ 成功从播放列表URL参数中提取到BV ID: ${bvidParam}`);  // 暂时屏蔽
         return bvidParam;
     }
 
@@ -119,7 +119,7 @@ function getCurrentVideoId() {
     if (oidParam) {
         // 检查是否有ep_id格式
         const epId = 'ep' + oidParam;
-        logDebug(`✅ 成功从播放列表URL参数中提取到EP ID: ${epId}`);
+        // logDebug(`✅ 成功从播放列表URL参数中提取到EP ID: ${epId}`); // 暂时屏蔽
         return epId;
     }
 
