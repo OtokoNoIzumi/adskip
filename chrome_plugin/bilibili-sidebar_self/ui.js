@@ -421,6 +421,8 @@ function createLinkGenerator() {
 
                 const currentUrl = new URL(window.location.href);
                 currentUrl.searchParams.set('adskip', input);
+                // 待修改成纯粹的参数，而不是用现有URL
+                adskipUtils.logDebug(`生成广告跳过链接: ${currentVideoId}`);
 
                 const resultDiv = document.getElementById('adskip-result');
                 resultDiv.innerHTML = `

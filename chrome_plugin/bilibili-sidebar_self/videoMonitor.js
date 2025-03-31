@@ -477,12 +477,44 @@ function setupAdMarkerMonitor() {
  */
 function setupUrlChangeMonitor() {
     let lastUrl = window.location.href;
+    // 记录上一次URL参数
+    let lastBvid = new URLSearchParams(window.location.search).get('bvid') || '';
+    let lastOid = new URLSearchParams(window.location.search).get('oid') || '';
+
+    // 每秒检查一次URL参数变化（特别是播放列表模式下的bvid和oid参数）
+    const paramCheckInterval = setInterval(function() {
+        const currentParams = new URLSearchParams(window.location.search);
+        const currentBvid = currentParams.get('bvid') || '';
+        const currentOid = currentParams.get('oid') || '';
+
+        // 检查播放列表参数是否变化
+        if (currentBvid !== lastBvid || currentOid !== lastOid) {
+            adskipUtils.logDebug(`播放列表参数变化: bvid ${lastBvid}->${currentBvid}, oid ${lastOid}->${currentOid}`);
+            lastBvid = currentBvid;
+            lastOid = currentOid;
+
+            // 刷新当前视频ID
+            checkForVideoChange();
+        }
+    }, 1000);
+
+    // 页面卸载时清理资源
+    window.addEventListener('unload', function() {
+        if (paramCheckInterval) {
+            clearInterval(paramCheckInterval);
+        }
+    });
 
     // 使用MutationObserver监视DOM变化可能表明URL变化
     const observer = new MutationObserver(function(mutations) {
         if (lastUrl !== window.location.href) {
             adskipUtils.logDebug(`URL变化检测到: ${lastUrl} -> ${window.location.href}`);
             lastUrl = window.location.href;
+
+            // 更新参数记录
+            const currentParams = new URLSearchParams(window.location.search);
+            lastBvid = currentParams.get('bvid') || '';
+            lastOid = currentParams.get('oid') || '';
 
             // 刷新当前视频ID
             const newVideoId = adskipUtils.getCurrentVideoId();
@@ -515,7 +547,14 @@ function setupUrlChangeMonitor() {
  */
 function checkForVideoChange() {
     const newVideoId = adskipUtils.getCurrentVideoId();
-    if (newVideoId !== currentVideoId && newVideoId !== '') {
+
+    // 添加日志记录当前和新的视频ID，帮助调试
+    adskipUtils.logDebug(`检测视频变化: 当前=${currentVideoId}, 新=${newVideoId}`);
+
+    // 检查视频ID是否变化或是否在播放列表模式中
+    if ((newVideoId !== currentVideoId && newVideoId !== '') ||
+        (window.location.href.includes('/list/') && newVideoId !== '')) {
+
         adskipUtils.logDebug(`视频ID变化检测 (event): ${currentVideoId} -> ${newVideoId}`);
         lastVideoId = currentVideoId;
         currentVideoId = newVideoId;
@@ -528,6 +567,14 @@ function checkForVideoChange() {
  */
 async function reinitialize() {
     adskipUtils.logDebug(`重新初始化，当前视频ID: ${currentVideoId}`);
+
+    // 清除UP主信息缓存
+    adskipStorage.clearUploaderCache();
+
+    // 刷新播放器引用
+    adskipUtils.logDebug('强制刷新播放器引用');
+    const videoPlayer = adskipUtils.findVideoPlayer();
+    adskipUtils.logDebug(videoPlayer ? '成功找到播放器' : '未找到播放器');
 
     // 重新解析URL中的广告跳过参数
     const currentUrlAdTimestamps = adskipUtils.parseAdSkipParam();

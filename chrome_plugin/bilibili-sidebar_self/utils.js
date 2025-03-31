@@ -103,6 +103,26 @@ function getCurrentVideoId() {
 
     logDebug(`开始提取视频ID，当前URL: ${fullUrl}`);
 
+    // 获取URL参数
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // 先检查播放列表模式
+    // 检查播放列表URL中的bvid参数（常规视频）
+    const bvidParam = urlParams.get('bvid');
+    if (bvidParam) {
+        logDebug(`✅ 成功从播放列表URL参数中提取到BV ID: ${bvidParam}`);
+        return bvidParam;
+    }
+
+    // 检查播放列表URL中的oid参数（番剧）
+    const oidParam = urlParams.get('oid');
+    if (oidParam) {
+        // 检查是否有ep_id格式
+        const epId = 'ep' + oidParam;
+        logDebug(`✅ 成功从播放列表URL参数中提取到EP ID: ${epId}`);
+        return epId;
+    }
+
     // 检查是否是番剧页面
     const epMatch = pathname.match(/\/bangumi\/play\/(ep[\d]+)/);
     if (epMatch && epMatch[1]) {
@@ -124,7 +144,6 @@ function getCurrentVideoId() {
     }
 
     // 如果没有BV ID，尝试查找AV ID
-    const urlParams = new URLSearchParams(window.location.search);
     const avid = urlParams.get('aid');
     if (avid) {
         const avId = 'av' + avid;

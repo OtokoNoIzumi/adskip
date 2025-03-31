@@ -36,6 +36,9 @@ const STORAGE_KEYS = {
 let debugMode = false; // 私有变量，只在本模块内使用
 let lastWhitelistHash = ''; // 白名单缓存哈希
 
+// 添加UP主信息缓存变量
+let cachedUploaderInfo = null;
+let lastUploaderCheck = 0;
 
 /**
  * 获取所有管理员重置相关的键（排除配置键和白名单键）
@@ -908,15 +911,58 @@ async function exportUploaderWhitelist() {
 function getCurrentVideoUploader() {
     return new Promise((resolve) => {
         try {
-            // 从页面中提取视频标题
-            const titleElement = document.querySelector('.video-title, .tit, h1.title');
-            const title = titleElement ? titleElement.textContent.trim() : '未知视频';
+            // 检查缓存是否有效（30秒内有效）
+            const now = Date.now();
+            if (cachedUploaderInfo && now - lastUploaderCheck < 30000) {
+                adskipUtils.logDebug('使用缓存的UP主信息', { throttle: 30000 });
+                return resolve(cachedUploaderInfo);
+            }
 
-            // 从页面中提取UP主名称
-            const upElement = document.querySelector('.up-name, .name .username, a.up-name');
+            // 定义标题选择器数组，按优先级排序
+            const titleSelectors = [
+                '.video-title',  // 优先尝试最特定的选择器
+                // '.tit',
+                // 'h1.title'
+            ];
+
+            // 定义UP主选择器数组，按优先级排序
+            const uploaderSelectors = [
+                '.up-name',
+                // '.name .username',
+                // 'a.up-name'
+            ];
+
+            // 查找标题元素，逐个尝试选择器
+            let titleElement = null;
+            for (let i = 0; i < titleSelectors.length; i++) {
+                titleElement = document.querySelector(titleSelectors[i]);
+                if (titleElement) {
+                    adskipUtils.logDebug(`找到标题元素，使用选择器：${titleSelectors[i]}`, { throttle: 10000 });
+                    break; // 找到后立即停止搜索
+                }
+            }
+
+            // 查找UP主元素，逐个尝试选择器
+            let upElement = null;
+            for (let i = 0; i < uploaderSelectors.length; i++) {
+                upElement = document.querySelector(uploaderSelectors[i]);
+                if (upElement) {
+                    adskipUtils.logDebug(`找到UP主元素，使用选择器：${uploaderSelectors[i]}`, { throttle: 10000 });
+                    break; // 找到后立即停止搜索
+                }
+            }
+
+            // 提取信息
+            const title = titleElement ? titleElement.textContent.trim() : '未知视频';
             const uploader = upElement ? upElement.textContent.trim() : '未知UP主';
 
-            resolve({ title, uploader });
+            // 更新缓存和时间戳
+            const info = { title, uploader };
+            cachedUploaderInfo = info;
+            lastUploaderCheck = now;
+
+            adskipUtils.logDebug(`已更新UP主信息缓存: ${uploader} / ${title}`, { throttle: 5000 });
+            resolve(info);
         } catch (e) {
             adskipUtils.logDebug('提取视频信息失败', e);
             resolve({ title: '未知视频', uploader: '未知UP主' });
@@ -1164,6 +1210,16 @@ async function removeVideoFromWhitelist(videoId) {
     return whitelist;
 }
 
+/**
+ * 清除UP主信息缓存
+ * 在视频切换或需要强制刷新UP主信息时调用
+ */
+function clearUploaderCache() {
+    cachedUploaderInfo = null;
+    lastUploaderCheck = 0;
+    adskipUtils.logDebug('已清除UP主信息缓存');
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -1222,5 +1278,8 @@ window.adskipStorage = {
     saveVideoWhitelist,
     checkVideoInWhitelist,
     addVideoToWhitelist,
-    removeVideoFromWhitelist
+    removeVideoFromWhitelist,
+
+    // 新添加的函数
+    clearUploaderCache
 };

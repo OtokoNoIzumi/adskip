@@ -20,7 +20,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://www.bilibili.com/video/*", "*://www.bilibili.com/bangumi/play/*"],
+      "matches": ["*://www.bilibili.com/video/*", "*://www.bilibili.com/bangumi/play/*", "*://www.bilibili.com/list/*"],
       "js": [
         "communication.js",
         "utils.js",
