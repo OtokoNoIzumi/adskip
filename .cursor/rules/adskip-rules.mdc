@@ -1,0 +1,13 @@
+---
+description: 处理广告识别插件的避坑指令
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+1. 除了options和popup外，其他所有模块禁止使用对DOMContentLoaded的document.addEventListener
+2. 除非有明确的指示，否则不要试图修改任何内部方法的接口
+3. 在做修改前充分了解 \chrome_plugin\docs\module_analysis里的各模块技术文档，遵循模块分工的最佳实践，并在验收通过后把修改同步更新到技术文档中，DRY原则非常重要！
+4. 代码应当遵循"最小必要性"原则，尤其是减少对内部代码和版本的兼容，不要考虑稳定性，除非是外部API的调用，否则不要草率的添加无用的try，这个业务只有100%可用的情况可以接受。协助我验证准确可靠的解决方案。
+

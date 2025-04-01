@@ -89,9 +89,26 @@ async function init() {
     // 设置广告标记监控
     adskipVideoMonitor.setupAdMarkerMonitor();
 
-    // 初始化字幕检测测试按钮（仅开发阶段使用）
+    // 初始化广告检测相关功能
     if (typeof adskipAdDetection !== 'undefined') {
+        // 创建测试按钮（仅开发阶段使用）
         adskipAdDetection.createTestButton();
+
+        // 创建测试状态切换按钮（仅在开发阶段使用）
+        adskipAdDetection.createTestStatusButton();
+
+        // 设置初始状态
+        // 如果有广告时间戳，则显示为HAS_ADS状态
+        if (currentAdTimestamps.length > 0) {
+            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.HAS_ADS, {
+                adTimestamps: currentAdTimestamps
+            });
+            adskipUtils.logDebug('[AdSkip广告检测] 设置初始状态为HAS_ADS');
+        } else {
+            // 否则设置为UNDETECTED状态
+            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.UNDETECTED);
+            adskipUtils.logDebug('[AdSkip广告检测] 设置初始状态为UNDETECTED');
+        }
     }
 
     adskipUtils.logDebug('插件初始化完成');

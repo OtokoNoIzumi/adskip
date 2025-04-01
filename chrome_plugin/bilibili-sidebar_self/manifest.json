@@ -32,7 +32,7 @@
         "adDetection.js",
         "core.js"
       ],
-      "css": ["content.css"],
+      "css": ["content.css", "adDetection.css"],
       "run_at": "document_end"
     }
   ],

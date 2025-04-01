@@ -24,7 +24,7 @@
 
 每个模块可独立开发和验证，按照从基础到复杂的顺序排列。
 
-### 模块1: 字幕信息获取模块
+### 模块1: 字幕信息获取模块 [已完成]
 
 **目标**: 封装获取视频字幕信息的功能
 
@@ -40,38 +40,203 @@ async function getVideoSubtitleData() {
 }
 ```
 
-**验证方法**:
-- 创建临时按钮，点击后调用此函数并在控制台输出结果
-- 确认能够正确获取视频元数据和字幕内容
+**实现状态**: ✅ 已完成并验证通过
 
-### 模块2: 按钮状态与样式模块
+**验证结果**:
+- getVideoSubtitleData函数已实现并能正确获取视频元数据和字幕内容
+- 测试按钮功能正常，显示获取结果信息
+- AdminPanel模块已成功集成此功能
+
+### 模块2: 按钮状态与样式模块 [已完成]
 
 **目标**: 实现不同状态下按钮的样式和交互
 
-**文件**: `adDetection.js` (扩展) 和 CSS样式
+**文件**:
+- `adDetection.js` (扩展)
+- `adDetection.css` (新建)
 
-**内容**:
+**具体实现内容**:
+
+1. **创建CSS文件**:
+   - 在插件根目录创建`adDetection.css`文件
+   - 确保在manifest.json中引入此CSS文件
+   - 实现各状态的样式定义
+
+2. **扩展状态更新函数**:
 ```javascript
-// 状态枚举
-const VIDEO_STATUS = {
-  NO_SUBTITLE: 0,
-  NO_ADS: 1,
-  HAS_ADS: 2,
-  UNDETECTED: 3,
-  DETECTING: 4
-};
+/**
+ * 创建广告跳过按钮
+ * @returns {HTMLElement} 创建的按钮元素
+ */
+function createAdSkipButton() {
+    // 检查是否已存在
+    let adskipButton = document.getElementById('adskip-button');
+    if (adskipButton) {
+        return adskipButton;
+    }
 
-// 更新按钮状态函数
-function updateVideoStatus(status) {
-  /*
-   * 根据不同状态更新按钮的样式和文本
-   */
+    // 创建按钮
+    adskipButton = document.createElement('div');
+    adskipButton.id = 'adskip-button';
+    adskipButton.className = 'adskip-button undetected';
+    adskipButton.innerHTML = '点击检测';
+
+    // 定位在视频播放器右上角
+    adskipButton.style.position = 'absolute';
+    adskipButton.style.top = '10px';
+    adskipButton.style.right = '10px';
+    adskipButton.style.zIndex = '9999';
+
+    // 添加到播放器容器
+    const playerContainer = document.querySelector('.bpx-player-container') || document.body;
+    playerContainer.appendChild(adskipButton);
+
+    return adskipButton;
+}
+
+/**
+ * 更新视频状态和按钮显示
+ * @param {number} status - 视频状态，使用VIDEO_STATUS枚举值
+ * @param {Object} data - 可选的附加数据，如广告时间戳等
+ */
+function updateVideoStatus(status, data = {}) {
+    const button = createAdSkipButton();
+
+    // 移除所有状态类
+    button.classList.remove('no-subtitle', 'no-ads', 'has-ads', 'undetected', 'detecting');
+
+    // 设置新状态
+    switch(status) {
+        case VIDEO_STATUS.NO_SUBTITLE:
+            button.classList.add('no-subtitle');
+            button.innerHTML = '无字幕内容';
+            break;
+
+        case VIDEO_STATUS.NO_ADS:
+            button.classList.add('no-ads');
+            button.innerHTML = '无广告内容';
+            break;
+
+        case VIDEO_STATUS.HAS_ADS:
+            button.classList.add('has-ads');
+            button.innerHTML = '广告跳过';
+            // 保存广告时间戳数据
+            if (data.adTimestamps) {
+                button.dataset.adTimestamps = JSON.stringify(data.adTimestamps);
+            }
+            break;
+
+        case VIDEO_STATUS.UNDETECTED:
+            button.classList.add('undetected');
+            button.innerHTML = '点击检测';
+            break;
+
+        case VIDEO_STATUS.DETECTING:
+            button.classList.add('detecting');
+            button.innerHTML = '检测中...';
+            break;
+
+        default:
+            button.classList.add('undetected');
+            button.innerHTML = '点击检测';
+    }
+
+    // 存储当前状态
+    button.dataset.status = status;
+
+    return button;
+}
+
+/**
+ * 循环切换按钮状态 - 仅用于测试
+ */
+function cycleButtonStatus() {
+    const button = document.getElementById('adskip-button');
+    if (!button) return;
+
+    const currentStatus = parseInt(button.dataset.status || '3');
+    const nextStatus = (currentStatus + 1) % 5;
+
+    // 测试数据
+    const testData = {
+        adTimestamps: [
+            {start: 30, end: 45},
+            {start: 120, end: 135}
+        ]
+    };
+
+    updateVideoStatus(nextStatus, nextStatus === VIDEO_STATUS.HAS_ADS ? testData : {});
+}
+
+/**
+ * 创建测试循环按钮 - 仅用于开发测试
+ */
+function createTestStatusButton() {
+    // 检查是否已存在
+    if (document.getElementById('adskip-test-status-button')) {
+        return;
+    }
+
+    // 先创建广告跳过按钮
+    createAdSkipButton();
+
+    // 创建测试状态按钮
+    const testButton = document.createElement('div');
+    testButton.id = 'adskip-test-status-button';
+    testButton.innerHTML = '切换状态';
+
+    // 样式
+    testButton.style.cssText = `
+        position: fixed;
+        top: 200px;
+        right: 20px;
+        background-color: rgba(38, 50, 56, 0.7);
+        color: #f5f5f5;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        z-index: 9999;
+        font-size: 13px;
+        font-weight: 400;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+        backdrop-filter: blur(4px);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    `;
+
+    // 悬停效果
+    testButton.addEventListener('mouseenter', () => {
+        testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.85)';
+    });
+
+    testButton.addEventListener('mouseleave', () => {
+        testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
+    });
+
+    // 点击事件
+    testButton.addEventListener('click', cycleButtonStatus);
+
+    // 添加到页面
+    document.body.appendChild(testButton);
 }
 ```
 
-**CSS样式与图标设计**:
+3. **更新导出对象**:
+```javascript
+// 导出函数到全局对象
+window.adskipAdDetection = {
+    getVideoSubtitleData,
+    createTestButton,
+    VIDEO_STATUS,
+    updateVideoStatus,
+    createAdSkipButton,
+    createTestStatusButton
+};
+```
+
+**CSS样式内容** (`adDetection.css`):
 ```css
-/* 按钮基础样式 */
+/* 广告跳过按钮基础样式 */
 .adskip-button {
   display: flex;
   align-items: center;
@@ -81,9 +246,10 @@ function updateVideoStatus(status) {
   color: #fff;
   transition: all 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  user-select: none;
 }
 
-/* 每种状态的样式 */
 /* 无字幕状态 - 灰色 */
 .adskip-button.no-subtitle {
   background-color: #aaaaaa;
@@ -123,7 +289,7 @@ function updateVideoStatus(status) {
 /* 检测中状态 - 紫色过渡色 */
 .adskip-button.detecting {
   background-color: #A578F2;
-  animation: pulse 1.5s infinite;
+  animation: adskip-pulse 1.5s infinite;
 }
 .adskip-button.detecting::before {
   content: "⌛";
@@ -138,26 +304,24 @@ function updateVideoStatus(status) {
 }
 
 /* 脉冲动画 */
-@keyframes pulse {
+@keyframes adskip-pulse {
   0% { opacity: 0.8; }
   50% { opacity: 1; }
   100% { opacity: 0.8; }
 }
 ```
 
-**状态文本与图标对应关系**:
-
-| 状态 | 类名 | 背景色 | 图标 | 文本 |
-|------|------|--------|------|------|
-| 无字幕 | no-subtitle | 灰色 (#aaaaaa) | 🚫 | 无字幕内容 |
-| 无广告 | no-ads | 绿色 (#6ac30d) | ✓ | 无广告内容 |
-| 有广告 | has-ads | B站粉色 (#FB7299) | ⏩ | 广告跳过 |
-| 未检测 | undetected | B站蓝色 (#23ADE5) | ❓ | 点击检测 |
-| 检测中 | detecting | 紫色 (#A578F2) | ⌛ | 检测中... |
-
 **验证方法**:
-- 创建临时按钮，通过点击循环切换不同状态
-- 确认每种状态的样式和交互效果正确
+- 创建adDetection.css文件并配置manifest.json引入
+- 实现上述函数并调用createTestStatusButton()
+- 点击"切换状态"按钮循环切换所有状态
+- 验证每种状态下按钮的样式和文本正确显示
+- 检查按钮位置是否正确显示在视频播放器右上角
+
+**注意事项**:
+- 确保按钮的z-index足够高，能在视频播放器上方正常显示
+- 测试不同尺寸的视频播放器下按钮的显示位置
+- 确保按钮在全屏模式下仍然可见并可交互
 
 ### 模块3: 本地存储扩展模块
 

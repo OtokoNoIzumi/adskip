@@ -1,0 +1,88 @@
+/*
+ * adDetection.css - 广告检测模块样式
+ * 定义广告跳过按钮的样式和动画效果
+ */
+
+/* 无字幕状态 - 灰色 */
+.adskip-button.no-subtitle {
+  background-color: #aaaaaa !important;
+}
+.adskip-button.no-subtitle::before {
+  content: "🚫";
+  margin-right: 4px;
+}
+
+/* 无广告状态 - 绿色 */
+.adskip-button.no-ads {
+  background-color: #6ac30d !important;
+}
+.adskip-button.no-ads::before {
+  content: "✓";
+  margin-right: 4px;
+}
+
+/* 有广告状态 - B站粉色 */
+.adskip-button.has-ads {
+  background-color: #FB7299 !important;
+}
+.adskip-button.has-ads::before {
+  content: "⏩";
+  margin-right: 4px;
+}
+
+/* 未检测状态 - B站蓝色 */
+.adskip-button.undetected {
+  background-color: #23ADE5 !important;
+}
+.adskip-button.undetected::before {
+  content: "❓";
+  margin-right: 4px;
+}
+
+/* 检测中状态 - 紫色过渡色 */
+.adskip-button.detecting {
+  background-color: #A578F2 !important;
+  animation: adskip-pulse 1.5s infinite !important;
+}
+.adskip-button.detecting::before {
+  content: "⌛";
+  margin-right: 4px;
+}
+
+/* 鼠标悬停效果 */
+.adskip-button:hover {
+  opacity: 0.9 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* 脉冲动画 */
+@keyframes adskip-pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
+}
+
+/* 测试状态切换按钮样式 */
+#adskip-test-status-button {
+  position: fixed;
+  top: 200px;
+  right: 20px;
+  background-color: rgba(38, 50, 56, 0.7);
+  color: #f5f5f5;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 9999;
+  font-size: 13px;
+  font-weight: 400;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#adskip-test-status-button:hover {
+  background-color: rgba(38, 50, 56, 0.85);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}

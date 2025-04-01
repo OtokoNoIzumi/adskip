@@ -203,17 +203,142 @@ function createTestButton() {
     document.body.appendChild(testButton);
 }
 
+/**
+ * 创建广告跳过按钮
+ * @returns {HTMLElement} 创建的按钮元素
+ */
+function createAdSkipButton() {
+    // 检查是否已存在
+    let adskipButton = document.getElementById('adskip-button');
+    if (adskipButton) {
+        adskipUtils.logDebug('[AdSkip广告检测] 广告跳过按钮已存在，返回现有按钮');
+        return adskipButton;
+    }
+
+    // 创建按钮
+    adskipButton = document.createElement('div');
+    adskipButton.id = 'adskip-button';
+    adskipButton.className = 'adskip-button undetected';
+    adskipButton.innerHTML = '点击检测广告';
+
+    adskipUtils.logDebug('[AdSkip广告检测] 创建广告跳过按钮');
+
+    return adskipButton;
+}
+
+/**
+ * 更新视频状态和按钮显示
+ * @param {number} status - 视频状态，使用VIDEO_STATUS枚举值
+ * @param {Object} data - 可选的附加数据，如广告时间戳等
+ */
+function updateVideoStatus(status, data = {}) {
+    const button = createAdSkipButton();
+
+    // 移除所有状态类
+    button.classList.remove('no-subtitle', 'no-ads', 'has-ads', 'undetected', 'detecting');
+
+    // 设置新状态
+    switch(status) {
+        case VIDEO_STATUS.NO_SUBTITLE:
+            button.classList.add('no-subtitle');
+            button.innerHTML = '无字幕';
+            break;
+
+        case VIDEO_STATUS.NO_ADS:
+            button.classList.add('no-ads');
+            button.innerHTML = '没有广告';
+            break;
+
+        case VIDEO_STATUS.HAS_ADS:
+            button.classList.add('has-ads');
+            button.innerHTML = '已处理广告';
+            // 保存广告时间戳数据
+            if (data.adTimestamps) {
+                button.dataset.adTimestamps = JSON.stringify(data.adTimestamps);
+            }
+            break;
+
+        case VIDEO_STATUS.UNDETECTED:
+            button.classList.add('undetected');
+            button.innerHTML = '点击检测广告';
+            break;
+
+        case VIDEO_STATUS.DETECTING:
+            button.classList.add('detecting');
+            button.innerHTML = '检测中...';
+            break;
+
+        default:
+            button.classList.add('has-ads');
+            button.innerHTML = '已处理广告';
+    }
+
+    // 存储当前状态
+    button.dataset.status = status;
+
+    adskipUtils.logDebug(`[AdSkip广告检测] 更新按钮状态为: ${status}`);
+
+    return button;
+}
+
+/**
+ * 循环切换按钮状态 - 仅用于测试
+ */
+function cycleButtonStatus() {
+    const button = document.getElementById('adskip-button');
+    if (!button) return;
+
+    const currentStatus = parseInt(button.dataset.status || '3');
+    const nextStatus = (currentStatus + 1) % 5;
+
+    // 测试数据
+    const testData = {
+        adTimestamps: [
+            {start: 30, end: 45},
+            {start: 120, end: 135}
+        ]
+    };
+
+    updateVideoStatus(nextStatus, nextStatus === VIDEO_STATUS.HAS_ADS ? testData : {});
+
+    adskipUtils.logDebug(`[AdSkip广告检测] 测试切换状态: ${currentStatus} -> ${nextStatus}`);
+}
+
+/**
+ * 创建测试循环按钮 - 仅用于开发测试
+ */
+function createTestStatusButton() {
+    // 检查是否已存在
+    if (document.getElementById('adskip-test-status-button')) {
+        return;
+    }
+
+    // 先创建广告跳过按钮
+    createAdSkipButton();
+
+    // 创建测试状态按钮
+    const testButton = document.createElement('div');
+    testButton.id = 'adskip-test-status-button';
+    testButton.innerHTML = '切换状态';
+
+    // 点击事件
+    testButton.addEventListener('click', cycleButtonStatus);
+
+    // 添加到页面
+    document.body.appendChild(testButton);
+
+    adskipUtils.logDebug('[AdSkip广告检测] 创建测试状态切换按钮');
+}
+
 // 导出函数到全局对象
 window.adskipAdDetection = {
     getVideoSubtitleData,
     createTestButton,
-    VIDEO_STATUS
+    VIDEO_STATUS,
+    updateVideoStatus,
+    createAdSkipButton,
+    createTestStatusButton,
+    cycleButtonStatus
 };
 
-// 初始化测试按钮（只在开发阶段使用）
-document.addEventListener('DOMContentLoaded', function() {
-    // 延迟加载，确保其他模块已加载
-    setTimeout(() => {
-        createTestButton();
-    }, 2000);
-});
+// 初始化测试按钮的代码已移除

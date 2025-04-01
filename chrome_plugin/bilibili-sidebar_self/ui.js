@@ -63,14 +63,20 @@ function updateStatusDisplay(message, type = 'success', duration = 3000) {
  * 创建链接生成器UI
  */
 function createLinkGenerator() {
-    // 创建悬浮按钮
-    const button = document.createElement('div');
-    button.innerHTML = '⏩ 广告跳过';
-    button.id = 'adskip-button';
-    button.className = 'adskip-button';
+    let button;
 
-    // 点击展开操作面板
+    button = adskipAdDetection.createAdSkipButton();
+    adskipUtils.logDebug('[AdSkip] 使用广告检测模块的按钮');
+
+    // 无论使用哪种按钮，都添加点击事件展开操作面板
     button.addEventListener('click', async function() {
+        // 如果按钮处于检测中状态，不响应点击
+        if (button.classList.contains('detecting')) {
+            adskipUtils.logDebug('[AdSkip] 按钮处于检测中状态，不响应点击');
+            return;
+        }
+
+        // 如果面板已经存在，则移除它
         if (document.getElementById('adskip-panel')) {
             document.getElementById('adskip-panel').remove();
             return;
