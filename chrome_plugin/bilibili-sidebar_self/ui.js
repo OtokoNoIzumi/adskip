@@ -77,7 +77,7 @@ function createLinkGenerator() {
         }
 
         // 刷新当前视频ID
-        currentVideoId = adskipUtils.getCurrentVideoId();
+        const currentVideoId = adskipUtils.getCurrentVideoId().id;
 
         // 获取当前视频UP主信息
         const { uploader: currentUploader, title: currentTitle } = await adskipStorage.getCurrentVideoUploader();

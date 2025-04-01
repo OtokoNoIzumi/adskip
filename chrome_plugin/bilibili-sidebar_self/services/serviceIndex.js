@@ -333,90 +333,13 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
         try {
             adskipUtils.logDebug('[AdSkip服务] 开始获取视频数据...');
-            // 检查是普通视频还是番剧页面
-            const currentUrl = window.location.href;
-            const isBangumi = currentUrl.includes('/bangumi/play/') ||
-                              currentUrl.includes('/play/ep') ||
-                              currentUrl.includes('/play/ss');
 
-            // 检查是否是播放列表模式
-            const isPlaylist = currentUrl.includes('/list/');
-            adskipUtils.logDebug('[AdSkip服务] 视频类型: ' +
-                (isPlaylist ? '播放列表页面 ✅' : (isBangumi ? '番剧页面 ✅' : '普通视频页面 ✅')));
-            adskipUtils.logDebug('[AdSkip服务] 当前URL: ' + currentUrl);
+            // 使用utils中的函数获取视频ID信息
+            const videoIdInfo = adskipUtils.getCurrentVideoId(); // 传入true获取完整对象
+            const { bvid, epid, id } = videoIdInfo;
 
-            // 获取视频ID (BV号或EP号)
-            let bvid = null;
-            let epid = null;
 
-            // 从URL参数中获取
-            const urlParams = new URLSearchParams(window.location.search);
-
-            // 处理播放列表模式 - 优先检查URL参数
-            if (isPlaylist) {
-                // 检查播放列表URL中的bvid参数（常规视频）
-                const bvidParam = urlParams.get('bvid');
-                if (bvidParam) {
-                    bvid = bvidParam;
-                    adskipUtils.logDebug('[AdSkip服务] ✅ 成功从播放列表URL参数中提取到BV号: ' + bvid);
-                }
-
-                // 检查播放列表URL中的oid参数（番剧）
-                const oidParam = urlParams.get('oid');
-                if (oidParam && !bvid) {
-                    epid = oidParam;
-                    adskipUtils.logDebug('[AdSkip服务] ✅ 成功从播放列表URL参数中提取到番剧EP ID: ' + epid);
-                }
-            }
-
-            // 如果播放列表模式未提取到，尝试其他标准模式
-            if (!bvid && !epid) {
-                if (isBangumi) {
-                    // 从番剧URL中提取ep号
-                    const epMatch = currentUrl.match(/\/play\/ep(\d+)/);
-                    if (epMatch && epMatch[1]) {
-                        epid = epMatch[1];
-                        adskipUtils.logDebug('[AdSkip服务] ✅ 成功从URL提取到番剧epid: ' + epid);
-                    } else {
-                        adskipUtils.logDebug('[AdSkip服务] ❌ 无法从URL提取番剧epid');
-
-                        // 尝试提取ss号 - 如果需要
-                        const ssMatch = currentUrl.match(/\/bangumi\/play\/ss(\d+)/) ||
-                                       currentUrl.match(/\/play\/ss(\d+)/);
-                        if (ssMatch && ssMatch[1]) {
-                            const ssid = ssMatch[1];
-                            adskipUtils.logDebug('[AdSkip服务] ✅ 成功从URL提取到番剧ssid: ' + ssid);
-                            // 这里可以添加ss号的处理逻辑
-                        } else {
-                            adskipUtils.logDebug('[AdSkip服务] ❌ 无法从URL提取番剧ssid');
-                        }
-                    }
-                } else {
-                    // 从普通视频URL中提取BV号
-                    const bvMatch = currentUrl.match(/\/video\/(BV[\w]+)/);
-                    if (bvMatch && bvMatch[1]) {
-                        bvid = bvMatch[1];
-                        adskipUtils.logDebug('[AdSkip服务] ✅ 成功从URL提取到BV号: ' + bvid);
-                    } else {
-                        adskipUtils.logDebug('[AdSkip服务] ❌ 无法从URL提取BV号');
-
-                        // 尝试从其他位置获取BV号
-                        try {
-                            const metaTag = document.querySelector('meta[itemprop="url"]');
-                            if (metaTag) {
-                                const metaContent = metaTag.getAttribute('content');
-                                const metaBvMatch = metaContent && metaContent.match(/\/video\/(BV[\w]+)/);
-                                if (metaBvMatch && metaBvMatch[1]) {
-                                    bvid = metaBvMatch[1];
-                                    adskipUtils.logDebug('[AdSkip服务] ✅ 成功从meta标签提取到BV号: ' + bvid);
-                                }
-                            }
-                        } catch (e) {
-                            adskipUtils.logDebug('[AdSkip服务] 从meta标签提取BV号时发生错误: ' + e.message);
-                        }
-                    }
-                }
-            }
+            adskipUtils.logDebug('[AdSkip服务] 视频ID信息:', videoIdInfo);
 
             // 初始化返回对象
             let result = {

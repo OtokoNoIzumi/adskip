@@ -40,7 +40,7 @@ async function init() {
     adskipUtils.logDebug(`初始化 - 管理员状态: ${isAdminAuthorized ? '已授权' : '未授权'}`);
 
     // 获取当前视频ID
-    currentVideoId = adskipUtils.getCurrentVideoId();
+    const currentVideoId = adskipUtils.getCurrentVideoId().id;
     adskipUtils.logDebug(`初始化 - 当前视频ID: ${currentVideoId}`);
 
     // 解析URL中的广告跳过参数

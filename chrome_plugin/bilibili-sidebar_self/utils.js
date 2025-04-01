@@ -94,86 +94,116 @@ function logDebug(message, dataOrOptions, throttleTime = 0) {
 }
 
 /**
- * 获取当前视频ID (BV或AV或EP)
- * @returns {string} 视频ID
+ * 获取当前视频ID信息
+ * @returns {Object} 视频ID字符串或包含视频ID信息的对象 {bvid, epid, type, id}
  */
 function getCurrentVideoId() {
     const pathname = window.location.pathname;
     const fullUrl = window.location.href;
-
     // logDebug(`开始提取视频ID，当前URL: ${fullUrl}`); // 暂时屏蔽
+    // 初始化返回对象
+    const result = {
+        bvid: null,
+        epid: null,
+        id: '' // 最终识别到的ID，向后兼容旧代码
+    };
 
     // 获取URL参数
     const urlParams = new URLSearchParams(window.location.search);
 
-    // 先检查播放列表模式
-    // 检查播放列表URL中的bvid参数（常规视频）
-    const bvidParam = urlParams.get('bvid');
-    if (bvidParam) {
-        // logDebug(`✅ 成功从播放列表URL参数中提取到BV ID: ${bvidParam}`);  // 暂时屏蔽
-        return bvidParam;
+    // 检查是否是播放列表模式
+    const isPlaylist = fullUrl.includes('/list/');
+
+    // 记录日志的函数，避免代码重复
+    const logSuccess = (idType, idValue, source) => {
+        logDebug(`✅ 成功从${source}中提取到${idType}: ${idValue}`);
+    };
+
+    // 1. 播放列表模式处理 - 优先级最高
+    if (isPlaylist) {
+        // 检查播放列表URL中的bvid参数（常规视频）
+        const bvidParam = urlParams.get('bvid');
+        if (bvidParam) {
+            result.bvid = bvidParam;
+            result.id = bvidParam;
+            logSuccess('BV ID', bvidParam, '播放列表URL参数');
+            return result;
+        }
+
+        // 检查播放列表URL中的oid参数（番剧）
+        const oidParam = urlParams.get('oid');
+        if (oidParam) {
+            result.epid = oidParam;
+            result.id = 'ep' + oidParam;
+            logSuccess('EP ID', result.id, '播放列表URL参数');
+            return result;
+        }
     }
 
-    // 检查播放列表URL中的oid参数（番剧）
-    const oidParam = urlParams.get('oid');
-    if (oidParam) {
-        // 检查是否有ep_id格式
-        const epId = 'ep' + oidParam;
-        // logDebug(`✅ 成功从播放列表URL参数中提取到EP ID: ${epId}`); // 暂时屏蔽
-        return epId;
-    }
-
-    // 检查是否是番剧页面
+    // 2. 标准番剧页面处理
     const epMatch = pathname.match(/\/bangumi\/play\/(ep[\d]+)/);
     if (epMatch && epMatch[1]) {
-        const epId = epMatch[1];
-        logDebug(`✅ 成功从番剧路径中提取到EP ID: ${epId}`);
-        return epId; // 返回EP ID
+        result.epid = epMatch[1].replace('ep', '');
+        result.id = epMatch[1];
+        logSuccess('EP ID', result.id, '番剧路径');
+        return result;
     } else {
         logDebug(`番剧EP ID提取：未匹配 - 路径 "${pathname}" 不包含标准番剧EP格式`);
     }
 
-    // 检查是否是普通视频页面
+    // 3. 标准视频页面处理
     const bvMatch = pathname.match(/\/video\/(BV[\w]+)/);
     if (bvMatch && bvMatch[1]) {
-        const bvId = bvMatch[1];
-        logDebug(`✅ 成功从路径中提取到BV ID: ${bvId}`);
-        return bvId; // 返回BV ID
+        result.bvid = bvMatch[1];
+        result.id = bvMatch[1];
+        logSuccess('BV ID', result.id, '路径');
+        return result;
     } else {
         logDebug(`BV ID提取：未匹配 - 路径 "${pathname}" 不包含标准视频BV格式`);
     }
 
-    // 如果没有BV ID，尝试查找AV ID
+    // 4. URL参数中的各种ID处理
+    // AV ID
     const avid = urlParams.get('aid');
     if (avid) {
         const avId = 'av' + avid;
-        logDebug(`✅ 成功从URL参数中提取到AV ID: ${avId}`);
-        return avId;
+        result.aid = avid;
+        result.id = avId;
+        logSuccess('AV ID', avId, 'URL参数');
+        return result;
     } else {
         logDebug(`AV ID提取：URL参数中没有aid参数`);
     }
 
-    // 如果没有找到EP/BV/AV ID，尝试从URL中提取番剧ss_id或ep_id
+    // SS ID (番剧季ID)
     const ssid = urlParams.get('ss_id');
     if (ssid) {
         const ssId = 'ss' + ssid;
-        logDebug(`✅ 成功从URL参数中提取到番剧SS ID: ${ssId}`);
-        return ssId;
+        result.ssid = ssid;
+        result.id = ssId;
+        logSuccess('SS ID', ssId, 'URL参数');
+        return result;
     } else {
         logDebug(`SS ID提取：URL参数中没有ss_id参数`);
     }
 
+    // EP ID (番剧集ID)
     const epid = urlParams.get('ep_id');
     if (epid) {
         const epId = 'ep' + epid;
-        logDebug(`✅ 成功从URL参数中提取到番剧EP ID: ${epId}`);
-        return epId;
+        result.epid = epid;
+        result.id = epId;
+        logSuccess('EP ID', epId, 'URL参数');
+        return result;
     } else {
         logDebug(`EP ID参数提取：URL参数中没有ep_id参数`);
     }
 
-    logDebug(`⚠️ 无法提取视频ID：已尝试所有已知格式，未找到匹配项`);
-    return '';
+    // 5. 如果所有方法都无法获取ID，返回空字符串
+    if (debugMode) {
+        logDebug(`⚠️ 无法提取视频ID：已尝试所有已知格式，未找到匹配项`);
+    }
+    return result;
 }
 
 /**

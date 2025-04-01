@@ -212,7 +212,8 @@ function checkAndSkip() {
         lastPlaybackTimeUpdate = Date.now();
 
         // 检查视频ID是否变化
-        const newVideoId = adskipUtils.getCurrentVideoId();
+        const newVideoId = adskipUtils.getCurrentVideoId().id;
+
         if (newVideoId !== currentVideoId && newVideoId !== '') {
             adskipUtils.logDebug(`视频ID变化检测 (checkAndSkip): ${currentVideoId} -> ${newVideoId}`);
             lastVideoId = currentVideoId;
@@ -517,7 +518,8 @@ function setupUrlChangeMonitor() {
             lastOid = currentParams.get('oid') || '';
 
             // 刷新当前视频ID
-            const newVideoId = adskipUtils.getCurrentVideoId();
+            const newVideoId = adskipUtils.getCurrentVideoId().id;
+
             if (newVideoId !== currentVideoId && newVideoId !== '') {
                 adskipUtils.logDebug(`视频ID变化检测 (observer): ${currentVideoId} -> ${newVideoId}`);
                 lastVideoId = currentVideoId;
@@ -546,15 +548,13 @@ function setupUrlChangeMonitor() {
  * 检查视频是否变化
  */
 function checkForVideoChange() {
-    const newVideoId = adskipUtils.getCurrentVideoId();
+    const newVideoId = adskipUtils.getCurrentVideoId().id; // 直接使用字符串模式
 
-    // 添加日志记录当前和新的视频ID，帮助调试
+
     adskipUtils.logDebug(`检测视频变化: 当前=${currentVideoId}, 新=${newVideoId}`);
 
-    // 检查视频ID是否变化或是否在播放列表模式中
-    if ((newVideoId !== currentVideoId && newVideoId !== '') ||
-        (window.location.href.includes('/list/') && newVideoId !== '')) {
-
+    // 检查视频ID是否变化
+    if (newVideoId !== currentVideoId && newVideoId !== '') {
         adskipUtils.logDebug(`视频ID变化检测 (event): ${currentVideoId} -> ${newVideoId}`);
         lastVideoId = currentVideoId;
         currentVideoId = newVideoId;
