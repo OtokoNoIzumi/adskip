@@ -89,6 +89,11 @@ async function init() {
     // 设置广告标记监控
     adskipVideoMonitor.setupAdMarkerMonitor();
 
+    // 初始化字幕检测测试按钮（仅开发阶段使用）
+    if (typeof adskipAdDetection !== 'undefined') {
+        adskipAdDetection.createTestButton();
+    }
+
     adskipUtils.logDebug('插件初始化完成');
 }
 

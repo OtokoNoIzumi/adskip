@@ -29,6 +29,7 @@
         "videoMonitor.js",
         "ui.js",
         "adminPanel.js",
+        "adDetection.js",
         "core.js"
       ],
       "css": ["content.css"],

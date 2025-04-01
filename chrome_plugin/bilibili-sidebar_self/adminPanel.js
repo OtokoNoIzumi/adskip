@@ -682,75 +682,24 @@ async function loadSubtitleInfo() {
     try {
         subtitleSection.innerHTML = '<div class="loading-spinner"></div>';
 
-        // 检查服务模块是否存在
-        if (typeof adskipSubtitleService === 'undefined') {
+        // 检查广告检测模块是否存在
+        if (typeof adskipAdDetection === 'undefined' || typeof adskipAdDetection.getVideoSubtitleData !== 'function') {
             subtitleSection.innerHTML = `
                 <div class="error-message">
-                    服务模块未加载，请刷新页面后重试。
+                    广告检测模块未加载，请刷新页面后重试。
                     <button class="retry-button" onclick="location.reload()">刷新页面</button>
                 </div>`;
             return;
         }
 
-        // 获取当前视频信息
-        const videoData = await adskipSubtitleService.getVideoData();
+        // 使用广告检测模块获取数据 - 直接使用其返回格式，不再转换
+        adskipUtils.logDebug('[AdSkip管理面板] 使用广告检测模块获取字幕数据');
+        const keyParams = await adskipAdDetection.getVideoSubtitleData();
 
-        // 获取字幕信息
+        // 获取原始数据以便UI显示
+        const videoData = await adskipSubtitleService.getVideoData();
         const subtitleInfo = await adskipSubtitleService.getVideoSubtitles();
         const subtitlePreview = await adskipSubtitleService.getSubtitlePreview();
-
-        // 准备重要参数信息对象
-        const keyParams = {
-            bvid: videoData.bvid || '',
-            title: videoData.title || '',
-            owner: videoData.owner || '',
-            mid: videoData.owner?.mid || '',
-            desc: videoData.desc || '',
-            dynamic: videoData.dynamic || '',
-            duration: videoData.duration || 0,
-            pubdate: videoData.pubdate || 0,
-            dimension: videoData.dimension,
-            subtitle: videoData.subtitle || {}
-        };
-
-        // 添加字幕完整内容（如果有）
-        if (subtitlePreview && subtitlePreview.subtitleContent && subtitlePreview.subtitleContent.length > 0) {
-            try {
-                // 找到默认字幕或第一个字幕
-                const firstSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
-                if (firstSubtitle) {
-                    // 使用已经处理过的字幕数据
-                    let fullContent = null;
-
-                    // 检查是否已经有预处理好的字幕内容
-                    if (subtitlePreview.rawSubtitleOriginal && Array.isArray(subtitlePreview.rawSubtitleOriginal)) {
-                        adskipUtils.logDebug('[AdSkip服务] 使用已有的处理后字幕内容');
-                        fullContent = subtitlePreview.rawSubtitleOriginal;
-                    }
-                    // 如果有完整的字幕处理结果
-                    else if (subtitlePreview.rawFullSubtitle && subtitlePreview.rawFullSubtitle.subtitles) {
-                        adskipUtils.logDebug('[AdSkip服务] 使用完整字幕处理结果');
-                        fullContent = subtitlePreview.rawFullSubtitle.subtitles;
-                    }
-                    // 如果需要重新获取字幕（极少情况）
-                    else if (!fullContent && firstSubtitle.url) {
-                        adskipUtils.logDebug('[AdSkip服务] 需要重新获取字幕内容:', firstSubtitle.url);
-                        const processedSubtitle = await adskipSubtitleService.downloadSubtitleFile(firstSubtitle.url);
-                        if (processedSubtitle && processedSubtitle.subtitles) {
-                            fullContent = processedSubtitle.subtitles;
-                        }
-                    }
-
-                    // 保存完整字幕内容到keyParams
-                    if (fullContent) {
-                        keyParams.subtitle_contents = [fullContent];
-                        adskipUtils.logDebug(`[AdSkip服务] 成功获取${fullContent.length}条字幕内容`);
-                    }
-                }
-            } catch (e) {
-                adskipUtils.logDebug('[AdSkip服务] 获取字幕内容失败:', e);
-            }
-        }
 
         let infoHTML = `
             <div class="credential-data">

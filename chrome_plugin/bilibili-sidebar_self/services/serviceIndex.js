@@ -371,12 +371,15 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                             // result.aid = epInfo.aid;
                             result.bvid = epInfo.bvid;
                             // result.cid = epInfo.cid;
-                            result.title = epInfo.epTitle || epInfo.title;
+                            result.title = epInfo.long_title || epInfo.ep_title || epInfo.title;
                             // result.uploader = epInfo.title;
 
                             adskipUtils.logDebug('[AdSkip服务] 成功获取番剧信息:', {
                                 title: result.title,
-                                bvid: result.bvid
+                                bvid: result.bvid,
+                                long_title: epInfo.long_title,
+                                ep_title: epInfo.ep_title,
+                                raw_title: epInfo.title
                             });
                         }
                     } else {

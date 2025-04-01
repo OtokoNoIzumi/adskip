@@ -136,58 +136,6 @@ function logDebug(message) {
 
 ## 4. 关键问题和优化机会
 
-### 4.1 DOM查询依赖性高
-
-**问题**：多个工具函数直接依赖DOM结构，如`getVideoUploader()`，使功能易受B站页面变化影响。
-
-**优化建议**：
-- 实现更智能的DOM元素查找策略，如基于特征而非固定选择器
-- 实现查询结果缓存机制，减少重复DOM查询
-- 添加结果验证逻辑，确保提取结果有效
-
-```javascript
-// 改进示例
-function getVideoUploader() {
-    // 缓存查询结果
-    if (cache.uploader && Date.now() - cache.uploaderTimestamp < 30000) {
-        return Promise.resolve(cache.uploader);
-    }
-
-    return new Promise((resolve) => {
-        try {
-            // 更灵活的DOM查询策略
-            const uploaderElement = findElementByMultipleAttributes({
-                possibleSelectors: ['.up-name', '.username', '[data-user-name]'],
-                contentValidation: (text) => text.length > 0 && text.length < 50
-            });
-
-            // 结果验证和缓存
-            if (uploaderElement) {
-                const result = {
-                    uploader: uploaderElement.textContent.trim(),
-                    avatarUrl: findAvatarUrl(uploaderElement)
-                };
-
-                // 验证结果有效性
-                if (isValidUploaderInfo(result)) {
-                    // 缓存结果
-                    cache.uploader = result;
-                    cache.uploaderTimestamp = Date.now();
-                    resolve(result);
-                    return;
-                }
-            }
-
-            // 返回默认或缓存的最后有效结果
-            resolve(cache.lastValidUploader || { uploader: '未知UP主', avatarUrl: '' });
-        } catch (error) {
-            logError('获取UP主信息时出错', error);
-            resolve(cache.lastValidUploader || { uploader: '未知UP主', avatarUrl: '' });
-        }
-    });
-}
-```
-
 ### 4.2 缺少性能优化机制
 
 **问题**：工具函数没有实现缓存机制，导致重复调用时重复执行相同操作，特别是DOM查询操作。
