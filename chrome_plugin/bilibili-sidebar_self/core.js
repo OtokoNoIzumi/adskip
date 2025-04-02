@@ -97,18 +97,11 @@ async function init() {
         // 创建测试状态切换按钮（仅在开发阶段使用）
         adskipAdDetection.createTestStatusButton();
 
-        // 设置初始状态
-        // 如果有广告时间戳，则显示为HAS_ADS状态
-        if (currentAdTimestamps.length > 0) {
-            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.HAS_ADS, {
-                adTimestamps: currentAdTimestamps
+        // 使用集中函数更新按钮状态
+        adskipAdDetection.updateButtonStatusBasedOnSubtitle(currentAdTimestamps, "初始化")
+            .catch(error => {
+                adskipUtils.logDebug('[AdSkip广告检测] 初始化状态更新失败:', error);
             });
-            adskipUtils.logDebug('[AdSkip广告检测] 设置初始状态为HAS_ADS');
-        } else {
-            // 否则设置为UNDETECTED状态
-            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.UNDETECTED);
-            adskipUtils.logDebug('[AdSkip广告检测] 设置初始状态为UNDETECTED');
-        }
     }
 
     adskipUtils.logDebug('插件初始化完成');

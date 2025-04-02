@@ -26,10 +26,6 @@ async function getVideoSubtitleData() {
     try {
         adskipUtils.logDebug('[AdSkip广告检测] 开始获取视频字幕数据...');
 
-        // 检查服务模块是否存在
-        if (typeof adskipSubtitleService === 'undefined') {
-            throw new Error('字幕服务模块未加载，请刷新页面后重试');
-        }
 
         // 获取当前视频信息
         const videoData = await adskipSubtitleService.getVideoData();
@@ -330,6 +326,43 @@ function createTestStatusButton() {
     adskipUtils.logDebug('[AdSkip广告检测] 创建测试状态切换按钮');
 }
 
+/**
+ * 根据字幕数据更新按钮状态
+ * 集中处理字幕检查和状态设置逻辑
+ * @param {Array} adTimestamps 广告时间戳数组
+ * @param {string} context 调用上下文，用于区分日志
+ * @returns {Promise} 返回字幕数据处理的Promise
+ */
+function updateButtonStatusBasedOnSubtitle(adTimestamps = [], context = "初始化") {
+    return getVideoSubtitleData().then(keyParams => {
+        // 检查是否有字幕数据
+        if (!keyParams.hasSubtitle) {
+            // 没有字幕数据，设置为NO_SUBTITLE状态
+            updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE);
+            adskipUtils.logDebug(`[AdSkip广告检测] ${context}后设置状态为NO_SUBTITLE（无字幕）`);
+        } else {
+            // 有字幕数据，根据是否有广告时间戳决定状态
+            if (adTimestamps && adTimestamps.length > 0) {
+                // 有广告时间戳，设置为HAS_ADS状态
+                updateVideoStatus(VIDEO_STATUS.HAS_ADS, {
+                    adTimestamps: adTimestamps
+                });
+                adskipUtils.logDebug(`[AdSkip广告检测] ${context}后设置状态为HAS_ADS`);
+            } else {
+                // 无广告时间戳，设置为UNDETECTED状态
+                updateVideoStatus(VIDEO_STATUS.UNDETECTED);
+                adskipUtils.logDebug(`[AdSkip广告检测] ${context}后设置状态为UNDETECTED`);
+            }
+        }
+        return keyParams; // 返回字幕数据以便其他地方可能需要使用
+    }).catch(error => {
+        // 获取字幕数据出错，设置为NO_SUBTITLE状态
+        adskipUtils.logDebug(`[AdSkip广告检测] ${context}后获取字幕数据出错，设置状态为NO_SUBTITLE`, error);
+        updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE);
+        throw error; // 继续抛出错误便于调用方捕获
+    });
+}
+
 // 导出函数到全局对象
 window.adskipAdDetection = {
     getVideoSubtitleData,
@@ -338,7 +371,8 @@ window.adskipAdDetection = {
     updateVideoStatus,
     createAdSkipButton,
     createTestStatusButton,
-    cycleButtonStatus
+    cycleButtonStatus,
+    updateButtonStatusBasedOnSubtitle
 };
 
 // 初始化测试按钮的代码已移除

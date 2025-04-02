@@ -245,7 +245,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             // 检查缓存是否有效
             const now = Date.now();
             if (subtitlesCache && (now - subtitlesCacheTimestamp < CACHE_LIFETIME)) {
-                adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕列表数据');
+                adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕列表数据', { data: subtitlesCache, timestamp: subtitlesCacheTimestamp });
                 return subtitlesCache;
             }
 
@@ -428,7 +428,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
             // 检查最终结果是否完整
             const hasCompleteInfo = !!(result.aid && result.cid);
-            adskipUtils.logDebug('[AdSkip服务] 最终获取到的视频数据' + (hasCompleteInfo ? '完整' : '不完整') + ':', {
+            adskipUtils.logDebug('[AdSkip服务] 最终获取到的视频元数据' + (hasCompleteInfo ? '完整' : '不完整') + ':', {
                 bvid: result.bvid,
                 aid: result.aid,
                 cid: result.cid,
@@ -628,11 +628,26 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 
+    /**
+     * 清除字幕相关缓存
+     * 在视频切换时调用，确保获取到新视频的字幕信息
+     */
+    function clearCache() {
+        subtitlesCache = null;
+        subtitlesCacheTimestamp = 0;
+        videoDataCache = null;
+        cacheTimestamp = 0;
+        // subtitleFileCache.clear(); // 清除字幕文件缓存
+        adskipUtils.logDebug('[AdSkip服务] 字幕服务缓存已清除');
+        return true;
+    }
+
     window.adskipSubtitleService = {
         getVideoSubtitles,
         getSubtitlePreview,
         downloadSubtitleFile,
-        getVideoData
+        getVideoData,
+        clearCache
     };
 
     adskipUtils.logDebug('[AdSkip服务] 字幕服务已加载');

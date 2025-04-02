@@ -568,6 +568,9 @@ function checkForVideoChange() {
 async function reinitialize() {
     adskipUtils.logDebug(`重新初始化，当前视频ID: ${currentVideoId}`);
 
+    // 清除字幕相关缓存，确保获取新视频的字幕信息
+    adskipSubtitleService.clearCache()
+
     // 清除UP主信息缓存
     adskipStorage.clearUploaderCache();
 
@@ -618,6 +621,12 @@ async function reinitialize() {
 
     // 更新面板中的信息（如果面板已打开）
     updatePanelInfo();
+
+    // 使用集中函数更新按钮状态
+    adskipAdDetection.updateButtonStatusBasedOnSubtitle(currentAdTimestamps, "视频切换")
+        .catch(error => {
+            adskipUtils.logDebug('[AdSkip广告检测] 视频切换后状态更新失败:', error);
+        });
 }
 
 /**
