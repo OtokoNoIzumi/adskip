@@ -63,7 +63,7 @@ async function getVideoSubtitleData() {
 
                     // 检查是否已经有预处理好的字幕内容
                     if (subtitlePreview.rawSubtitleOriginal && Array.isArray(subtitlePreview.rawSubtitleOriginal)) {
-                        adskipUtils.logDebug('[AdSkip广告检测] 使用已有的处理后字幕内容');
+                        adskipUtils.logDebug('[AdSkip广告检测] ');
                         subtitles = subtitlePreview.rawSubtitleOriginal;
                     }
                     // 如果有完整的字幕处理结果

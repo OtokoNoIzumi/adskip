@@ -381,43 +381,32 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
 
 /**
  * 加载广告跳过百分比配置
- * @returns {Promise<number>} 广告跳过百分比，默认为80
+ * @returns {Promise<number>} 广告跳过百分比，默认为50
  */
 async function loadAdSkipPercentage() {
     adskipUtils.logDebug('开始加载广告跳过百分比配置');
 
-    try {
-        return new Promise(resolve => {
-            chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, data => {
-                if (chrome.runtime.lastError) {
-                    adskipUtils.logDebug(`加载广告跳过百分比配置失败: ${chrome.runtime.lastError.message}，使用默认值 80%`);
-                    resolve(80);
-                    return;
-                }
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, data => {
+            // Chrome API错误是唯一必须处理的异常情况
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`加载广告跳过百分比配置失败: ${chrome.runtime.lastError.message}，使用默认值 50%`);
+                resolve(50);
+                return;
+            }
 
-                const skipPercentage = data[STORAGE_KEYS.PERCENTAGE];
+            const percent = parseInt(data[STORAGE_KEYS.PERCENTAGE], 10);
 
-                if (skipPercentage === undefined) {
-                    adskipUtils.logDebug('未找到广告跳过百分比配置，使用默认值 80%');
-                    resolve(80);
-                } else {
-                    const percent = parseInt(skipPercentage, 10);
-
-                    if (isNaN(percent) || percent < 0 || percent > 100) {
-                        adskipUtils.logDebug(`广告跳过百分比配置值无效 (${skipPercentage})，使用默认值 80%`);
-                        resolve(80);
-                    } else {
-                        adskipUtils.logDebug(`已加载广告跳过百分比配置: ${percent}%`);
-                        resolve(percent);
-                    }
-                }
-            });
+            // 简单的有效性检查，几乎不会触发，但作为最后保障
+            if (isNaN(percent) || percent < 0 || percent > 100) {
+                adskipUtils.logDebug(`配置值无效或未设置，使用默认值 50%`);
+                resolve(50);
+            } else {
+                adskipUtils.logDebug(`已加载广告跳过百分比配置: ${percent}%`);
+                resolve(percent);
+            }
         });
-    } catch (e) {
-        adskipUtils.logDebug(`加载广告跳过百分比时发生异常: ${e.message}，使用默认值 80%`);
-        console.error('加载广告跳过百分比时发生异常:', e);
-        return 80;
-    }
+    });
 }
 
 /**
@@ -426,41 +415,26 @@ async function loadAdSkipPercentage() {
  * @returns {Promise<boolean>} 保存是否成功
  */
 async function saveAdSkipPercentage(percentage) {
-    if (percentage === undefined || percentage === null) {
-        adskipUtils.logDebug('广告跳过百分比参数为空，无法保存');
-        return false;
-    }
-
-    // 确保输入是数字并且在有效范围内
-    const percent = parseInt(percentage, 10);
-    if (isNaN(percent) || percent < 0 || percent > 100) {
-        adskipUtils.logDebug(`广告跳过百分比参数无效: ${percentage}，取值应为0-100之间的整数`);
-        return false;
-    }
+    // 简单转换，UI层已经确保了值的有效性
+    const percent = parseInt(percentage, 10) || 50; // 无效时使用默认值
 
     adskipUtils.logDebug(`准备保存广告跳过百分比配置: ${percent}%`);
 
-    try {
-        return new Promise(resolve => {
-            const saveObj = {};
-            saveObj[STORAGE_KEYS.PERCENTAGE] = percent;
+    return new Promise(resolve => {
+        const saveObj = {};
+        saveObj[STORAGE_KEYS.PERCENTAGE] = percent;
 
-            chrome.storage.local.set(saveObj, () => {
-                const success = !chrome.runtime.lastError;
-                if (success) {
-                    adskipUtils.logDebug(`成功保存广告跳过百分比配置: ${percent}%`);
-                } else {
-                    adskipUtils.logDebug(`保存广告跳过百分比配置失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
-                    console.error('保存广告跳过百分比配置失败:', chrome.runtime.lastError);
-                }
-                resolve(success);
-            });
+        chrome.storage.local.set(saveObj, () => {
+            // 只有Chrome API错误需要处理
+            const success = !chrome.runtime.lastError;
+            if (success) {
+                adskipUtils.logDebug(`成功保存广告跳过百分比配置: ${percent}%`);
+            } else {
+                adskipUtils.logDebug(`保存失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
+            }
+            resolve(success);
         });
-    } catch (e) {
-        adskipUtils.logDebug(`保存广告跳过百分比时发生异常: ${e.message}`);
-        console.error('保存广告跳过百分比时发生异常:', e);
-        return false;
-    }
+    });
 }
 
 /**

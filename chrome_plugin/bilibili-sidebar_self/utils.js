@@ -85,13 +85,40 @@ function logDebug(message, dataOrOptions, throttleTime = 0) {
         }
     }
 
-    // 输出日志
+
+    // 获取调用栈信息来确定调用模块和行号
+    let callerInfo = '';
+    try {
+        const stackObj = new Error();
+        const stackLines = stackObj.stack.split('\n');
+
+        // 查找调用者信息（第3行通常是调用logDebug的代码）
+        if (stackLines.length >= 3) {
+            // 提取文件名和行号
+            // Chrome格式: "    at 函数名 (文件名:行号:列号)"
+            // 或者: "    at 文件名:行号:列号"
+            const callerLine = stackLines[2].trim();
+            const matches = callerLine.match(/(?:at\s+(?:[\w\.]+\s+)?\()?([\w\-\.\/]+\.js):(\d+)(?::(\d+))?/);
+
+            if (matches) {
+                const fileName = matches[1].split('/').pop(); // 只取文件名，不要路径
+                const lineNumber = matches[2];
+                callerInfo = `[${fileName}:${lineNumber}] `;
+            }
+        }
+    } catch (e) {
+        // 如果解析栈失败，使用后备方案
+        callerInfo = '';
+    }
+
+    // 输出日志，添加调用者信息
     if (data) {
-        console.log(`--==--LOG: ${message}`, data);
+        console.log(`--==--LOG: ${callerInfo}${message}`, data);
     } else {
-        console.log(`--==--LOG: ${message}`);
+        console.log(`--==--LOG: ${callerInfo}${message}`);
     }
 }
+
 
 /**
  * 获取当前视频ID信息
@@ -147,8 +174,6 @@ function getCurrentVideoId() {
         result.id = epMatch[1];
         logSuccess('EP ID', result.id, '番剧路径');
         return result;
-    } else {
-        logDebug(`番剧EP ID提取：未匹配 - 路径 "${pathname}" 不包含标准番剧EP格式`);
     }
 
     // 3. 标准视频页面处理
@@ -158,8 +183,6 @@ function getCurrentVideoId() {
         result.id = bvMatch[1];
         logSuccess('BV ID', result.id, '路径');
         return result;
-    } else {
-        logDebug(`BV ID提取：未匹配 - 路径 "${pathname}" 不包含标准视频BV格式`);
     }
 
     // 4. URL参数中的各种ID处理
@@ -171,8 +194,6 @@ function getCurrentVideoId() {
         result.id = avId;
         logSuccess('AV ID', avId, 'URL参数');
         return result;
-    } else {
-        logDebug(`AV ID提取：URL参数中没有aid参数`);
     }
 
     // SS ID (番剧季ID)
@@ -183,8 +204,6 @@ function getCurrentVideoId() {
         result.id = ssId;
         logSuccess('SS ID', ssId, 'URL参数');
         return result;
-    } else {
-        logDebug(`SS ID提取：URL参数中没有ss_id参数`);
     }
 
     // EP ID (番剧集ID)
@@ -195,8 +214,6 @@ function getCurrentVideoId() {
         result.id = epId;
         logSuccess('EP ID', epId, 'URL参数');
         return result;
-    } else {
-        logDebug(`EP ID参数提取：URL参数中没有ep_id参数`);
     }
 
     // 5. 如果所有方法都无法获取ID，返回空字符串
