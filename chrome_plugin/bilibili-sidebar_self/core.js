@@ -43,65 +43,46 @@ async function init() {
     const currentVideoId = adskipUtils.getCurrentVideoId().id;
     adskipUtils.logDebug(`初始化 - 当前视频ID: ${currentVideoId}`);
 
-    // 解析URL中的广告跳过参数
-    const urlParams = adskipUtils.parseAdSkipParam();
-
-    // 使用storage模块的验证方法加载并验证时间戳
-    const result = await adskipStorage.loadAndValidateTimestamps(
-        currentVideoId,
-        urlParams
-    );
-
-    // 根据结果更新全局变量并设置监控
-    if (result.fromUrl) {
-        // 使用URL参数（已验证非污染）
-        urlAdTimestamps = [...result.timestamps];
-        currentAdTimestamps = [...result.timestamps];
-        adskipUtils.logDebug('使用URL中的广告时间段初始化');
-    } else if (result.timestamps.length > 0) {
-        // 使用保存的时间戳
-        urlAdTimestamps = []; // URL参数可能被污染，清空
-        currentAdTimestamps = [...result.timestamps];
-        adskipUtils.logDebug('使用保存的广告时间段初始化');
-
-        // 如果检测到污染，输出额外日志
-        if (result.isPolluted) {
-            adskipUtils.logDebug(`URL参数被视频${result.pollutionSource}的数据污染，已清除`);
-        }
-    } else {
-        // 没有可用的时间戳
-        urlAdTimestamps = [];
-        currentAdTimestamps = [];
-        adskipUtils.logDebug('没有找到广告时间段');
-    }
-
-    // 根据时间戳状态设置监控
-    if (currentAdTimestamps.length > 0) {
-        adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
-    }
-
-    // 创建UI界面
+    // 创建UI界面 - 无论任何情况都需要
     adskipUI.createLinkGenerator();
 
-    // 设置URL变化监控
+    // 设置URL变化监控 - 无论任何情况都需要
     adskipVideoMonitor.setupUrlChangeMonitor();
 
-    // 设置广告标记监控
+    // 设置广告标记监控 - 无论任何情况都需要
     adskipVideoMonitor.setupAdMarkerMonitor();
 
-    // 初始化广告检测相关功能
+    // 初始化测试按钮 - 开发阶段使用
     if (typeof adskipAdDetection !== 'undefined') {
-        // 创建测试按钮（仅开发阶段使用）
         adskipAdDetection.createTestButton();
-
-        // 创建测试状态切换按钮（仅在开发阶段使用）
         adskipAdDetection.createTestStatusButton();
+        adskipAdDetection.validateStorageModule();
+    }
 
-        // 使用集中函数更新按钮状态
-        adskipAdDetection.updateButtonStatusBasedOnSubtitle(currentAdTimestamps, "初始化")
-            .catch(error => {
-                adskipUtils.logDebug('[AdSkip广告检测] 初始化状态更新失败:', error);
-            });
+    // 解析URL参数
+    const urlParams = adskipUtils.parseAdSkipParam();
+
+    // 使用集中处理函数处理视频状态
+    if (typeof adskipAdDetection !== 'undefined' && currentVideoId) {
+        const statusResult = await adskipAdDetection.processVideoAdStatus(currentVideoId, urlParams, true);
+
+        // 更新全局状态
+        urlAdTimestamps = statusResult.urlAdTimestamps;
+        currentAdTimestamps = statusResult.currentAdTimestamps;
+
+        // 根据时间戳状态设置监控 - 仅当有广告时间戳时
+        if (currentAdTimestamps.length > 0) {
+            adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
+        }
+
+        // 处理字幕和广告检测 - 仅当不跳过数据处理时
+        if (!statusResult.skipDataProcessing && statusResult.source === 'none') {
+            // 还没有状态数据，通过字幕检测确定状态
+            adskipAdDetection.updateButtonStatusBasedOnSubtitle([], "初始化")
+                .catch(error => {
+                    adskipUtils.logDebug('[AdSkip广告检测] 初始化状态更新失败:', error);
+                });
+        }
     }
 
     adskipUtils.logDebug('插件初始化完成');

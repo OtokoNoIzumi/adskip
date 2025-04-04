@@ -164,6 +164,7 @@ function showAdminPanel() {
             <div class="adskip-tabs">
                 <button class="adskip-tab active" data-tab="general">常规</button>
                 <button class="adskip-tab" data-tab="video-data">视频数据</button>
+                <button class="adskip-tab" data-tab="video-whitelist">无广告视频</button>
                 <button class="adskip-tab" data-tab="api-info">API信息</button>
             </div>
 
@@ -190,6 +191,19 @@ function showAdminPanel() {
                 <div class="adskip-video-list-section">
                     <h4>已保存的视频广告数据 <span id="video-data-count">(加载中...)</span></h4>
                     <div id="adskip-video-list" class="scrollable">
+                        <div class="adskip-loading">加载中...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="adskip-tab-content" id="video-whitelist-tab">
+                <div class="adskip-video-whitelist-section">
+                    <h4>无广告视频白名单 <span id="video-whitelist-count">(加载中...)</span></h4>
+                    <div class="adskip-whitelist-actions">
+                        <button id="refresh-video-whitelist" class="adskip-info-btn">刷新列表</button>
+                        <button id="add-current-to-whitelist" class="adskip-success-btn">添加当前视频</button>
+                    </div>
+                    <div id="adskip-video-whitelist" class="scrollable">
                         <div class="adskip-loading">加载中...</div>
                     </div>
                 </div>
@@ -377,6 +391,9 @@ function showAdminPanel() {
     if (document.querySelector('.adskip-tab.active').dataset.tab === 'video-data') {
         loadVideoData();
     }
+
+    // 设置视频白名单选项卡
+    setupVideoWhitelistTab();
 }
 
 /**
@@ -863,6 +880,154 @@ async function loadSubtitleInfo() {
                 <button class="retry-button" onclick="adskipAdmin.loadSubtitleInfo()">重试</button>
             </div>`;
     }
+}
+
+/**
+ * 设置白名单管理功能
+ */
+function setupVideoWhitelistTab() {
+    const videoWhitelistContainer = document.getElementById('adskip-video-whitelist');
+    const countDisplay = document.getElementById('video-whitelist-count');
+
+    if (!videoWhitelistContainer) {
+        adskipUtils.logDebug('无法找到视频白名单容器');
+        return;
+    }
+
+    // 刷新白名单列表按钮
+    const refreshButton = document.getElementById('refresh-video-whitelist');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => {
+            loadVideoWhitelistToUI(videoWhitelistContainer, countDisplay);
+        });
+    }
+
+    // 添加当前视频到白名单按钮
+    const addCurrentButton = document.getElementById('add-current-to-whitelist');
+    if (addCurrentButton) {
+        addCurrentButton.addEventListener('click', async () => {
+            const videoId = adskipUtils.getCurrentVideoId().id;
+            if (!videoId) {
+                adskipUtils.logDebug('[AdSkip管理面板] 未找到当前视频ID，无法添加到白名单');
+                return;
+            }
+
+            const isAlreadyInWhitelist = await adskipStorage.checkVideoInNoAdsWhitelist(videoId);
+            if (isAlreadyInWhitelist) {
+                adskipUtils.logDebug(`[AdSkip管理面板] 视频 ${videoId} 已经在白名单中`);
+                return;
+            }
+
+            // 添加到白名单 - 这是与外部存储API的交互，可能失败
+            await adskipStorage.addVideoToNoAdsWhitelist(videoId)
+                .catch(error => {
+                    adskipUtils.logDebug(`[AdSkip管理面板] 添加视频到白名单失败: ${error.message}`);
+                    return;
+                });
+
+            adskipUtils.logDebug(`[AdSkip管理面板] 视频 ${videoId} 已添加到无广告白名单`);
+
+            // 刷新列表
+            loadVideoWhitelistToUI(videoWhitelistContainer, countDisplay);
+
+            // 更新按钮状态为NO_ADS
+            if (typeof adskipAdDetection !== 'undefined') {
+                adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.NO_ADS);
+            }
+        });
+    }
+
+    // 初始加载白名单
+    loadVideoWhitelistToUI(videoWhitelistContainer, countDisplay);
+}
+
+/**
+ * 加载视频白名单数据到UI
+ * @param {HTMLElement} container 白名单容器
+ * @param {HTMLElement} countDisplay 计数显示元素
+ */
+async function loadVideoWhitelistToUI(container, countDisplay) {
+    // 显示加载中
+    container.innerHTML = '<div class="adskip-loading">加载中...</div>';
+
+    // 加载白名单数据 - 存储操作可能失败
+    const whitelist = await adskipStorage.loadVideoWhitelist()
+        .catch(error => {
+            adskipUtils.logDebug(`加载视频白名单失败: ${error.message}`);
+            container.innerHTML = '<div class="adskip-error">加载白名单失败</div>';
+            if (countDisplay) {
+                countDisplay.textContent = '(加载失败)';
+            }
+            return [];
+        });
+
+    const noAdsVideos = whitelist.filter(item =>
+        (typeof item === 'object' && item.noAds === true)
+    );
+
+    adskipUtils.logDebug(`已加载${noAdsVideos.length}个无广告视频白名单项`);
+
+    // 更新计数
+    if (countDisplay) {
+        countDisplay.textContent = `(${noAdsVideos.length}个视频)`;
+    }
+
+    // 清空容器
+    container.innerHTML = '';
+
+    // 如果白名单为空，显示提示
+    if (noAdsVideos.length === 0) {
+        container.innerHTML = '<div class="adskip-empty-list">白名单为空</div>';
+        return;
+    }
+
+    // 创建白名单项列表
+    const whitelistList = document.createElement('ul');
+    whitelistList.className = 'adskip-video-whitelist-list';
+
+    // 添加每个无广告视频到列表
+    noAdsVideos.forEach(item => {
+        const videoId = typeof item === 'string' ? item : item.bvid;
+        const addedAt = item.addedAt ? new Date(item.addedAt).toLocaleString() : '未知时间';
+
+        const listItem = document.createElement('li');
+        listItem.className = 'adskip-video-whitelist-item';
+
+        listItem.innerHTML = `
+            <div class="adskip-video-whitelist-info">
+                <a href="https://www.bilibili.com/video/${videoId}" target="_blank" class="adskip-video-id">${videoId}</a>
+                <span class="adskip-video-added-time">添加时间: ${addedAt}</span>
+            </div>
+            <button class="adskip-remove-video-btn" data-video-id="${videoId}">移除</button>
+        `;
+
+        // 添加移除按钮事件
+        const removeButton = listItem.querySelector('.adskip-remove-video-btn');
+        if (removeButton) {
+            removeButton.addEventListener('click', async () => {
+                // 外部存储API调用可能失败
+                await adskipStorage.removeVideoFromWhitelist(videoId)
+                    .catch(error => {
+                        adskipUtils.logDebug(`[AdSkip管理面板] 移除视频 ${videoId} 从白名单失败: ${error.message}`);
+                        return;
+                    });
+
+                listItem.remove();
+
+                // 更新计数
+                const newCount = document.querySelectorAll('.adskip-video-whitelist-item').length;
+                if (countDisplay) {
+                    countDisplay.textContent = `(${newCount}个视频)`;
+                }
+
+                adskipUtils.logDebug(`[AdSkip管理面板] 视频 ${videoId} 已从白名单中移除`);
+            });
+        }
+
+        whitelistList.appendChild(listItem);
+    });
+
+    container.appendChild(whitelistList);
 }
 
 // 导出模块函数

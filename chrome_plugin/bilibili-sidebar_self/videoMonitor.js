@@ -568,65 +568,54 @@ function checkForVideoChange() {
 async function reinitialize() {
     adskipUtils.logDebug(`重新初始化，当前视频ID: ${currentVideoId}`);
 
-    // 清除字幕相关缓存，确保获取新视频的字幕信息
-    adskipSubtitleService.clearCache()
+    // 清空当前广告时间戳
+    currentAdTimestamps = [];
 
-    // 清除UP主信息缓存
-    adskipStorage.clearUploaderCache();
-
-    // 刷新播放器引用
-    adskipUtils.logDebug('强制刷新播放器引用');
-    const videoPlayer = adskipUtils.findVideoPlayer();
-    adskipUtils.logDebug(videoPlayer ? '成功找到播放器' : '未找到播放器');
-
-    // 重新解析URL中的广告跳过参数
-    const currentUrlAdTimestamps = adskipUtils.parseAdSkipParam();
-
-    // 使用storage模块的验证方法加载并验证时间戳
-    const result = await adskipStorage.loadAndValidateTimestamps(
-        currentVideoId,
-        currentUrlAdTimestamps
-    );
-
-    // 更新全局变量
-    if (result.fromUrl) {
-        // 使用URL参数（已验证非污染）
-        urlAdTimestamps = [...result.timestamps];
-        currentAdTimestamps = [...result.timestamps];
-        adskipUtils.logDebug('使用URL中的广告时间段初始化或更新');
-    } else if (result.timestamps.length > 0) {
-        // 使用保存的时间戳
-        urlAdTimestamps = []; // 清空URL时间戳
-        currentAdTimestamps = [...result.timestamps];
-        adskipUtils.logDebug('使用保存的广告时间段');
-
-        // 如果检测到污染，输出额外日志
-        if (result.isPolluted) {
-            adskipUtils.logDebug(`URL参数被视频${result.pollutionSource}的数据污染，已清除`);
-        }
-    } else {
-        // 没有可用的时间戳
-        urlAdTimestamps = [];
-        currentAdTimestamps = [];
-        adskipUtils.logDebug('没有找到广告时间段，清除监控');
-    }
-
-    // 根据时间戳状态设置或清除监控
-    if (currentAdTimestamps.length > 0) {
-        setupAdSkipMonitor(currentAdTimestamps);
-    } else if (window.adSkipCheckInterval) {
+    // 重置计时器
+    if (window.adSkipCheckInterval) {
         clearInterval(window.adSkipCheckInterval);
         window.adSkipCheckInterval = null;
     }
 
-    // 更新面板中的信息（如果面板已打开）
+    // 清除UP主信息缓存 - 无论任何情况都需要
+    adskipStorage.clearUploaderCache();
+
+    // 刷新播放器引用 - 无论任何情况都需要
+    adskipUtils.logDebug('强制刷新播放器引用');
+    const videoPlayer = adskipUtils.findVideoPlayer();
+    adskipUtils.logDebug(videoPlayer ? '成功找到播放器' : '未找到播放器');
+
+    // 更新面板中的信息（如果面板已打开）- 无论任何情况都需要
     updatePanelInfo();
 
-    // 使用集中函数更新按钮状态
-    adskipAdDetection.updateButtonStatusBasedOnSubtitle(currentAdTimestamps, "视频切换")
-        .catch(error => {
-            adskipUtils.logDebug('[AdSkip广告检测] 视频切换后状态更新失败:', error);
-        });
+    // 重新解析URL中的广告跳过参数
+    const currentUrlAdTimestamps = adskipUtils.parseAdSkipParam();
+
+    // 使用集中处理函数处理视频状态
+    if (typeof adskipAdDetection !== 'undefined' && currentVideoId) {
+        const statusResult = await adskipAdDetection.processVideoAdStatus(currentVideoId, currentUrlAdTimestamps, false);
+
+        // 更新全局状态
+        urlAdTimestamps = statusResult.urlAdTimestamps;
+        currentAdTimestamps = statusResult.currentAdTimestamps;
+
+        // 根据时间戳状态设置监控 - 仅当有广告时间戳时
+        if (currentAdTimestamps.length > 0) {
+            setupAdSkipMonitor(currentAdTimestamps);
+        }
+
+        // 处理字幕和广告检测 - 仅当不跳过数据处理时
+        if (!statusResult.skipDataProcessing && statusResult.source === 'none') {
+            // 清除字幕相关缓存，确保获取新视频的字幕信息
+            adskipSubtitleService.clearCache();
+
+            // 还没有状态数据，通过字幕检测确定状态
+            adskipAdDetection.updateButtonStatusBasedOnSubtitle([], "视频切换")
+                .catch(error => {
+                    adskipUtils.logDebug('[AdSkip广告检测] 视频切换后状态更新失败:', error);
+                });
+        }
+    }
 }
 
 /**

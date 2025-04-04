@@ -28,7 +28,7 @@ const STORAGE_KEYS = {
     ],
     // 所有保留的键（不会被数据清除操作删除的键）
     RESERVED_KEYS: function() {
-        return [...this.CONFIG_KEYS, ...this.WHITELIST_KEYS];
+        return [...this.CONFIG_KEYS, ...this.WHITELIST_KEYS, this.VIDEO_WHITELIST];
     }
 };
 
@@ -1136,6 +1136,22 @@ async function checkVideoInWhitelist(videoId) {
 }
 
 /**
+ * 检查视频是否在无广告白名单中
+ * 用于判断视频是否已被标记为无广告内容
+ * @param {string} videoId 视频ID
+ * @returns {Promise<boolean>} 视频是否在无广告白名单中
+ */
+async function checkVideoInNoAdsWhitelist(videoId) {
+    if (!videoId) return false;
+
+    const whitelist = await loadVideoWhitelist();
+    return whitelist.some(item =>
+        ((typeof item === 'string' && item === videoId) || (item.bvid === videoId)) &&
+        (item.noAds === true)
+    );
+}
+
+/**
  * 添加视频ID到白名单
  * @param {string} videoId 视频ID
  * @returns {Promise<Array>} 更新后的白名单
@@ -1160,6 +1176,127 @@ async function addVideoToWhitelist(videoId) {
     }
 
     return whitelist;
+}
+
+/**
+ * 将视频添加到无广告白名单
+ * 用于服务器识别后确认该视频没有广告内容
+ * @param {string} videoId 视频ID
+ * @returns {Promise<Array>} 更新后的白名单
+ */
+async function addVideoToNoAdsWhitelist(videoId) {
+    if (!videoId) return Promise.reject(new Error('视频ID不能为空'));
+
+    const whitelist = await loadVideoWhitelist();
+
+    // 查找视频在白名单中的位置
+    const existingIndex = whitelist.findIndex(item =>
+        (typeof item === 'string' && item === videoId) ||
+        (item.bvid === videoId)
+    );
+
+    if (existingIndex >= 0) {
+        // 更新已存在的条目
+        whitelist[existingIndex] = {
+            ...(typeof whitelist[existingIndex] === 'string'
+                ? { bvid: whitelist[existingIndex] }
+                : whitelist[existingIndex]),
+            bvid: videoId,
+            noAds: true,
+            updatedAt: Date.now()
+        };
+    } else {
+        // 添加新条目
+        whitelist.push({
+            bvid: videoId,
+            noAds: true,
+            addedAt: Date.now(),
+            updatedAt: Date.now()
+        });
+    }
+
+    adskipUtils.logDebug(`[AdSkip存储] 添加视频 ${videoId} 到无广告白名单`);
+    return saveVideoWhitelist(whitelist);
+}
+
+/**
+ * 保存视频状态
+ * 存储视频的处理状态，用于后续跟踪和优化
+ * @param {string} videoId 视频ID
+ * @param {number} status 视频状态，使用VIDEO_STATUS枚举值
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveVideoStatus(videoId, status) {
+    if (!videoId) {
+        adskipUtils.logDebug('[AdSkip存储] 视频ID为空，无法保存状态');
+        return false;
+    }
+
+    try {
+        // 使用视频ID作为键，避免与广告时间戳存储冲突
+        const key = `${STORAGE_KEYS.VIDEO_PREFIX}status_${videoId}`;
+
+        const data = {
+            status: status,
+            updatedAt: Date.now()
+        };
+
+        return new Promise(resolve => {
+            chrome.storage.local.set({ [key]: JSON.stringify(data) }, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug(`[AdSkip存储] 成功保存视频 ${videoId} 的状态: ${status}`);
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 保存视频状态失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 保存视频状态时发生异常: ${e.message}`);
+        console.error('[AdSkip存储] 保存视频状态时发生异常:', e);
+        return false;
+    }
+}
+
+/**
+ * 获取视频状态
+ * 获取之前存储的视频处理状态
+ * @param {string} videoId 视频ID
+ * @returns {Promise<number|null>} 视频状态或null（如果未找到）
+ */
+async function getVideoStatus(videoId) {
+    if (!videoId) {
+        adskipUtils.logDebug('[AdSkip存储] 视频ID为空，无法获取状态');
+        return null;
+    }
+
+    try {
+        const key = `${STORAGE_KEYS.VIDEO_PREFIX}status_${videoId}`;
+
+        return new Promise(resolve => {
+            chrome.storage.local.get(key, result => {
+                if (chrome.runtime.lastError || !result[key]) {
+                    adskipUtils.logDebug(`[AdSkip存储] 未找到视频 ${videoId} 的状态记录`);
+                    resolve(null);
+                    return;
+                }
+
+                try {
+                    const data = JSON.parse(result[key]);
+                    adskipUtils.logDebug(`[AdSkip存储] 成功获取视频 ${videoId} 的状态: ${data.status}`);
+                    resolve(data.status);
+                } catch (e) {
+                    adskipUtils.logDebug(`[AdSkip存储] 解析视频状态时发生异常: ${e.message}`);
+                    resolve(null);
+                }
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 获取视频状态时发生异常: ${e.message}`);
+        console.error('[AdSkip存储] 获取视频状态时发生异常:', e);
+        return null;
+    }
 }
 
 /**
@@ -1253,6 +1390,12 @@ window.adskipStorage = {
     checkVideoInWhitelist,
     addVideoToWhitelist,
     removeVideoFromWhitelist,
+
+    // 新增的视频无广告白名单和状态管理
+    checkVideoInNoAdsWhitelist,
+    addVideoToNoAdsWhitelist,
+    saveVideoStatus,
+    getVideoStatus,
 
     // 新添加的函数
     clearUploaderCache
