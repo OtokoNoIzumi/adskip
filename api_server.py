@@ -10,13 +10,18 @@ import os
 
 app = FastAPI(title="广告识别API")
 
-# CORS设置 - 限制只允许插件域名
+# CORS设置 - 允许来自插件和B站的请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl"],  # 仅限指定插件ID
+    allow_origins=[
+        "chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl",  # 插件ID
+        "https://www.bilibili.com",                             # B站主域名
+        "https://bilibili.com"                                  # B站域名变体
+    ],
     allow_credentials=True,
-    allow_methods=["POST", "GET"],
+    allow_methods=["POST", "GET", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # 模拟数据库
@@ -84,20 +89,48 @@ def verify_signature(data):
 @app.post("/api/detect")
 async def detect_ads(request: Request):
     try:
+        # 记录请求头，便于调试
+        print("请求头信息:")
+        for header, value in request.headers.items():
+            print(f"  {header}: {value}")
+
+        # 1. 检查请求来源
+        origin = request.headers.get("Origin", "")
+        referer = request.headers.get("Referer", "")
+
+        # 验证请求来源于B站或插件
+        valid_origins = [
+            "https://www.bilibili.com",
+            "https://bilibili.com",
+            "chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl"
+        ]
+
+        is_valid_origin = False
+        # 检查Origin
+        if any(origin.startswith(valid) for valid in valid_origins):
+            is_valid_origin = True
+        # 检查Referer（备用）
+        elif any(referer.startswith(valid) for valid in valid_origins if "chrome-extension" not in valid):
+            is_valid_origin = True
+
+        if not is_valid_origin:
+            print(f"拒绝来自未授权来源的请求: Origin={origin}, Referer={referer}")
+            return {"success": False, "message": "未授权的请求来源"}
+
         data = await request.json()
 
-        # 1. 验证签名
+        # 2. 验证签名
         if not verify_signature(data):
             print("签名验证失败")
             return {"success": False, "message": "无效的请求签名"}
 
-        # 2. 获取客户端信息
+        # 3. 获取客户端信息
         client_ip = request.client.host
         user_id = data.get("user", {}).get("uid", "anonymous")
         video_id = data.get('videoId')
         subtitles = data.get('subtitles', [])
 
-        # 3. 频率限制检查
+        # 4. 频率限制检查
         # 全局API限制: 每分钟50个请求
         if not limiter.check_limit("global", 60, 60):
             return {"success": False, "message": "服务繁忙，请稍后再试"}
@@ -110,7 +143,7 @@ async def detect_ads(request: Request):
         if not limiter.check_limit(f"user:{user_id}", 6, 60):
             return {"success": False, "message": "用户请求过于频繁，请稍后再试"}
 
-        # 4. 业务处理逻辑
+        # 5. 业务处理逻辑
         print(f"收到检测请求: {video_id}")
         print(f"字幕数量: {len(subtitles)}")
         print(f"请求来源: {data.get('clientVersion', '未知')}, 自动检测: {data.get('autoDetect', False)}")
@@ -182,6 +215,11 @@ async def get_result(video_id: str, request: Request):
 @app.get("/")
 async def root():
     return {"message": "广告检测API服务正常运行中"}
+
+@app.options("/api/detect")
+async def options_detect():
+    """处理预检请求"""
+    return {}
 
 if __name__ == "__main__":
     print("正在启动广告检测API服务...")
