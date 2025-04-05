@@ -557,7 +557,10 @@ function signRequest(data) {
 
     // 计算简单签名 - 使用BASE64编码确保跨平台一致性
     const SECRET_KEY = "adskip_plugin_2024_secure_key"; // 与服务器匹配
-    const signature = btoa(dataString + SECRET_KEY);
+
+    // 解决中文字符问题：先转为UTF-8编码，再进行Base64编码
+    const stringToEncode = dataString + SECRET_KEY;
+    const signature = btoa(unescape(encodeURIComponent(stringToEncode)));
 
     // 添加签名到数据
     data.signature = signature;
@@ -622,7 +625,7 @@ async function sendDetectionRequest(subtitleData) {
         });
 
         // 发送请求到服务器API - 使用阿里云服务器地址
-        const apiUrl = 'http://8.138.184.239:3000/api/detect';
+        const apiUrl = 'https://8.138.184.239:3000/api/detect';
 
         const response = await fetch(apiUrl, {
             method: 'POST',

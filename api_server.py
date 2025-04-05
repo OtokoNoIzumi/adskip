@@ -65,7 +65,14 @@ def verify_signature(data):
     data_string = json.dumps(data, sort_keys=True)
 
     # 计算签名 - 与前端完全一致的方法
-    calculated_signature = base64.b64encode((data_string + SECRET_KEY).encode()).decode()
+    try:
+        # 解决中文字符问题：使用与前端相同的编码方式
+        string_to_encode = data_string + SECRET_KEY
+        calculated_signature = base64.b64encode(string_to_encode.encode('utf-8')).decode()
+    except Exception as e:
+        print(f"签名计算错误: {str(e)}")
+        data['signature'] = original_signature  # 恢复签名字段
+        return False
 
     # 恢复签名字段
     data['signature'] = original_signature
@@ -177,5 +184,52 @@ async def root():
 
 if __name__ == "__main__":
     print("正在启动广告检测API服务...")
-    print("访问 http://localhost:3000/ 查看服务状态")
-    uvicorn.run("api_server:app", host="0.0.0.0", port=3000)
+    print("访问 https://localhost:3000/ 查看服务状态")
+
+    # 使用uvicorn的HTTPS参数
+    import ssl
+    # 创建SSL上下文
+    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    # 使用自签名证书 - 这里会在当前目录下自动生成自签名证书
+    from pathlib import Path
+
+    cert_file = Path("server.crt")
+    key_file = Path("server.key")
+
+    # 如果证书不存在，自动生成自签名证书
+    if not cert_file.exists() or not key_file.exists():
+        print("正在生成自签名SSL证书...")
+        from OpenSSL import crypto
+
+        # 创建一个密钥对
+        k = crypto.PKey()
+        k.generate_key(crypto.TYPE_RSA, 2048)
+
+        # 创建一个自签名证书
+        cert = crypto.X509()
+        cert.get_subject().CN = "localhost"
+        cert.set_serial_number(1000)
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(10*365*24*60*60)  # 10年有效期
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(k)
+        cert.sign(k, 'sha256')
+
+        # 写入文件
+        with open(cert_file, "wb") as f:
+            f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+        with open(key_file, "wb") as f:
+            f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+
+        print(f"证书已生成: {cert_file}, {key_file}")
+
+    ssl_context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+
+    # 启动带HTTPS的服务器
+    uvicorn.run(
+        "api_server:app",
+        host="0.0.0.0",
+        port=3000,
+        ssl_keyfile=str(key_file),
+        ssl_certfile=str(cert_file)
+    )
