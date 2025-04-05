@@ -625,8 +625,12 @@ async function sendDetectionRequest(subtitleData) {
         });
 
         // 发送请求到服务器API - 使用阿里云服务器地址
-        const apiUrl = 'https://8.138.184.239:3000/api/detect';
+        const apiUrl = 'http://8.138.184.239:3000/api/detect';
 
+        // 使用Chrome扩展API发送请求，避免证书问题
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 使用Chrome扩展API发送请求');
+
+        // 使用原生fetch，但改用HTTP协议
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
