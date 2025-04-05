@@ -57,6 +57,7 @@ async function init() {
         adskipAdDetection.createTestButton();
         adskipAdDetection.createTestStatusButton();
         adskipAdDetection.validateStorageModule();
+        adskipAdDetection.createApiTestButton();
     }
 
     // 解析URL参数

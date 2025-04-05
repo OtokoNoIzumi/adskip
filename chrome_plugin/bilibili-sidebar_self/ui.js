@@ -87,11 +87,11 @@ function createLinkGenerator() {
 
         // 获取当前视频UP主信息
         const { uploader: currentUploader, title: currentTitle } = await adskipStorage.getCurrentVideoUploader();
-
         // 检查UP主是否在白名单中及其状态
-        const whitelistItem = adskipStorage.loadUploaderWhitelist()
+        const whitelistItem = await adskipStorage.loadUploaderWhitelist()
             .then(list => list.find(item => item.name === currentUploader));
-
+        // adskipUtils.logDebug(`adskipStorage.loadUploaderWhitelist(): ${JSON.stringify(await adskipStorage.loadUploaderWhitelist())}`);
+        // adskipUtils.logDebug(`whitelistItem: ${JSON.stringify(whitelistItem)}`);
         const isInWhitelist = !!whitelistItem;
         const isWhitelistEnabled = whitelistItem && whitelistItem.enabled !== false;
 

@@ -543,6 +543,225 @@ async function processVideoAdStatus(videoId, urlTimestamps = [], isInitial = tru
     return result;
 }
 
+/**
+ * 发送检测请求到服务端
+ * @param {Object} subtitleData - 包含视频和字幕信息的数据对象
+ * @returns {Promise<Object>} 广告检测结果
+ */
+async function sendDetectionRequest(subtitleData) {
+    try {
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 开始发送检测请求...');
+
+        // 检查输入数据
+        if (!subtitleData || !subtitleData.bvid) {
+            throw new Error('无效的视频数据');
+        }
+
+        if (!subtitleData.hasSubtitle || !subtitleData.subtitle_contents || !subtitleData.subtitle_contents[0]) {
+            throw new Error('无字幕数据可供检测');
+        }
+
+        // 获取用户信息
+        let userInfo = null;
+        if (typeof adskipCredentialService !== 'undefined') {
+            userInfo = await adskipCredentialService.getBilibiliLoginStatus()
+                .catch(error => {
+                    adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 获取用户信息失败:', error);
+                    return null;
+                });
+        }
+
+        // 准备请求数据 - 保留原始subtitleData的完整数据结构
+        const requestData = {
+            videoId: subtitleData.bvid,
+            title: subtitleData.title || '',
+            uploader: subtitleData.owner?.name || '',
+            mid: subtitleData.mid || '',
+            duration: subtitleData.duration || 0,
+            subtitles: subtitleData.subtitle_contents[0] || [],
+            autoDetect: false, // 非付费用户
+            clientVersion: '1.0.0', // 客户端版本
+            videoData: subtitleData, // 保留完整原始数据
+            user: userInfo ? {
+                username: userInfo.username || '',
+                uid: userInfo.uid || '',
+                level: userInfo.level || 0
+            } : null
+        };
+
+        // 更新按钮状态为检测中
+        updateVideoStatus(VIDEO_STATUS.DETECTING);
+
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 发送数据到服务器:', {
+            videoId: requestData.videoId,
+            subtitlesCount: requestData.subtitles.length
+        });
+
+        // 发送请求到服务器API
+        const apiUrl = 'http://127.0.0.1:3000/api/detect';
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        // 检查响应状态
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
+        }
+
+        // 解析JSON响应
+        const result = await response.json();
+
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 收到服务器响应:', result);
+
+        // 验证响应数据
+        if (!result || typeof result.success !== 'boolean') {
+            throw new Error('服务器返回了无效的响应格式');
+        }
+
+        if (!result.success) {
+            throw new Error(result.message || '检测失败，未返回具体原因');
+        }
+
+        // 根据检测结果更新视频状态
+        const newStatus = result.hasAds ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
+        updateVideoStatus(newStatus, {
+            adTimestamps: result.adTimestamps || []
+        });
+
+        // 保存结果到本地存储
+        await adskipStorage.saveVideoStatus(requestData.videoId, newStatus);
+
+        // 如果没有广告，加入白名单
+        if (!result.hasAds) {
+            await adskipStorage.addVideoToNoAdsWhitelist(requestData.videoId);
+        }
+
+        return result;
+
+    } catch (error) {
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 检测请求失败:', error);
+
+        // 发生错误时，恢复到未检测状态
+        updateVideoStatus(VIDEO_STATUS.UNDETECTED);
+
+        // 返回错误结果
+        return {
+            success: false,
+            message: error.message || '未知错误',
+            error: error
+        };
+    }
+}
+
+/**
+ * 创建API测试按钮 - 仅用于开发测试
+ * 点击按钮测试与服务器的通信
+ */
+function createApiTestButton() {
+    // 检查是否已存在
+    if (document.getElementById('adskip-api-test-button')) {
+        return;
+    }
+
+    // 创建测试按钮
+    const apiTestButton = document.createElement('div');
+    apiTestButton.id = 'adskip-api-test-button';
+    apiTestButton.innerHTML = '测试API通信';
+
+    // 样式
+    apiTestButton.style.cssText = `
+        position: fixed;
+        top: 250px;
+        right: 20px;
+        background-color: rgba(38, 50, 56, 0.7);
+        color: #f5f5f5;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        z-index: 9999;
+        font-size: 13px;
+        font-weight: 400;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+        backdrop-filter: blur(4px);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    `;
+
+    // 悬停效果
+    apiTestButton.addEventListener('mouseenter', () => {
+        apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.85)';
+    });
+
+    apiTestButton.addEventListener('mouseleave', () => {
+        apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
+    });
+
+    // 点击事件
+    apiTestButton.addEventListener('click', async function() {
+        apiTestButton.innerHTML = '请求中...';
+        apiTestButton.style.backgroundColor = 'rgba(121, 134, 203, 0.85)';
+
+        try {
+            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试按钮被点击，准备获取数据');
+
+            // 获取视频字幕数据
+            const subtitleData = await getVideoSubtitleData();
+            console.log('获取的字幕数据:', subtitleData);
+
+            if (!subtitleData.hasSubtitle) {
+                apiTestButton.innerHTML = '无字幕数据';
+                apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
+                adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试失败：无字幕数据');
+                setTimeout(() => resetButton(), 3000);
+                return;
+            }
+
+            // 发送检测请求
+            const result = await sendDetectionRequest(subtitleData);
+            console.log('API响应结果:', result);
+            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试完成，响应结果:', result.success);
+
+            // 显示结果
+            if (result.success) {
+                apiTestButton.innerHTML = result.hasAds ? '检测到广告' : '无广告';
+                apiTestButton.style.backgroundColor = result.hasAds ?
+                    'rgba(244, 67, 54, 0.85)' : 'rgba(76, 175, 80, 0.85)';
+            } else {
+                apiTestButton.innerHTML = '请求失败';
+                apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
+            }
+
+            // 5秒后恢复
+            setTimeout(() => resetButton(), 5000);
+        } catch (error) {
+            console.error('API通信测试失败:', error);
+            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试出错:', error);
+            apiTestButton.innerHTML = '测试失败';
+            apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
+
+            // 3秒后恢复
+            setTimeout(() => resetButton(), 3000);
+        }
+
+        // 重置按钮状态的辅助函数
+        function resetButton() {
+            apiTestButton.innerHTML = '测试API通信';
+            apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
+        }
+    });
+
+    // 添加到页面
+    document.body.appendChild(apiTestButton);
+
+    adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 创建API测试按钮');
+}
+
 // 导出函数到全局对象
 window.adskipAdDetection = {
     getVideoSubtitleData,
@@ -554,7 +773,9 @@ window.adskipAdDetection = {
     cycleButtonStatus,
     updateButtonStatusBasedOnSubtitle,
     validateStorageModule,
-    processVideoAdStatus
+    processVideoAdStatus,
+    sendDetectionRequest,
+    createApiTestButton
 };
 
 // 初始化测试按钮的代码已移除
