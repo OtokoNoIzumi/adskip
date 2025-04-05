@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import uvicorn
@@ -9,20 +9,13 @@ from collections import defaultdict
 
 app = FastAPI(title="广告识别API")
 
-# CORS设置 - 允许插件ID和B站域名
+# CORS设置 - 限制只允许插件域名
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl",  # 插件ID
-        "https://www.bilibili.com",                            # B站主域名
-        "https://bilibili.com",                                # B站域名变体
-        "https://www.bilibili.tv",                             # 其他可能的B站域名
-        "*",                                                   # 允许所有来源（开发测试用）
-    ],
+    allow_origins=["chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl"],  # 仅限指定插件ID
     allow_credentials=True,
-    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_methods=["POST", "GET"],
     allow_headers=["*"],
-    max_age=86400,  # 预检请求缓存1天
 )
 
 # 模拟数据库
@@ -89,62 +82,38 @@ def verify_signature(data):
 
 @app.post("/api/detect")
 async def detect_ads(request: Request):
-    print("\n===================== 新的广告检测请求 =====================")
-    print(f"客户端IP: {request.client.host}")
-    print(f"请求头: {dict(request.headers)}")
-
     try:
-        # 获取和记录请求体
-        request_body = await request.body()
-        if len(request_body) > 5000:
-            print(f"请求体 (长度 {len(request_body)}): {request_body[:2000]}...{request_body[-2000:]}")
-        else:
-            print(f"请求体: {request_body}")
+        data = await request.json()
 
-        # 解析JSON
-        try:
-            data = await request.json()
-        except Exception as e:
-            print(f"JSON解析错误: {str(e)}")
-            return {"success": False, "message": f"无效的JSON格式: {str(e)}"}
-
-        # 获取基本信息
-        user_id = data.get("user", {}).get("uid", "anonymous")
-        video_id = data.get('videoId')
-        print(f"视频ID: {video_id}, 用户: {user_id}")
-
-        # 验证签名 - 在测试阶段暂时可选
-        signature_valid = verify_signature(data)
-        print(f"签名验证结果: {'通过' if signature_valid else '失败'}")
-
-        # 是否强制要求签名
-        require_signature = False  # 开发阶段设置为False
-        if require_signature and not signature_valid:
-            print("签名验证失败，拒绝请求")
+        # 1. 验证签名
+        if not verify_signature(data):
+            print("签名验证失败")
             return {"success": False, "message": "无效的请求签名"}
 
-        # 获取客户端信息
+        # 2. 获取客户端信息
         client_ip = request.client.host
+        user_id = data.get("user", {}).get("uid", "anonymous")
+        video_id = data.get('videoId')
         subtitles = data.get('subtitles', [])
-        print(f"字幕数量: {len(subtitles)}")
 
-        # 3. 频率限制检查 - 在测试阶段暂时关闭
-        apply_rate_limits = False  # 开发阶段设置为False
-        if apply_rate_limits:
-            # 全局API限制: 每分钟50个请求
-            if not limiter.check_limit("global", 60, 60):
-                return {"success": False, "message": "服务繁忙，请稍后再试"}
+        # 3. 频率限制检查
+        # 全局API限制: 每分钟50个请求
+        if not limiter.check_limit("global", 60, 60):
+            return {"success": False, "message": "服务繁忙，请稍后再试"}
 
-            # IP限制: 每IP每分钟10个请求
-            if not limiter.check_limit(f"ip:{client_ip}", 12, 60):
-                return {"success": False, "message": "请求过于频繁，请稍后再试"}
+        # IP限制: 每IP每分钟10个请求
+        if not limiter.check_limit(f"ip:{client_ip}", 12, 60):
+            return {"success": False, "message": "请求过于频繁，请稍后再试"}
 
-            # 用户限制: 每用户每分钟5个请求
-            if not limiter.check_limit(f"user:{user_id}", 6, 60):
-                return {"success": False, "message": "用户请求过于频繁，请稍后再试"}
+        # 用户限制: 每用户每分钟5个请求
+        if not limiter.check_limit(f"user:{user_id}", 6, 60):
+            return {"success": False, "message": "用户请求过于频繁，请稍后再试"}
 
         # 4. 业务处理逻辑
+        print(f"收到检测请求: {video_id}")
+        print(f"字幕数量: {len(subtitles)}")
         print(f"请求来源: {data.get('clientVersion', '未知')}, 自动检测: {data.get('autoDetect', False)}")
+        print(f"客户端IP: {client_ip}")
 
         if data.get('user'):
             print(f"用户信息: {data.get('user').get('username', '未知')}, UID: {data.get('user').get('uid', '未知')}")
@@ -180,22 +149,15 @@ async def detect_ads(request: Request):
         # 模拟处理延迟
         await asyncio.sleep(1)
 
-        result = {
+        return {
             'success': True,
             'hasAds': has_ads,
             'adTimestamps': ad_timestamps,
             'message': '检测到广告' if has_ads else '未检测到广告',
             'confidence': 0.95
         }
-
-        print(f"响应结果: {result}")
-        print("===================== 请求处理完成 =====================\n")
-        return result
     except Exception as e:
         print(f"处理请求出错: {str(e)}")
-        import traceback
-        print(f"错误堆栈: {traceback.format_exc()}")
-        print("===================== 请求处理异常 =====================\n")
         return {"success": False, "message": f"服务器处理错误: {str(e)}"}
 
 @app.get("/api/result/{video_id}")
@@ -220,67 +182,33 @@ async def get_result(video_id: str, request: Request):
 async def root():
     return {"message": "广告检测API服务正常运行中"}
 
-# 添加OPTIONS请求处理程序
-@app.options("/api/detect")
-async def options_api_detect():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-            "Access-Control-Max-Age": "86400",
-        }
-    )
-
 if __name__ == "__main__":
     print("正在启动广告检测API服务...")
-    print("访问 https://localhost:3000/ 查看服务状态")
+    print("访问 https://izumihostpab.life:3000/ 查看服务状态")
 
-    # 使用uvicorn的HTTPS参数
-    import ssl
-    # 创建SSL上下文
-    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    # 使用自签名证书 - 这里会在当前目录下自动生成自签名证书
-    from pathlib import Path
+    import sys
 
-    cert_file = Path("server.crt")
-    key_file = Path("server.key")
+    # 获取命令行参数
+    ssl_keyfile = None
+    ssl_certfile = None
 
-    # 如果证书不存在，自动生成自签名证书
-    if not cert_file.exists() or not key_file.exists():
-        print("正在生成自签名SSL证书...")
-        from OpenSSL import crypto
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--ssl-keyfile" and i + 1 < len(args):
+            ssl_keyfile = args[i + 1]
+            i += 2
+        elif args[i] == "--ssl-certfile" and i + 1 < len(args):
+            ssl_certfile = args[i + 1]
+            i += 2
+        else:
+            i += 1
 
-        # 创建一个密钥对
-        k = crypto.PKey()
-        k.generate_key(crypto.TYPE_RSA, 2048)
-
-        # 创建一个自签名证书
-        cert = crypto.X509()
-        cert.get_subject().CN = "localhost"
-        cert.set_serial_number(1000)
-        cert.gmtime_adj_notBefore(0)
-        cert.gmtime_adj_notAfter(10*365*24*60*60)  # 10年有效期
-        cert.set_issuer(cert.get_subject())
-        cert.set_pubkey(k)
-        cert.sign(k, 'sha256')
-
-        # 写入文件
-        with open(cert_file, "wb") as f:
-            f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
-        with open(key_file, "wb") as f:
-            f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
-
-        print(f"证书已生成: {cert_file}, {key_file}")
-
-    ssl_context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
-
-    # 启动带HTTPS的服务器
-    uvicorn.run(
-        "api_server:app",
-        host="0.0.0.0",
-        port=3000,
-        ssl_keyfile=str(key_file),
-        ssl_certfile=str(cert_file)
-    )
+    # 使用SSL启动服务器
+    if ssl_keyfile and ssl_certfile:
+        print(f"使用SSL证书: {ssl_certfile}")
+        uvicorn.run("api_server:app", host="0.0.0.0", port=3000,
+                    ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile)
+    else:
+        print("警告: 未提供SSL证书，使用HTTP模式启动")
+        uvicorn.run("api_server:app", host="0.0.0.0", port=3000)

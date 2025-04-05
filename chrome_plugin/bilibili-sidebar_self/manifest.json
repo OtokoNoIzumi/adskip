@@ -8,8 +8,7 @@
     "type": "module"
   },
   "host_permissions": [
-    "*://*.bilibili.com/*",
-    "https://8.138.184.239:3000/*"
+    "*://*.bilibili.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

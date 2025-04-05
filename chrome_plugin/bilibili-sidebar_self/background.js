@@ -107,18 +107,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 异步响应需要返回true
     return true;
   }
-  else if (message.action === 'detectAds') {
-    // 处理广告检测请求
-    handleAdDetection(message.data)
-      .then(result => sendResponse(result))
-      .catch(error => sendResponse({
-        success: false,
-        message: error.message || '检测请求失败'
-      }));
-
-    // 异步响应需要返回true
-    return true;
-  }
   else if (message.action === 'updateState') {
     // 更新插件状态
     if (message.state && typeof message.state === 'object') {
@@ -156,65 +144,4 @@ async function handleFetch(url, options = {}) {
   }
 
   return await response.json();
-}
-
-/**
- * 处理广告检测请求
- * @param {Object} data - 签名后的请求数据
- * @returns {Promise<Object>} - 检测结果
- */
-async function handleAdDetection(data) {
-  console.log('[AdSkip] 执行广告检测请求');
-
-  try {
-    // API服务器地址
-    const apiUrl = 'https://8.138.184.239:3000/api/detect';
-
-    // 输出请求数据
-    console.log('[AdSkip] 请求数据:', JSON.stringify(data).slice(0, 500) + '...');
-
-    // 发送请求
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Origin': 'chrome-extension://hnglljbeonpjacjdijbebkjlgeibhpfl',
-        'X-Client-Version': '1.1.0',
-        'Accept': 'application/json',
-      },
-      mode: 'cors',
-      cache: 'no-cache',
-      credentials: 'omit',
-      body: JSON.stringify(data)
-    });
-
-    // 检查响应状态
-    if (!response.ok) {
-      console.error('[AdSkip] 响应错误状态:', response.status, response.statusText);
-      const errorText = await response.text();
-      console.error('[AdSkip] 响应错误内容:', errorText);
-      throw new Error(`API响应错误 (${response.status}): ${errorText || response.statusText}`);
-    }
-
-    // 解析响应数据
-    const result = await response.json();
-
-    console.log('[AdSkip] 广告检测结果:', result);
-    return result;
-  } catch (error) {
-    console.error('[AdSkip] 广告检测请求失败:', error);
-    console.error('[AdSkip] 错误类型:', error.name);
-    console.error('[AdSkip] 错误消息:', error.message);
-    console.error('[AdSkip] 错误堆栈:', error.stack);
-
-    // 即使出错也返回一个有效的结果对象
-    return {
-      success: false,
-      message: `请求失败: ${error.message}`,
-      error: {
-        name: error.name,
-        message: error.message
-      }
-    };
-  }
 }

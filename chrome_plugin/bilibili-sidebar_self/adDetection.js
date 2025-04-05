@@ -624,26 +624,25 @@ async function sendDetectionRequest(subtitleData) {
             subtitlesCount: requestData.subtitles.length
         });
 
-        // 通过消息传递机制发送请求给background脚本处理
-        // 这样可以避免CORS问题，因为background脚本不受网页域的限制
-        const result = await new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage({
-                action: 'detectAds',
-                data: signedData
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(`通信错误: ${chrome.runtime.lastError.message}`));
-                    return;
-                }
+        // 发送请求到服务器API - 使用SSL加密域名
+        const apiUrl = 'https://izumihostpab.life:3000/api/detect';
 
-                if (!response) {
-                    reject(new Error('未收到响应'));
-                    return;
-                }
-
-                resolve(response);
-            });
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(signedData)
         });
+
+        // 检查响应状态
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
+        }
+
+        // 解析JSON响应
+        const result = await response.json();
 
         adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 收到服务器响应:', result);
 
