@@ -544,6 +544,27 @@ async function processVideoAdStatus(videoId, urlTimestamps = [], isInitial = tru
 }
 
 /**
+ * 生成请求签名
+ * @param {Object} data - 要签名的数据
+ * @returns {Object} - 添加了签名的数据
+ */
+function signRequest(data) {
+    // 添加时间戳
+    data.timestamp = Date.now();
+
+    // 准备要签名的字符串 - 确保排序一致性
+    const dataString = JSON.stringify(data, Object.keys(data).sort());
+
+    // 计算简单签名 - 使用BASE64编码确保跨平台一致性
+    const SECRET_KEY = "adskip_plugin_2024_secure_key"; // 与服务器匹配
+    const signature = btoa(dataString + SECRET_KEY);
+
+    // 添加签名到数据
+    data.signature = signature;
+    return data;
+}
+
+/**
  * 发送检测请求到服务端
  * @param {Object} subtitleData - 包含视频和字幕信息的数据对象
  * @returns {Promise<Object>} 广告检测结果
@@ -589,6 +610,9 @@ async function sendDetectionRequest(subtitleData) {
             } : null
         };
 
+        // 签名请求数据
+        const signedData = signRequest(requestData);
+
         // 更新按钮状态为检测中
         updateVideoStatus(VIDEO_STATUS.DETECTING);
 
@@ -597,15 +621,15 @@ async function sendDetectionRequest(subtitleData) {
             subtitlesCount: requestData.subtitles.length
         });
 
-        // 发送请求到服务器API
-        const apiUrl = 'http://127.0.0.1:3000/api/detect';
+        // 发送请求到服务器API - 使用阿里云服务器地址
+        const apiUrl = 'http://8.138.184.239:3000/api/detect';
 
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify(signedData)
         });
 
         // 检查响应状态
@@ -733,7 +757,7 @@ function createApiTestButton() {
                 apiTestButton.style.backgroundColor = result.hasAds ?
                     'rgba(244, 67, 54, 0.85)' : 'rgba(76, 175, 80, 0.85)';
             } else {
-                apiTestButton.innerHTML = '请求失败';
+                apiTestButton.innerHTML = '请求失败: ' + result.message;
                 apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
             }
 
@@ -775,7 +799,8 @@ window.adskipAdDetection = {
     validateStorageModule,
     processVideoAdStatus,
     sendDetectionRequest,
-    createApiTestButton
+    createApiTestButton,
+    signRequest
 };
 
 // 初始化测试按钮的代码已移除
