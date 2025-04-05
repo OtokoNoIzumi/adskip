@@ -624,29 +624,26 @@ async function sendDetectionRequest(subtitleData) {
             subtitlesCount: requestData.subtitles.length
         });
 
-        // 发送请求到服务器API - 使用阿里云服务器地址
-        const apiUrl = 'http://8.138.184.239:3000/api/detect';
+        // 通过消息传递机制发送请求给background脚本处理
+        // 这样可以避免CORS问题，因为background脚本不受网页域的限制
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                action: 'detectAds',
+                data: signedData
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(`通信错误: ${chrome.runtime.lastError.message}`));
+                    return;
+                }
 
-        // 使用Chrome扩展API发送请求，避免证书问题
-        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 使用Chrome扩展API发送请求');
+                if (!response) {
+                    reject(new Error('未收到响应'));
+                    return;
+                }
 
-        // 使用原生fetch，但改用HTTP协议
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(signedData)
+                resolve(response);
+            });
         });
-
-        // 检查响应状态
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
-        }
-
-        // 解析JSON响应
-        const result = await response.json();
 
         adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 收到服务器响应:', result);
 
