@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 from collections import defaultdict
+import os
 
 app = FastAPI(title="广告识别API")
 
@@ -184,31 +185,33 @@ async def root():
 
 if __name__ == "__main__":
     print("正在启动广告检测API服务...")
-    print("访问 https://izumihostpab.life:3000/ 查看服务状态")
 
-    import sys
+    # 直接检查SSL证书文件是否存在
+    ssl_keyfile = "izumihostpab.life.key"
+    ssl_certfile = "izumihostpab.life.pem"
 
-    # 获取命令行参数
-    ssl_keyfile = None
-    ssl_certfile = None
+    # 构建启动参数
+    uvicorn_kwargs = {
+        "host": "0.0.0.0",
+        "port": 3000
+    }
 
-    args = sys.argv[1:]
-    i = 0
-    while i < len(args):
-        if args[i] == "--ssl-keyfile" and i + 1 < len(args):
-            ssl_keyfile = args[i + 1]
-            i += 2
-        elif args[i] == "--ssl-certfile" and i + 1 < len(args):
-            ssl_certfile = args[i + 1]
-            i += 2
-        else:
-            i += 1
-
-    # 使用SSL启动服务器
-    if ssl_keyfile and ssl_certfile:
+    # 如果证书文件存在，则添加SSL配置
+    if os.path.exists(ssl_keyfile) and os.path.exists(ssl_certfile):
         print(f"使用SSL证书: {ssl_certfile}")
-        uvicorn.run("api_server:app", host="0.0.0.0", port=3000,
-                    ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile)
+        print(f"访问 https://izumihostpab.life:3000/ 查看服务状态")
+        uvicorn_kwargs.update({
+            "ssl_keyfile": ssl_keyfile,
+            "ssl_certfile": ssl_certfile
+        })
     else:
-        print("警告: 未提供SSL证书，使用HTTP模式启动")
-        uvicorn.run("api_server:app", host="0.0.0.0", port=3000)
+        print(f"警告: 未找到SSL证书文件（{ssl_keyfile}和{ssl_certfile}）")
+        print("使用HTTP模式启动")
+        print("访问 http://localhost:3000/ 查看服务状态")
+
+    # 打印当前工作目录以便调试
+    print(f"当前工作目录: {os.getcwd()}")
+    print(f"证书文件路径: {os.path.abspath(ssl_keyfile)}")
+
+    # 启动服务器
+    uvicorn.run("api_server:app", **uvicorn_kwargs)
