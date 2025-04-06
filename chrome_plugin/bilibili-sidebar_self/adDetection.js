@@ -552,18 +552,34 @@ function signRequest(data) {
     // 添加时间戳
     data.timestamp = Date.now();
 
-    // 准备要签名的字符串 - 确保排序一致性
-    const dataString = JSON.stringify(data, Object.keys(data).sort());
+    // 创建用于签名的简化数据对象（只包含关键字段）
+    const signatureData = {
+        timestamp: data.timestamp,
+        videoId: data.videoId,
+        // 如果要添加其他小型关键字段用于签名，放在这里
+        clientVersion: data.clientVersion
+    };
 
-    // 计算简单签名 - 使用BASE64编码确保跨平台一致性
+    // 准备要签名的字符串
+    // 使用与Python的json.dumps(obj, sort_keys=True)完全一致的格式
+    const sortedData = {};
+    Object.keys(signatureData).sort().forEach(key => {
+        sortedData[key] = signatureData[key];
+    });
+    const dataString = JSON.stringify(sortedData);
+
+    // 计算签名
     const SECRET_KEY = "adskip_plugin_2024_secure_key"; // 与服务器匹配
-
-    // 解决中文字符问题：先转为UTF-8编码，再进行Base64编码
     const stringToEncode = dataString + SECRET_KEY;
-    const signature = btoa(unescape(encodeURIComponent(stringToEncode)));
 
-    // 添加签名到数据
-    data.signature = signature;
+    // 使用与Python base64.b64encode()兼容的编码方式
+    const utf8Encoder = new TextEncoder();
+    const utf8Bytes = utf8Encoder.encode(stringToEncode);
+    const base64String = btoa(String.fromCharCode.apply(null, utf8Bytes));
+
+    // 添加签名到原始数据
+    data.signature = base64String;
+
     return data;
 }
 
@@ -595,7 +611,7 @@ async function sendDetectionRequest(subtitleData) {
                 });
         }
 
-        // 准备请求数据 - 保留原始subtitleData的完整数据结构
+        // 准备请求数据 - 包含所有必要的数据字段
         const requestData = {
             videoId: subtitleData.bvid,
             title: subtitleData.title || '',
@@ -605,7 +621,7 @@ async function sendDetectionRequest(subtitleData) {
             subtitles: subtitleData.subtitle_contents[0] || [],
             autoDetect: false, // 非付费用户
             clientVersion: '1.0.0', // 客户端版本
-            videoData: subtitleData, // 保留完整原始数据
+            videoData: subtitleData, // 保留完整原始数据，对服务器端处理很重要
             user: userInfo ? {
                 username: userInfo.username || '',
                 uid: userInfo.uid || '',
@@ -739,7 +755,6 @@ function createApiTestButton() {
 
             // 获取视频字幕数据
             const subtitleData = await getVideoSubtitleData();
-            console.log('获取的字幕数据:', subtitleData);
 
             if (!subtitleData.hasSubtitle) {
                 apiTestButton.innerHTML = '无字幕数据';
@@ -751,7 +766,6 @@ function createApiTestButton() {
 
             // 发送检测请求
             const result = await sendDetectionRequest(subtitleData);
-            console.log('API响应结果:', result);
             adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试完成，响应结果:', result.success);
 
             // 显示结果
