@@ -591,7 +591,7 @@ function signRequest(data) {
  */
 async function sendDetectionRequest(subtitleData) {
     try {
-        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 开始发送检测请求...');
+        adskipUtils.logDebug('[AdSkip广告检测] 开始发送检测请求...');
 
         // 检查输入数据
         if (!subtitleData || !subtitleData.bvid) {
@@ -607,7 +607,7 @@ async function sendDetectionRequest(subtitleData) {
         if (typeof adskipCredentialService !== 'undefined') {
             userInfo = await adskipCredentialService.getBilibiliLoginStatus()
                 .catch(error => {
-                    adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 获取用户信息失败:', error);
+                    adskipUtils.logDebug('[AdSkip广告检测] 获取用户信息失败:', error);
                     return null;
                 });
         }
@@ -656,7 +656,7 @@ async function sendDetectionRequest(subtitleData) {
         // 解析JSON响应
         const result = await response.json();
 
-        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 收到服务器响应:', result);
+        adskipUtils.logDebug('[AdSkip广告检测] 收到服务器响应:', result);
 
         // 验证响应数据
         if (!result || typeof result.success !== 'boolean') {
@@ -690,18 +690,18 @@ async function sendDetectionRequest(subtitleData) {
                     ...ts
                 }));
 
-                adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 检测到广告，调用核心应用函数处理', convertedTimestamps);
+                adskipUtils.logDebug('[AdSkip广告检测] 检测到广告，调用核心应用函数处理', convertedTimestamps);
                 // 调用 core.js 的函数来应用和保存
                 adskipCore.applyNewAdTimestamps(convertedTimestamps);
 
             } else {
-                 adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 核心应用函数 adskipCore.applyNewAdTimestamps 未找到');
+                 adskipUtils.logDebug('[AdSkip广告检测] 核心应用函数 adskipCore.applyNewAdTimestamps 未找到');
             }
         }
 
         return result;
     } catch (error) {
-        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 检测请求失败:', error);
+        adskipUtils.logDebug('[AdSkip广告检测] 检测请求失败:', error);
 
         // 请求失败时，尝试将状态设置为未检测
         try {
@@ -764,7 +764,7 @@ function createApiTestButton() {
         apiTestButton.style.backgroundColor = 'rgba(121, 134, 203, 0.85)';
 
         try {
-            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试按钮被点击，准备获取数据');
+            adskipUtils.logDebug('[AdSkip广告检测] API测试按钮被点击，准备获取数据');
 
             // 获取视频字幕数据
             const subtitleData = await getVideoSubtitleData();
@@ -772,14 +772,14 @@ function createApiTestButton() {
             if (!subtitleData.hasSubtitle) {
                 apiTestButton.innerHTML = '无字幕数据';
                 apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
-                adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试失败：无字幕数据');
+                adskipUtils.logDebug('[AdSkip广告检测] API测试失败：无字幕数据');
                 setTimeout(() => resetButton(), 3000);
                 return;
             }
 
             // 发送检测请求
             const result = await sendDetectionRequest(subtitleData);
-            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试完成，响应结果:', result.success);
+            adskipUtils.logDebug('[AdSkip广告检测] API测试完成，响应结果:', result.success);
 
             // 显示结果
             if (result.success) {
@@ -795,7 +795,7 @@ function createApiTestButton() {
             setTimeout(() => resetButton(), 5000);
         } catch (error) {
             console.error('API通信测试失败:', error);
-            adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 API测试出错:', error);
+            adskipUtils.logDebug('[AdSkip广告检测] API测试出错:', error);
             apiTestButton.innerHTML = '测试失败';
             apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
 
@@ -813,7 +813,7 @@ function createApiTestButton() {
     // 添加到页面
     document.body.appendChild(apiTestButton);
 
-    adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 创建API测试按钮');
+    adskipUtils.logDebug('[AdSkip广告检测] 创建API测试按钮');
 }
 
 // 导出函数到全局对象
