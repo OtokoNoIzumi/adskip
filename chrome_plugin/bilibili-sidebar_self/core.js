@@ -202,6 +202,46 @@ function updateUIToggle(isEnabled) {
         toggleSwitch.checked = isEnabled;
     }
 }
+/**
+ * 应用新的广告时间戳，设置监控并保存到存储
+ * @param {Array} newTimestamps - 要应用的广告时间戳（start_time/end_time 格式）
+ */
+async function applyNewAdTimestamps(newTimestamps) {
+    adskipUtils.logDebug('[AdSkip Core] 正在应用新的广告时间戳:', newTimestamps);
+
+    // 0. 获取当前视频ID（重要）
+    const videoId = adskipUtils.getCurrentVideoId().id;
+    if (!videoId) {
+         adskipUtils.logDebug('[AdSkip Core] 未找到要应用的视频ID');
+         // 当没有videoId时，不更新core.js的全局变量更安全
+         return;
+    }
+    // 更新core.js中的currentVideoId全局变量
+    currentVideoId = videoId;
+
+    // 1. 更新全局变量
+    currentAdTimestamps = newTimestamps || [];
+    adskipUtils.logDebug('[AdSkip Core] 已更新全局变量currentAdTimestamps');
+
+    // 2. 设置/更新监控器
+    if (typeof adskipVideoMonitor !== 'undefined' && adskipVideoMonitor.setupAdSkipMonitor) {
+         adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
+    } else {
+        adskipUtils.logDebug('[AdSkip Core] 未找到adskipVideoMonitor或setupAdSkipMonitor');
+    }
+
+    // 3. 保存到本地存储（确保已获取到videoId）
+    try {
+        await adskipStorage.saveAdTimestampsForVideo(videoId, currentAdTimestamps);
+        adskipUtils.logDebug(`[AdSkip Core] 已将时间戳保存到视频${videoId}的存储中`);
+    } catch (error) {
+        adskipUtils.logDebug(`[AdSkip Core] 保存时间戳时发生错误: ${error.message}`);
+    }
+}
+
+// 将此函数导出到adskipCore或window对象
+window.adskipCore = window.adskipCore || {};
+window.adskipCore.applyNewAdTimestamps = applyNewAdTimestamps;
 
 // 在页面加载后初始化
 window.addEventListener('load', init);

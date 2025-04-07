@@ -521,7 +521,7 @@ function setupUrlChangeMonitor() {
             const newVideoId = adskipUtils.getCurrentVideoId().id;
 
             if (newVideoId !== currentVideoId && newVideoId !== '') {
-                adskipUtils.logDebug(`视频ID变化检测 (observer): ${currentVideoId} -> ${newVideoId}`);
+                adskipUtils.logDebug(`视频ID变化检测: [${currentVideoId}] -> [${newVideoId}]`);
                 lastVideoId = currentVideoId;
                 currentVideoId = newVideoId;
                 reinitialize();

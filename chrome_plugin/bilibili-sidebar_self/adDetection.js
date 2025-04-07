@@ -46,6 +46,7 @@ async function getVideoSubtitleData() {
             desc: videoData.desc || '',
             dynamic: videoData.dynamic || '',
             duration: videoData.duration || 0,
+            pages: videoData.pages || [],
             pubdate: videoData.pubdate || 0,
             dimension: videoData.dimension,
             subtitle: videoData.subtitle || {},
@@ -618,8 +619,8 @@ async function sendDetectionRequest(subtitleData) {
             uploader: subtitleData.owner?.name || '',
             mid: subtitleData.mid || '',
             duration: subtitleData.duration || 0,
-            subtitles: subtitleData.subtitle_contents[0] || [],
-            autoDetect: false, // 非付费用户
+            // subtitles: subtitleData.subtitle_contents[0] || [],
+            autoDetect: true, // 非付费用户
             clientVersion: '1.0.0', // 客户端版本
             videoData: subtitleData, // 保留完整原始数据，对服务器端处理很重要
             user: userInfo ? {
@@ -634,11 +635,6 @@ async function sendDetectionRequest(subtitleData) {
 
         // 更新按钮状态为检测中
         updateVideoStatus(VIDEO_STATUS.DETECTING);
-
-        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 发送数据到服务器:', {
-            videoId: requestData.videoId,
-            subtitlesCount: requestData.subtitles.length
-        });
 
         // 发送请求到服务器API - 使用SSL加密域名
         const apiUrl = 'https://izumihostpab.life:3000/api/detect';
@@ -673,8 +669,8 @@ async function sendDetectionRequest(subtitleData) {
 
         // 根据检测结果更新视频状态
         const newStatus = result.hasAds ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
-        updateVideoStatus(newStatus, {
-            adTimestamps: result.adTimestamps || []
+        const adSkipButton = updateVideoStatus(newStatus, {
+            adTimestamps: result.adTimestamps || [] // 更新按钮dataset时仍使用原始格式
         });
 
         // 保存结果到本地存储
@@ -683,22 +679,39 @@ async function sendDetectionRequest(subtitleData) {
         // 如果没有广告，加入白名单
         if (!result.hasAds) {
             await adskipStorage.addVideoToNoAdsWhitelist(requestData.videoId);
+        } else {
+            // 如果检测到广告，转换时间戳格式并调用核心应用函数
+            if (typeof adskipCore !== 'undefined' && adskipCore.applyNewAdTimestamps) {
+                // 转换时间戳格式: start/end -> start_time/end_time
+                const convertedTimestamps = (result.adTimestamps || []).map(ts => ({
+                    start_time: ts.start,
+                    end_time: ts.end,
+                    // 保留其他可能的字段，例如 description, confidence
+                    ...ts
+                }));
+
+                adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 检测到广告，调用核心应用函数处理', convertedTimestamps);
+                // 调用 core.js 的函数来应用和保存
+                adskipCore.applyNewAdTimestamps(convertedTimestamps);
+
+            } else {
+                 adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 核心应用函数 adskipCore.applyNewAdTimestamps 未找到');
+            }
         }
 
         return result;
-
     } catch (error) {
         adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 检测请求失败:', error);
 
-        // 发生错误时，恢复到未检测状态
-        updateVideoStatus(VIDEO_STATUS.UNDETECTED);
+        // 请求失败时，尝试将状态设置为未检测
+        try {
+            updateVideoStatus(VIDEO_STATUS.UNDETECTED);
+        } catch(uiError) {
+            console.error('更新按钮状态失败:', uiError);
+        }
 
-        // 返回错误结果
-        return {
-            success: false,
-            message: error.message || '未知错误',
-            error: error
-        };
+        // 重新抛出错误以便API测试按钮能捕获
+        throw error;
     }
 }
 
