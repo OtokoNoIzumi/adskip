@@ -30,6 +30,15 @@
   margin-right: 4px;
 }
 
+/* 准备状态 - 同样用粉色 */
+.adskip-button.prepare {
+  background-color: #FB7299 !important;
+}
+.adskip-button.prepare::before {
+  content: "⏳"; /* 沙漏图标 */
+  margin-right: 4px;
+}
+
 /* 未检测状态 - B站蓝色 */
 .adskip-button.undetected {
   background-color: #23ADE5 !important;
