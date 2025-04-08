@@ -40,7 +40,8 @@ async function init() {
     adskipUtils.logDebug(`初始化 - 管理员状态: ${isAdminAuthorized ? '已授权' : '未授权'}`);
 
     // 获取当前视频ID
-    const currentVideoId = adskipUtils.getCurrentVideoId().id;
+    const video_id_info = adskipUtils.getCurrentVideoId();
+    const currentVideoId = video_id_info.id;
     adskipUtils.logDebug(`初始化 - 当前视频ID: ${currentVideoId}`);
 
     // 创建UI界面 - 无论任何情况都需要
@@ -51,14 +52,6 @@ async function init() {
 
     // 设置广告标记监控 - 无论任何情况都需要
     adskipVideoMonitor.setupAdMarkerMonitor();
-
-    // 初始化测试按钮 - 开发阶段使用
-    if (typeof adskipAdDetection !== 'undefined') {
-        adskipAdDetection.createTestButton();
-        adskipAdDetection.createTestStatusButton();
-        adskipAdDetection.validateStorageModule();
-        adskipAdDetection.createApiTestButton();
-    }
 
     // 解析URL参数
     const urlParams = adskipUtils.parseAdSkipParam();
@@ -74,15 +67,6 @@ async function init() {
         // 根据时间戳状态设置监控 - 仅当有广告时间戳时
         if (currentAdTimestamps.length > 0) {
             adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
-        }
-
-        // 处理字幕和广告检测 - 仅当不跳过数据处理时
-        if (!statusResult.skipDataProcessing && statusResult.source === 'none') {
-            // 还没有状态数据，通过字幕检测确定状态
-            adskipAdDetection.updateButtonStatusBasedOnSubtitle([], "初始化")
-                .catch(error => {
-                    adskipUtils.logDebug('[AdSkip广告检测] 初始化状态更新失败:', error);
-                });
         }
     }
 

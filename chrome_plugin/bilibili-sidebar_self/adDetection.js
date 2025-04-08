@@ -14,21 +14,23 @@ const VIDEO_STATUS = {
     DETECTING: 4          // 当前视频有字幕信息，且在请求服务器处理识别广告区间中
 };
 
-// 创建全局对象
+// 全局变量
 window.adskipAdDetection = window.adskipAdDetection || {};
+let autoDetectTimerId = null; // 用于存储自动检测的setTimeout ID
 
 /**
  * 获取视频字幕数据
  * 整合来自adskipSubtitleService的视频信息和字幕数据
- * @returns {Promise<Object>} 完整的keyParams对象
+ * @param {boolean} forceRefresh 是否强制刷新缓存
+ * @returns {Promise<Object>} 完整的keyParams对象，包含视频元数据和字幕内容
  */
-async function getVideoSubtitleData() {
+async function getVideoSubtitleData(forceRefresh = false) {
     try {
         adskipUtils.logDebug('[AdSkip广告检测] 开始获取视频字幕数据...');
 
 
         // 获取当前视频信息
-        const videoData = await adskipSubtitleService.getVideoData();
+        const videoData = await adskipSubtitleService.getVideoData(forceRefresh);
         if (!videoData || !videoData.bvid) {
             throw new Error('无法获取视频信息');
         }
@@ -114,93 +116,6 @@ async function getVideoSubtitleData() {
 }
 
 /**
- * 创建测试按钮 - 仅用于开发测试
- * 点击后获取字幕信息并在控制台输出
- */
-function createTestButton() {
-    // 检查测试按钮是否已存在
-    if (document.getElementById('adskip-test-button')) {
-        return;
-    }
-
-    // 创建测试按钮
-    const testButton = document.createElement('div');
-    testButton.id = 'adskip-test-button';
-    testButton.innerHTML = '测试获取字幕';
-
-    // 使用更符合现代设计的样式
-    testButton.style.cssText = `
-        position: fixed;
-        top: 150px;
-        right: 20px;
-        background-color: rgba(38, 50, 56, 0.7);
-        color: #f5f5f5;
-        padding: 8px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        z-index: 9999;
-        font-size: 13px;
-        font-weight: 400;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-        backdrop-filter: blur(4px);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    `;
-
-    // 悬停效果
-    testButton.addEventListener('mouseenter', () => {
-        testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.85)';
-        testButton.style.boxShadow = '0 3px 8px rgba(0, 0, 0, 0.2)';
-    });
-
-    testButton.addEventListener('mouseleave', () => {
-        testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
-        testButton.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.15)';
-    });
-
-    // 点击事件
-    testButton.addEventListener('click', async function() {
-        testButton.innerHTML = '获取中...';
-        testButton.style.backgroundColor = 'rgba(121, 134, 203, 0.85)';
-
-        try {
-            const subtitleData = await getVideoSubtitleData();
-            console.log('字幕数据:', subtitleData);
-
-            // 显示结果
-            let resultText = '获取';
-            if (subtitleData.hasSubtitle && subtitleData.subtitle_contents) {
-                resultText += `成功: ${subtitleData.subtitle_contents[0].length}条字幕`;
-                testButton.style.backgroundColor = 'rgba(96, 125, 139, 0.85)';
-            } else {
-                resultText += '失败: 无字幕';
-                testButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
-            }
-            testButton.innerHTML = resultText;
-
-            // 3秒后恢复
-            setTimeout(() => {
-                testButton.innerHTML = '测试获取字幕';
-                testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
-            }, 3000);
-        } catch (error) {
-            console.error('获取字幕失败:', error);
-            testButton.innerHTML = '获取失败';
-            testButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
-
-            // 3秒后恢复
-            setTimeout(() => {
-                testButton.innerHTML = '测试获取字幕';
-                testButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
-            }, 3000);
-        }
-    });
-
-    // 添加到页面
-    document.body.appendChild(testButton);
-}
-
-/**
  * 创建广告跳过按钮
  * @returns {HTMLElement} 创建的按钮元素
  */
@@ -208,7 +123,6 @@ function createAdSkipButton() {
     // 检查是否已存在
     let adskipButton = document.getElementById('adskip-button');
     if (adskipButton) {
-        adskipUtils.logDebug('[AdSkip广告检测] 广告跳过按钮已存在，返回现有按钮');
         return adskipButton;
     }
 
@@ -218,8 +132,15 @@ function createAdSkipButton() {
     adskipButton.className = 'adskip-button undetected';
     adskipButton.innerHTML = '点击检测广告';
 
-    adskipUtils.logDebug('[AdSkip广告检测] 创建广告跳过按钮');
+    // 添加到播放器容器 (这部分可能仍需外部协调，暂时保留)
+    // 建议: 按钮的创建和添加到DOM应该分离，或者提供一个父元素参数
+    const playerContainer = document.querySelector('.bpx-player-container') || document.body;
+    playerContainer.appendChild(adskipButton);
 
+    // 设置点击事件监听器
+    setupManualDetectionTrigger(adskipButton);
+
+    adskipUtils.logDebug('[AdSkip广告检测] 创建广告跳过按钮完成');
     return adskipButton;
 }
 
@@ -227,12 +148,19 @@ function createAdSkipButton() {
  * 更新视频状态和按钮显示
  * @param {number} status - 视频状态，使用VIDEO_STATUS枚举值
  * @param {Object} data - 可选的附加数据，如广告时间戳等
+ * @param {string} reason - 更新原因，用于日志记录
  */
-function updateVideoStatus(status, data = {}) {
-    const button = createAdSkipButton();
+function updateVideoStatus(status, data = {}, reason = "未知原因") {
+    const button = createAdSkipButton(); // 获取或创建按钮
+
+    adskipUtils.logDebug(`[AdSkip广告检测] 更新按钮状态 -> ${Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === status)}(${status}), 原因: ${reason}, 数据:`, data);
+
 
     // 移除所有状态类
     button.classList.remove('no-subtitle', 'no-ads', 'has-ads', 'undetected', 'detecting');
+
+    // 清除可能的动画类
+    button.style.animation = '';
 
     // 设置新状态
     switch(status) {
@@ -252,28 +180,34 @@ function updateVideoStatus(status, data = {}) {
             // 保存广告时间戳数据
             if (data.adTimestamps) {
                 button.dataset.adTimestamps = JSON.stringify(data.adTimestamps);
+            } else {
+                delete button.dataset.adTimestamps; // 清除旧数据
             }
             break;
 
         case VIDEO_STATUS.UNDETECTED:
             button.classList.add('undetected');
             button.innerHTML = '点击检测广告';
+            delete button.dataset.adTimestamps; // 清除旧数据
             break;
 
         case VIDEO_STATUS.DETECTING:
             button.classList.add('detecting');
             button.innerHTML = '检测中...';
+            // 应用动画
+            button.style.animation = 'adskip-pulse 1.5s infinite';
+            delete button.dataset.adTimestamps; // 清除旧数据
             break;
 
         default:
-            button.classList.add('has-ads');
-            button.innerHTML = '已处理广告';
+            adskipUtils.logDebug('[AdSkip广告检测] 未知状态，默认设为UNDETECTED:', status);
+            button.classList.add('undetected');
+            button.innerHTML = '点击检测广告';
+            delete button.dataset.adTimestamps; // 清除旧数据
     }
 
     // 存储当前状态
     button.dataset.status = status;
-
-    adskipUtils.logDebug(`[AdSkip广告检测] 更新按钮状态为: ${status}`);
 
     return button;
 }
@@ -299,32 +233,6 @@ function cycleButtonStatus() {
     updateVideoStatus(nextStatus, nextStatus === VIDEO_STATUS.HAS_ADS ? testData : {});
 
     adskipUtils.logDebug(`[AdSkip广告检测] 测试切换状态: ${currentStatus} -> ${nextStatus}`);
-}
-
-/**
- * 创建测试循环按钮 - 仅用于开发测试
- */
-function createTestStatusButton() {
-    // 检查是否已存在
-    if (document.getElementById('adskip-test-status-button')) {
-        return;
-    }
-
-    // 先创建广告跳过按钮
-    createAdSkipButton();
-
-    // 创建测试状态按钮
-    const testButton = document.createElement('div');
-    testButton.id = 'adskip-test-status-button';
-    testButton.innerHTML = '切换状态';
-
-    // 点击事件
-    testButton.addEventListener('click', cycleButtonStatus);
-
-    // 添加到页面
-    document.body.appendChild(testButton);
-
-    adskipUtils.logDebug('[AdSkip广告检测] 创建测试状态切换按钮');
 }
 
 /**
@@ -365,7 +273,7 @@ function updateButtonStatusBasedOnSubtitle(adTimestamps = [], context = "初始�
 }
 
 /**
- * 验证存储模块功能
+ * 验证存储模块功能——待删除
  * 创建临时按钮用于测试视频白名单和状态存储功能
  */
 function validateStorageModule() {
@@ -450,102 +358,182 @@ function validateStorageModule() {
 }
 
 /**
- * 处理视频广告状态
- * 集中处理视频状态检查逻辑，用于初始化和重新初始化
- *
- * @param {string} videoId 视频ID
- * @param {Array} urlTimestamps URL中解析的时间戳（如果有）
- * @param {boolean} isInitial 是否是初始化调用（区分init和reinitialize的处理）
- * @returns {Promise<Object>} 返回处理结果，包含状态和是否需要跳过数据处理
+ * 处理视频的广告状态（核心逻辑）
+ * @param {string} videoId - 当前视频ID
+ * @param {Array} urlParamsTimestamps - 从URL参数解析的时间戳
+ * @param {boolean} isInitialLoad - 是否为页面首次加载或视频切换后的首次处理
+ * @returns {Promise<Object>} 处理结果，包含状态来源、最终状态等
  */
-async function processVideoAdStatus(videoId, urlTimestamps = [], isInitial = true) {
-    // 返回对象
-    const result = {
-        urlAdTimestamps: [],              // URL参数中的时间戳
-        currentAdTimestamps: [],          // 当前使用的时间戳
-        skipDataProcessing: false,        // 是否跳过数据处理（API解析和服务器请求）
-        status: VIDEO_STATUS.UNDETECTED,  // 视频状态
-        statusData: {},                   // 状态相关数据
-        source: 'none'                    // 数据来源
-    };
+async function processVideoAdStatus(videoId, urlParamsTimestamps = [], isInitialLoad = false) {
+    adskipUtils.logDebug(`[AdSkip广告检测] - 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Params Count: ${urlParamsTimestamps.length}`);
 
-    // 没有视频ID，直接返回
-    if (!videoId) {
-        adskipUtils.logDebug('[AdSkip广告检测] 未找到视频ID，无法处理状态');
-        return result;
+    let finalStatus = VIDEO_STATUS.UNDETECTED;
+    let statusDataSource = 'none'; // 'url', 'storage', 'whitelist', 'detection', 'none', 'no_subtitle'
+    let skipDataProcessing = false; // 是否跳过后续的API请求
+    let resultTimestamps = []; // 最终生效的时间戳
+    let statusData = {}; // 用于传递额外数据，例如广告时间戳
+    let extra_log = '';
+    // 清除上一个视频的自动检测定时器
+    if (autoDetectTimerId) {
+        clearTimeout(autoDetectTimerId);
+        autoDetectTimerId = null;
+        adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 清除了上一个视频的自动检测定时器');
     }
 
-    const modeText = isInitial ? '初始化' : '视频切换';
-
-    // 1. 验证时间戳（URL优先于本地存储）- 外部存储API调用可能失败
-    const validationResult = await adskipStorage.loadAndValidateTimestamps(
-        videoId,
-        urlTimestamps
-    ).catch(error => {
-        adskipUtils.logDebug(`[AdSkip广告检测] 加载时间戳时出错: ${error.message}`);
-        return { timestamps: [], fromUrl: false, isPolluted: false };
-    });
-
-    // 2. 检查是否在白名单中（无论状态如何，先检查白名单）- 外部存储API调用可能失败
-    const isInWhitelist = await adskipStorage.checkVideoInNoAdsWhitelist(videoId)
-        .catch(error => {
-            adskipUtils.logDebug(`[AdSkip广告检测] 检查白名单状态出错: ${error.message}`);
-            return false;
-        });
-
-    // 3. 确定数据来源和时间戳
-    if (validationResult.fromUrl) {
-        // 来自URL参数
-        result.source = 'url';
-        result.urlAdTimestamps = [...validationResult.timestamps];
-        result.currentAdTimestamps = [...validationResult.timestamps];
-        adskipUtils.logDebug(`[AdSkip广告检测] ${modeText}时使用URL中的广告时间段`);
-    } else if (validationResult.timestamps.length > 0) {
-        // 来自本地存储
-        result.source = 'storage';
-        result.currentAdTimestamps = [...validationResult.timestamps];
-        adskipUtils.logDebug(`[AdSkip广告检测] ${modeText}时使用本地存储的广告时间段`);
-
-        // 输出污染日志
-        if (validationResult.isPolluted) {
-            adskipUtils.logDebug(`[AdSkip广告检测] URL参数被视频${validationResult.pollutionSource}的数据污染，已清除`);
+    try {
+        // 1. 检查是否有字幕信息（这是最基础的）
+        const subtitleData = await getVideoSubtitleData(!isInitialLoad);
+        if (!subtitleData || !subtitleData.bvid || subtitleData.bvid !== videoId) {
+            extra_log = '获取视频数据失败或ID不匹配，可能视频已切换，跳过处理。';
+            extra_log += `subtitleData: [${subtitleData.bvid}], videoId: [${videoId}]`;
+            adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - ' + extra_log);
+            return { source: 'error', status: VIDEO_STATUS.UNDETECTED, skipDataProcessing: true, currentAdTimestamps: [], urlAdTimestamps: urlParamsTimestamps };
         }
-    } else if (isInWhitelist) {
-        // 没有其他数据，但在白名单中
-        result.source = 'whitelist';
-        adskipUtils.logDebug(`[AdSkip广告检测] 视频 ${videoId} 在白名单中，设置NO_ADS状态`);
-    }
 
-    // 4. 根据数据来源确定状态和是否跳过数据处理
-    if (result.source === 'url' || result.source === 'storage') {
-        // 有URL参数或本地存储 -> HAS_ADS
-        result.status = VIDEO_STATUS.HAS_ADS;
-        result.statusData = { adTimestamps: result.currentAdTimestamps };
-
-        // 即使有广告数据，如果在白名单中也跳过API请求
-        if (isInWhitelist) {
-            adskipUtils.logDebug(`[AdSkip广告检测] 视频 ${videoId} 在白名单中，但有${result.source === 'url' ? 'URL参数' : '本地存储'}，保持HAS_ADS状态，跳过API请求`);
-            result.skipDataProcessing = true;
+        if (!subtitleData.hasSubtitle) {
+            adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 - 视频无字幕信息');
+            finalStatus = VIDEO_STATUS.NO_SUBTITLE;
+            statusDataSource = 'no_subtitle';
+            skipDataProcessing = true; // 没有字幕，无法进行检测
+        } else {
+            // 2. 检查URL参数
+            if (urlParamsTimestamps && urlParamsTimestamps.length > 0) {
+                adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 - 发现URL参数中的时间戳');
+                finalStatus = VIDEO_STATUS.HAS_ADS;
+                statusDataSource = 'url';
+                resultTimestamps = urlParamsTimestamps;
+                statusData.adTimestamps = resultTimestamps;
+                skipDataProcessing = true; // 使用了URL参数，不再进行检测或查询存储
+            } else {
+                // 3. 检查本地存储状态
+                const storedStatus = await adskipStorage.getVideoStatus(videoId);
+                if (storedStatus !== null && storedStatus !== undefined) {
+                    adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 发现本地存储状态: ${Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === storedStatus)}(${storedStatus})`);
+                    finalStatus = storedStatus;
+                    statusDataSource = 'storage';
+                    skipDataProcessing = true; // 已有本地记录，不再进行检测
+                    if (finalStatus === VIDEO_STATUS.HAS_ADS) {
+                        // 如果存储状态是有广告，尝试获取时间戳
+                        const storedTimestamps = await adskipStorage.loadAdTimestampsForVideo(videoId);
+                        if (storedTimestamps && storedTimestamps.length > 0) {
+                             resultTimestamps = storedTimestamps;
+                             statusData.adTimestamps = resultTimestamps;
+                             adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 从本地存储加载了广告时间戳');
+                        } else {
+                             adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 本地存储状态为HAS_ADS，但未找到时间戳数据');
+                             // 状态维持 HAS_ADS，但无时间戳可用
+                        }
+                    }
+                } else {
+                     // 4. 检查无广告白名单 (仅在无URL参数和存储状态时检查)
+                    const isInWhitelist = await adskipStorage.checkVideoInNoAdsWhitelist(videoId);
+                    if (isInWhitelist) {
+                        adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 视频在无广告白名单中');
+                        finalStatus = VIDEO_STATUS.NO_ADS;
+                        statusDataSource = 'whitelist';
+                        skipDataProcessing = true; // 在白名单中，不再进行检测
+                    }
+                    // 5. 如果以上都没有命中，则状态为 UNDETECTED
+                    else {
+                         adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 视频状态为 UNDETECTED (无URL参数、无存储、无白名单)');
+                         finalStatus = VIDEO_STATUS.UNDETECTED;
+                         statusDataSource = 'none';
+                         skipDataProcessing = false; // 需要后续处理（可能触发自动检测）
+                    }
+                }
+            }
         }
-    } else if (result.source === 'whitelist') {
-        // 仅在白名单中 -> NO_ADS
-        result.status = VIDEO_STATUS.NO_ADS;
-        result.skipDataProcessing = true;
-    } else {
-        // 完全没有数据 -> UNDETECTED，需要API检测
-        adskipUtils.logDebug(`[AdSkip广告检测] ${modeText}没有找到广告时间段，需要API检测`);
-    }
 
-    // 5. 更新按钮状态（如果已有数据来源）
-    if (result.source !== 'none') {
-        updateVideoStatus(result.status, result.statusData);
-    }
+        // --- 自动检测调度逻辑 ---
+        // 仅在初始加载/切换时, 状态为UNDETECTED, 且未跳过处理时触发
+        if (finalStatus === VIDEO_STATUS.UNDETECTED && !skipDataProcessing) {
+             adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 满足自动检测前置条件 (isInitialLoad, UNDETECTED)');
 
-    return result;
+             // 检查视频时长
+             if (subtitleData.duration && subtitleData.duration >= 30) {
+                 adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 视频时长 (${subtitleData.duration}s) 满足条件 (>=30s)`);
+
+                 // 检查用户权限 (临时占位)
+                 const hasAutoDetectPermission = true; // TODO: 替换为实际权限检查
+                 if (hasAutoDetectPermission) {
+                     adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 用户权限满足，将在10秒后调度自动检测');
+
+                     // 使用setTimeout调度检测
+                     autoDetectTimerId = setTimeout(async () => {
+                         adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 10秒计时结束，开始执行自动检测...');
+                         try {
+                             // 再次确认视频ID是否未变 (虽然可能性小，但更健壮)
+                             const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
+                             if (currentVideoCheck === videoId) {
+                                 // 获取最新的字幕数据（以防万一有变化）
+                                 const latestSubtitleData = await getVideoSubtitleData();
+                                 if (latestSubtitleData.hasSubtitle && latestSubtitleData.bvid === videoId) {
+                                     // 注意：sendDetectionRequest内部会先设置按钮为DETECTING
+                                     await sendDetectionRequest(latestSubtitleData);
+                                     adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 自动检测请求已发送');
+                                 } else {
+                                     adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 自动检测被取消：字幕信息丢失或视频已切换');
+                                     updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE, {}, "自动检测前字幕丢失");
+                                 }
+                             } else {
+                                 adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 自动检测被取消：视频已切换');
+                             }
+                         } catch (error) {
+                             adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 自动检测执行失败:', error);
+                             // 出错尝试恢复为UNDETECTED，前提是视频没变
+                             const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
+                             if (currentVideoCheck === videoId) {
+                                 updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "自动检测失败");
+                             }
+                         }
+                         autoDetectTimerId = null; // 清除ID
+                     }, 10000); // 10秒延迟
+
+                     adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 已设置自动检测定时器 ID: ${autoDetectTimerId}`);
+                     // 注意：此时按钮状态 *不* 设置为 DETECTING，保持 UNDETECTED
+
+                 } else {
+                     adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 用户无自动检测权限');
+                 }
+             } else {
+                 adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 视频时长 (${subtitleData.duration}s) 不满足条件 (<30s)`);
+             }
+        } else {
+             adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 不满足自动检测调度条件 (isInitialLoad=${isInitialLoad}, status=${finalStatus}, skipProcessing=${skipDataProcessing})`);
+        }
+
+        // --- 更新最终按钮状态 ---
+        // 这个调用应该在所有状态判断和自动检测调度逻辑之后
+        updateVideoStatus(finalStatus, statusData, `数据来源: ${statusDataSource}`);
+
+        adskipUtils.logDebug(`[AdSkip广告检测]🌟🌟🌟  - 处理完成. 最终状态: ${Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === finalStatus)}(${finalStatus}), 数据来源: ${statusDataSource}, 是否跳过API: ${skipDataProcessing}`);
+
+        return {
+            source: statusDataSource,
+            status: finalStatus,
+            skipDataProcessing: skipDataProcessing,
+            currentAdTimestamps: resultTimestamps, // 返回最终生效的时间戳
+            urlAdTimestamps: urlParamsTimestamps,
+            statusData: statusData, // 包含从URL或存储加载的时间戳
+            hasSubtitle: subtitleData.hasSubtitle,
+            duration: subtitleData.duration
+        };
+
+    } catch (error) {
+        // 增加对特定函数错误的捕获日志
+        if (error.message && error.message.includes('loadAdTimestampsForVideo')) {
+            adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 调用 loadAdTimestampsForVideo 时发生错误:', error);
+        } else {
+            adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟  - 处理视频状态时发生严重错误:', error);
+        }
+        // 发生错误时，尝试更新为UNDETECTED，并阻止后续处理
+        updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "处理异常");
+        return { source: 'error', status: VIDEO_STATUS.UNDETECTED, skipDataProcessing: true, currentAdTimestamps: [], urlAdTimestamps: urlParamsTimestamps };
+    }
 }
 
 /**
- * 生成请求签名
+ * 签名请求数据
  * @param {Object} data - 要签名的数据
  * @returns {Object} - 添加了签名的数据
  */
@@ -590,18 +578,20 @@ function signRequest(data) {
  * @returns {Promise<Object>} 广告检测结果
  */
 async function sendDetectionRequest(subtitleData) {
+    const videoId = subtitleData?.bvid;
+    adskipUtils.logDebug(`[AdSkip广告检测] sendDetectionRequest - 开始发送检测请求 for VideoID: ${videoId}`);
+
+    // 清除可能存在的自动检测定时器（如果手动触发时自动的还没执行）
+    if (autoDetectTimerId) {
+        clearTimeout(autoDetectTimerId);
+        autoDetectTimerId = null;
+        adskipUtils.logDebug('[AdSkip广告检测] 🌟🌟🌟 sendDetectionRequest - 清除了待执行的自动检测定时器');
+    }
+
+    // 更新按钮状态为检测中
+    updateVideoStatus(VIDEO_STATUS.DETECTING, {}, "发送检测请求");
+
     try {
-        adskipUtils.logDebug('[AdSkip广告检测] 开始发送检测请求...');
-
-        // 检查输入数据
-        if (!subtitleData || !subtitleData.bvid) {
-            throw new Error('无效的视频数据');
-        }
-
-        if (!subtitleData.hasSubtitle || !subtitleData.subtitle_contents || !subtitleData.subtitle_contents[0]) {
-            throw new Error('无字幕数据可供检测');
-        }
-
         // 获取用户信息
         let userInfo = null;
         if (typeof adskipCredentialService !== 'undefined') {
@@ -612,9 +602,9 @@ async function sendDetectionRequest(subtitleData) {
                 });
         }
 
-        // 准备请求数据 - 包含所有必要的数据字段
+        // 准备请求数据
         const requestData = {
-            videoId: subtitleData.bvid,
+            videoId: videoId,
             title: subtitleData.title || '',
             uploader: subtitleData.owner?.name || '',
             mid: subtitleData.mid || '',
@@ -630,15 +620,11 @@ async function sendDetectionRequest(subtitleData) {
             } : null
         };
 
-        // 签名请求数据
         const signedData = signRequest(requestData);
 
-        // 更新按钮状态为检测中
-        updateVideoStatus(VIDEO_STATUS.DETECTING);
-
-        // 发送请求到服务器API - 使用SSL加密域名
         const apiUrl = 'https://izumihostpab.life:3000/api/detect';
 
+        adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 sendDetectionRequest - 发送请求，签名：', signedData);
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -653,184 +639,144 @@ async function sendDetectionRequest(subtitleData) {
             throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
         }
 
-        // 解析JSON响应
         const result = await response.json();
+        adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 收到服务器响应JSON:', result);
 
-        adskipUtils.logDebug('[AdSkip广告检测] 收到服务器响应:', result);
-
-        // 验证响应数据
         if (!result || typeof result.success !== 'boolean') {
             throw new Error('服务器返回了无效的响应格式');
         }
 
         if (!result.success) {
-            throw new Error(result.message || '检测失败，未返回具体原因');
+            // 服务端明确告知失败，但不是网络或格式错误
+             adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 服务器返回失败消息:', result.message);
+             // 根据服务器返回决定是否需要关闭免费体验 (未来实现)
+             // if (result.disableTrial) { ... }
+
+             // 更新状态为 UNDETECTED
+             updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, `检测失败: ${result.message || '未知原因'}`);
+             // 返回一个表示失败的结构，避免后续处理出错
+             return { success: false, hasAds: false, adTimestamps: [], message: result.message || '检测失败' };
         }
 
-        // 根据检测结果更新视频状态
+        // --- 检测成功 ---
         const newStatus = result.hasAds ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
-        const adSkipButton = updateVideoStatus(newStatus, {
-            adTimestamps: result.adTimestamps || [] // 更新按钮dataset时仍使用原始格式
-        });
+        const adTimestamps = result.adTimestamps || [];
 
-        // 保存结果到本地存储
-        await adskipStorage.saveVideoStatus(requestData.videoId, newStatus);
+        // 更新按钮状态和数据
+        updateVideoStatus(newStatus, { adTimestamps: adTimestamps }, "检测成功");
 
-        // 如果没有广告，加入白名单
-        if (!result.hasAds) {
-            await adskipStorage.addVideoToNoAdsWhitelist(requestData.videoId);
+        // 保存状态和时间戳到本地存储
+        await adskipStorage.saveVideoStatus(videoId, newStatus);
+        if (newStatus === VIDEO_STATUS.HAS_ADS) {
+            await adskipStorage.saveAdTimestampsForVideo(videoId, adTimestamps);
+             adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 已保存 HAS_ADS 状态和时间戳');
         } else {
-            // 如果检测到广告，转换时间戳格式并调用核心应用函数
-            if (typeof adskipCore !== 'undefined' && adskipCore.applyNewAdTimestamps) {
-                // 转换时间戳格式: start/end -> start_time/end_time
-                const convertedTimestamps = (result.adTimestamps || []).map(ts => ({
-                    start_time: ts.start,
-                    end_time: ts.end,
-                    // 保留其他可能的字段，例如 description, confidence
-                    ...ts
-                }));
-
-                adskipUtils.logDebug('[AdSkip广告检测] 检测到广告，调用核心应用函数处理', convertedTimestamps);
-                // 调用 core.js 的函数来应用和保存
-                adskipCore.applyNewAdTimestamps(convertedTimestamps);
-
-            } else {
-                 adskipUtils.logDebug('[AdSkip广告检测] 核心应用函数 adskipCore.applyNewAdTimestamps 未找到');
-            }
+            // 如果检测结果是无广告，加入白名单
+            await adskipStorage.addVideoToNoAdsWhitelist(videoId);
+            adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 已保存 NO_ADS 状态并加入白名单');
         }
 
-        return result;
+        // 如果检测到广告，调用核心应用函数处理
+        if (newStatus === VIDEO_STATUS.HAS_ADS && typeof adskipCore !== 'undefined' && adskipCore.applyNewAdTimestamps) {
+            const convertedTimestamps = adTimestamps.map(ts => ({
+                start_time: ts.start,
+                end_time: ts.end,
+                ...ts // 保留其他可能的字段
+            }));
+            adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 检测到广告，调用核心应用函数处理', convertedTimestamps);
+            adskipCore.applyNewAdTimestamps(convertedTimestamps);
+        }
+
+        return result; // 返回原始成功结果
+
     } catch (error) {
-        adskipUtils.logDebug('[AdSkip广告检测] 检测请求失败:', error);
-
-        // 请求失败时，尝试将状态设置为未检测
-        try {
-            updateVideoStatus(VIDEO_STATUS.UNDETECTED);
-        } catch(uiError) {
-            console.error('更新按钮状态失败:', uiError);
+        adskipUtils.logDebug('[AdSkip广告检测] sendDetectionRequest - 检测请求失败:', error);
+        // 请求失败时（网络错误、JSON解析错误等），尝试将状态恢复为UNDETECTED
+        // 但要确保当前视频还是发送请求时的视频
+        const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
+        if (currentVideoCheck === videoId) {
+            updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "检测请求异常");
         }
-
         // 重新抛出错误以便API测试按钮能捕获
         throw error;
     }
 }
 
 /**
- * 创建API测试按钮 - 仅用于开发测试
- * 点击按钮测试与服务器的通信
+ * 为按钮设置手动触发检测的点击事件
+ * @param {HTMLElement} button - 广告跳过按钮元素
  */
-function createApiTestButton() {
-    // 检查是否已存在
-    if (document.getElementById('adskip-api-test-button')) {
-        return;
-    }
+function setupManualDetectionTrigger(button) {
+    if (!button) return;
 
-    // 创建测试按钮
-    const apiTestButton = document.createElement('div');
-    apiTestButton.id = 'adskip-api-test-button';
-    apiTestButton.innerHTML = '测试API通信';
+    button.addEventListener('click', async function() {
+        const videoId = adskipUtils.getCurrentVideoId().id;
+        adskipUtils.logDebug(`[AdSkip广告检测] ManualTrigger - 按钮被点击 for VideoID: ${videoId}`);
 
-    // 样式
-    apiTestButton.style.cssText = `
-        position: fixed;
-        top: 250px;
-        right: 20px;
-        background-color: rgba(38, 50, 56, 0.7);
-        color: #f5f5f5;
-        padding: 8px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        z-index: 9999;
-        font-size: 13px;
-        font-weight: 400;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-        backdrop-filter: blur(4px);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    `;
+        // 获取当前按钮状态
+        const currentStatus = parseInt(button.dataset.status || VIDEO_STATUS.UNDETECTED);
+        adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 当前按钮状态:', Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === currentStatus), `(${currentStatus})`);
 
-    // 悬停效果
-    apiTestButton.addEventListener('mouseenter', () => {
-        apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.85)';
-    });
 
-    apiTestButton.addEventListener('mouseleave', () => {
-        apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
-    });
+        // 只有 UNDETECTED 状态下才触发手动检测
+        if (currentStatus === VIDEO_STATUS.UNDETECTED) {
+            adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 状态为 UNDETECTED，尝试手动检测');
 
-    // 点击事件
-    apiTestButton.addEventListener('click', async function() {
-        apiTestButton.innerHTML = '请求中...';
-        apiTestButton.style.backgroundColor = 'rgba(121, 134, 203, 0.85)';
-
-        try {
-            adskipUtils.logDebug('[AdSkip广告检测] API测试按钮被点击，准备获取数据');
-
-            // 获取视频字幕数据
-            const subtitleData = await getVideoSubtitleData();
-
-            if (!subtitleData.hasSubtitle) {
-                apiTestButton.innerHTML = '无字幕数据';
-                apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
-                adskipUtils.logDebug('[AdSkip广告检测] API测试失败：无字幕数据');
-                setTimeout(() => resetButton(), 3000);
-                return;
+            // 清除可能存在的自动检测定时器
+            if (autoDetectTimerId) {
+                clearTimeout(autoDetectTimerId);
+                autoDetectTimerId = null;
+                adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 清除了待执行的自动检测定时器');
             }
 
-            // 发送检测请求
-            const result = await sendDetectionRequest(subtitleData);
-            adskipUtils.logDebug('[AdSkip广告检测] API测试完成，响应结果:', result.success);
+            try {
+                // 获取字幕数据
+                 adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 获取字幕数据...');
+                 const subtitleData = await getVideoSubtitleData();
 
-            // 显示结果
-            if (result.success) {
-                apiTestButton.innerHTML = result.hasAds ? '检测到广告' : '无广告';
-                apiTestButton.style.backgroundColor = result.hasAds ?
-                    'rgba(244, 67, 54, 0.85)' : 'rgba(76, 175, 80, 0.85)';
-            } else {
-                apiTestButton.innerHTML = '请求失败: ' + result.message;
-                apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
+                 // 再次检查视频ID是否匹配
+                 if (!subtitleData || subtitleData.bvid !== videoId) {
+                    adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 获取字幕数据失败或视频已切换，取消手动检测');
+                    return;
+                 }
+
+                 if (!subtitleData.hasSubtitle) {
+                    adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 无法检测：该视频没有字幕');
+                    updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE, {}, "手动检测前发现无字幕");
+                    return;
+                 }
+
+                 adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 字幕数据获取成功，发送检测请求...');
+                 // 直接调用发送请求函数 (内部会更新状态为DETECTING)
+                 await sendDetectionRequest(subtitleData);
+
+            } catch (error) {
+                // sendDetectionRequest 内部已经处理了错误和状态恢复
+                adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 手动检测过程中发生错误 (已被sendDetectionRequest处理):', error.message);
             }
 
-            // 5秒后恢复
-            setTimeout(() => resetButton(), 5000);
-        } catch (error) {
-            console.error('API通信测试失败:', error);
-            adskipUtils.logDebug('[AdSkip广告检测] API测试出错:', error);
-            apiTestButton.innerHTML = '测试失败';
-            apiTestButton.style.backgroundColor = 'rgba(158, 158, 158, 0.85)';
-
-            // 3秒后恢复
-            setTimeout(() => resetButton(), 3000);
-        }
-
-        // 重置按钮状态的辅助函数
-        function resetButton() {
-            apiTestButton.innerHTML = '测试API通信';
-            apiTestButton.style.backgroundColor = 'rgba(38, 50, 56, 0.7)';
+        } else {
+             adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 ManualTrigger - 当前状态非 UNDETECTED，不执行特殊操作');
+             // 其他状态 (NO_SUBTITLE, NO_ADS, DETECTING) 点击无特殊效果
         }
     });
-
-    // 添加到页面
-    document.body.appendChild(apiTestButton);
-
-    adskipUtils.logDebug('[AdSkip广告检测] 创建API测试按钮');
+    adskipUtils.logDebug('[AdSkip广告检测]🌟🌟🌟 手动触发检测监听器已设置');
 }
+
 
 // 导出函数到全局对象
 window.adskipAdDetection = {
     getVideoSubtitleData,
-    createTestButton,
     VIDEO_STATUS,
     updateVideoStatus,
     createAdSkipButton,
-    createTestStatusButton,
-    cycleButtonStatus,
-    updateButtonStatusBasedOnSubtitle,
-    validateStorageModule,
-    processVideoAdStatus,
-    sendDetectionRequest,
-    createApiTestButton,
-    signRequest
+    cycleButtonStatus, // 保留测试函数
+    updateButtonStatusBasedOnSubtitle, // 保留辅助函数
+    processVideoAdStatus, // 核心状态处理函数
+    sendDetectionRequest, // API请求函数
+    signRequest, // 签名函数
+    setupManualDetectionTrigger // 手动触发设置函数 (虽然内部调用，但导出可能便于测试)
+    // 移除了 checkAutoDetectionEligibility, startAutoDetectionProcess, initAutoDetection, onVideoUrlChange
 };
 
 // 初始化测试按钮的代码已移除

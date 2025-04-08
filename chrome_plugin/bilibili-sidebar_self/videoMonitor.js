@@ -603,18 +603,6 @@ async function reinitialize() {
         if (currentAdTimestamps.length > 0) {
             setupAdSkipMonitor(currentAdTimestamps);
         }
-
-        // 处理字幕和广告检测 - 仅当不跳过数据处理时
-        if (!statusResult.skipDataProcessing && statusResult.source === 'none') {
-            // 清除字幕相关缓存，确保获取新视频的字幕信息
-            adskipSubtitleService.clearCache();
-
-            // 还没有状态数据，通过字幕检测确定状态
-            adskipAdDetection.updateButtonStatusBasedOnSubtitle([], "视频切换")
-                .catch(error => {
-                    adskipUtils.logDebug('[AdSkip广告检测] 视频切换后状态更新失败:', error);
-                });
-        }
     }
 }
 

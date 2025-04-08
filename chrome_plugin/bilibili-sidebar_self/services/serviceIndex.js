@@ -238,22 +238,27 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
 
     /**
      * 获取视频字幕信息 - 直接通过API获取
+     * @param {string} bvid 视频BV号
      * @returns {Promise<Object>} 字幕信息
      */
     async function getVideoSubtitles() {
         try {
-            // 检查缓存是否有效
-            const now = Date.now();
-            if (subtitlesCache && (now - subtitlesCacheTimestamp < CACHE_LIFETIME)) {
-                adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕列表数据', { data: subtitlesCache, timestamp: subtitlesCacheTimestamp });
-                return subtitlesCache;
-            }
-
             const result = {
                 hasSubtitleFeature: false,
                 subtitles: [],
                 message: ''
             };
+
+            // 使用utils中的函数获取视频ID信息
+            const videoIdInfo = adskipUtils.getCurrentVideoId();
+            const { bvid, epid, id } = videoIdInfo;
+
+            // 检查缓存是否有效
+            const now = Date.now();
+            if (subtitlesCache && (now - subtitlesCacheTimestamp < CACHE_LIFETIME) && subtitlesCache.rawData.bvid === bvid) {
+                adskipUtils.logDebug('[AdSkip服务] 使用缓存的字幕列表数据', { data: subtitlesCache, timestamp: subtitlesCacheTimestamp });
+                return subtitlesCache;
+            }
 
             // 获取当前视频ID和CID
             const videoData = await getVideoData();
@@ -335,7 +340,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
             adskipUtils.logDebug('[AdSkip服务] 开始获取视频数据...');
 
             // 使用utils中的函数获取视频ID信息
-            const videoIdInfo = adskipUtils.getCurrentVideoId(); // 传入true获取完整对象
+            const videoIdInfo = adskipUtils.getCurrentVideoId();
             const { bvid, epid, id } = videoIdInfo;
 
 
