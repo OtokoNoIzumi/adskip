@@ -368,12 +368,13 @@ function validateStorageModule() {
  * 处理视频的广告状态（核心逻辑）- 重构版
  * 优先级: URL > Storage > Whitelist > Prepare/Detect
  * @param {string} videoId - 当前视频ID
- * @param {Array} urlParamsTimestamps - 从URL参数解析的时间戳
+ * @param {object} urlAdSkipResult - 从URL参数解析的结果对象 {type: string, timestamps: Array}
  * @param {boolean} isInitialLoad - 是否为页面首次加载或视频切换后的首次处理
  * @returns {Promise<Object>} 处理结果，包含状态来源、最终状态等
  */
-async function processVideoAdStatus(videoId, urlParamsTimestamps = [], isInitialLoad = false) {
-    adskipUtils.logDebug(`[AdSkip广告检测] 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Params Count: ${urlParamsTimestamps.length}`);
+async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = false) {
+    adskipUtils.logDebug(`[AdSkip广告检测] 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Result Type: ${urlAdSkipResult.type}`);
+    // adskipUtils.logDebug(`[AdSkip广告检测] 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Params Count: ${urlAdSkipResult.timestamps.length}`);
 
     // 1. 清理工作：清除上一个视频的自动检测定时器
     if (autoDetectTimerId) {
@@ -388,11 +389,13 @@ async function processVideoAdStatus(videoId, urlParamsTimestamps = [], isInitial
         status: VIDEO_STATUS.UNDETECTED, // 默认错误或回退状态
         skipDataProcessing: true,         // 默认跳过后续处理，除非明确需要
         currentAdTimestamps: [],
-        urlAdTimestamps: urlParamsTimestamps,
+        urlAdTimestamps: [],
         statusData: {},
         hasSubtitle: false,
         duration: 0
     };
+
+    statusResult.urlAdTimestamps = urlAdSkipResult.type === "HAS_ADS" ? urlAdSkipResult.timestamps : [];
 
     try {
         // 2. 获取关键数据：视频和字幕信息
@@ -408,7 +411,35 @@ async function processVideoAdStatus(videoId, urlParamsTimestamps = [], isInitial
         statusResult.hasSubtitle = subtitleData.hasSubtitle;
         statusResult.duration = subtitleData.duration;
 
-        // 3. 处理无字幕情况 (最高优先级的基础条件)
+
+        // 3. 检查URL参数 (优先级 1)
+        if (urlAdSkipResult.type === "NO_ADS_CONFIRMED" || urlAdSkipResult.type === "PARSE_ERROR") {
+            if (urlAdSkipResult.type === "NO_ADS_CONFIRMED") {
+                adskipUtils.logDebug('[AdSkip广告检测] URL参数明确指定无广告 (adskip=NONE).');
+            } else {
+                adskipUtils.logDebug('[AdSkip广告检测] URL参数解析出错 (adskip参数格式错误或无效).');
+            }
+            statusResult.status = VIDEO_STATUS.NO_ADS;
+            statusResult.source = urlAdSkipResult.type === "NO_ADS_CONFIRMED" ? 'url_no_ads' : 'url_parse_error';
+            statusResult.currentAdTimestamps = [];
+            statusResult.statusData = {};
+            updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
+            return statusResult;
+        } else if (urlAdSkipResult.type === "HAS_ADS") {
+            adskipUtils.logDebug('[AdSkip广告检测] 使用URL参数中的时间戳.');
+            statusResult.status = VIDEO_STATUS.HAS_ADS;
+            statusResult.source = 'url';
+            statusResult.currentAdTimestamps = urlAdSkipResult.timestamps;
+            statusResult.statusData.adTimestamps = urlAdSkipResult.timestamps;
+            updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
+            return statusResult;
+        } else if (urlAdSkipResult.type === "NO_PARAM") {
+            adskipUtils.logDebug(`[AdSkip广告检测] URL参数类型为 NO_PARAM，继续检查其他来源.`);
+            // 继续后续检查
+        }
+
+
+        // 4. 处理无字幕情况 (最高优先级的基础条件)——顺序要低于URL参数，如果URL有值
         if (!statusResult.hasSubtitle) {
             adskipUtils.logDebug('[AdSkip广告检测] 视频无字幕信息.');
             statusResult.status = VIDEO_STATUS.NO_SUBTITLE;
@@ -418,19 +449,6 @@ async function processVideoAdStatus(videoId, urlParamsTimestamps = [], isInitial
             return statusResult;
         }
 
-        // --- 按优先级确定状态 ---
-
-        // 4. 检查URL参数 (优先级 1)
-        if (urlParamsTimestamps && urlParamsTimestamps.length > 0) {
-            adskipUtils.logDebug('[AdSkip广告检测] 使用URL参数中的时间戳.');
-            statusResult.status = VIDEO_STATUS.HAS_ADS;
-            statusResult.source = 'url';
-            statusResult.currentAdTimestamps = urlParamsTimestamps;
-            statusResult.statusData.adTimestamps = urlParamsTimestamps;
-            // skipDataProcessing 保持 true
-            updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
-            return statusResult;
-        }
 
         // 5. 检查本地存储状态 (优先级 2)
         const storedStatus = await adskipStorage.getVideoStatus(videoId);
@@ -659,7 +677,7 @@ async function sendDetectionRequest(subtitleData) {
 
         const signedData = signRequest(requestData);
 
-        const apiUrl = 'https://izumihostpab.life:3000/api/detect';
+        const apiUrl = 'https://izumilife.xyz:3000/api/detect';
 
         adskipUtils.logDebug('[AdSkip广告检测] - 发送请求，签名：', signedData);
         const response = await fetch(apiUrl, {

@@ -54,14 +54,20 @@ async function init() {
     adskipVideoMonitor.setupAdMarkerMonitor();
 
     // 解析URL参数
-    const urlParams = adskipUtils.parseAdSkipParam();
+    const urlAdSkipResult = adskipUtils.parseAdSkipParam(); // 返回 { type: "...", timestamps: [] }
 
     // 使用集中处理函数处理视频状态
     if (typeof adskipAdDetection !== 'undefined' && currentVideoId) {
-        const statusResult = await adskipAdDetection.processVideoAdStatus(currentVideoId, urlParams, true);
+        // 将整个结果对象传递下去
+        const statusResult = await adskipAdDetection.processVideoAdStatus(currentVideoId, urlAdSkipResult, true);
 
-        // 更新全局状态
-        urlAdTimestamps = statusResult.urlAdTimestamps;
+        // 更新全局状态 - urlAdTimestamps 应基于解析结果的类型
+        if (urlAdSkipResult.type === "HAS_ADS") {
+            urlAdTimestamps = urlAdSkipResult.timestamps;
+        } else {
+            urlAdTimestamps = []; // 对于 NO_PARAM, NO_ADS_CONFIRMED, PARSE_ERROR，URL上没有有效广告时间戳
+        }
+
         currentAdTimestamps = statusResult.currentAdTimestamps;
 
         // 根据时间戳状态设置监控 - 仅当有广告时间戳时

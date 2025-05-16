@@ -225,7 +225,9 @@ function getCurrentVideoId() {
 
 /**
  * 解析URL中的adskip参数
- * @returns {Array} 广告时间段数组
+ * @returns {object} 解析结果对象，包含:
+ *                   - type: string ("NO_PARAM", "NO_ADS_CONFIRMED", "HAS_ADS", "PARSE_ERROR")
+ *                   - timestamps: Array (仅在 type 为 "HAS_ADS" 时有实际数据)
  */
 function parseAdSkipParam() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -233,23 +235,28 @@ function parseAdSkipParam() {
 
     if (!adskipParam) {
         logDebug('URL中没有adskip参数');
-        return [];
+        return { type: "NO_PARAM", timestamps: [] };
+    }
+
+    if (adskipParam.toUpperCase() === 'NONE') {
+        logDebug('URL参数adskip=NONE，确认为无广告');
+        return { type: "NO_ADS_CONFIRMED", timestamps: [] };
     }
 
     try {
-        // 解析格式: 61-87,120-145,300-320
-        const result = adskipParam.split(',').map(segment => {
+        const timestamps = adskipParam.split(',').map(segment => {
             const [start, end] = segment.split('-').map(Number);
-            return {
-                start_time: start,
-                end_time: end
-            };
+            if (isNaN(start) || isNaN(end) || start < 0 || end < 0 || start > end) {
+                throw new Error(`无效的时间段: ${segment}`);
+            }
+            return { start_time: start, end_time: end };
         });
-        logDebug(`解析URL adskip参数成功:`, result);
-        return result;
+
+        logDebug(`解析URL adskip参数成功:`, timestamps);
+        return { type: "HAS_ADS", timestamps: timestamps };
     } catch (e) {
         console.error('--==--LOG: 解析adskip参数失败:', e);
-        return [];
+        return { type: "PARSE_ERROR", timestamps: [] };
     }
 }
 
