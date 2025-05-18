@@ -519,9 +519,9 @@ function setupUrlChangeMonitor() {
 
             // 刷新当前视频ID
             const newVideoId = adskipUtils.getCurrentVideoId().id;
+            adskipUtils.logDebug(`视频ID变化检测: [${currentVideoId}] -> [${newVideoId}]`);
 
-            if (newVideoId !== currentVideoId && newVideoId !== '') {
-                adskipUtils.logDebug(`视频ID变化检测: [${currentVideoId}] -> [${newVideoId}]`);
+            if (newVideoId !== currentVideoId && newVideoId !== '' && currentVideoId !== '') {
                 lastVideoId = currentVideoId;
                 currentVideoId = newVideoId;
                 reinitialize();
@@ -551,10 +551,10 @@ function checkForVideoChange() {
     const newVideoId = adskipUtils.getCurrentVideoId().id; // 直接使用字符串模式
 
 
-    adskipUtils.logDebug(`检测视频变化: 当前=${currentVideoId}, 新=${newVideoId}`);
+    adskipUtils.logDebug(`检测视频变化: 当前=[${currentVideoId}], 新=[${newVideoId}]`);
 
     // 检查视频ID是否变化
-    if (newVideoId !== currentVideoId && newVideoId !== '') {
+    if (newVideoId !== currentVideoId && newVideoId !== '' && currentVideoId !== '') {
         adskipUtils.logDebug(`视频ID变化检测 (event): ${currentVideoId} -> ${newVideoId}`);
         lastVideoId = currentVideoId;
         currentVideoId = newVideoId;

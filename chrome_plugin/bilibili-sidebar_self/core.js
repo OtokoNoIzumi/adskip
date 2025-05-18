@@ -41,7 +41,7 @@ async function init() {
 
     // 获取当前视频ID
     const video_id_info = adskipUtils.getCurrentVideoId();
-    const currentVideoId = video_id_info.id;
+    currentVideoId = video_id_info.id;
     adskipUtils.logDebug(`初始化 - 当前视频ID: ${currentVideoId}`);
 
     // 创建UI界面 - 无论任何情况都需要
