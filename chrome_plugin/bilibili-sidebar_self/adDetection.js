@@ -53,7 +53,8 @@ async function getVideoSubtitleData(forceRefresh = false) {
             pubdate: videoData.pubdate || 0,
             dimension: videoData.dimension,
             subtitle: videoData.subtitle || {},
-            hasSubtitle: subtitleInfo.hasSubtitleFeature && subtitleInfo.subtitles.length > 0
+            hasSubtitle: subtitleInfo.hasSubtitleFeature && subtitleInfo.subtitles.length > 0,
+            epid: videoData.epid ? 'ep' + videoData.epid : ''
         };
 
         // 添加字幕完整内容（如果有）
@@ -101,6 +102,7 @@ async function getVideoSubtitleData(forceRefresh = false) {
 
         adskipUtils.logDebug('[AdSkip广告检测] 字幕数据获取完成:', {
             bvid: keyParams.bvid,
+            epid: keyParams.epid,
             title: keyParams.title,
             hasSubtitle: keyParams.hasSubtitle,
             subtitlesCount: keyParams.subtitle_contents ? keyParams.subtitle_contents[0].length : 0
@@ -478,8 +480,20 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
 
         // 5. 获取关键数据：视频和字幕信息
         const subtitleData = await getVideoSubtitleData(!isInitialLoad);
-        if (!subtitleData || !subtitleData.bvid || subtitleData.bvid !== videoId) {
-            adskipUtils.logDebug(`[AdSkip广告检测] 获取字幕数据失败或视频已切换 (${subtitleData?.bvid} vs ${videoId}). 中止处理.`);
+
+        // 判断bvid和videoId是否一致，或者videoId和epid是否一致（允许epid作为videoId的情况，不加'ep'前缀）
+        let isVideoIdMatch = false;
+        if (subtitleData && subtitleData.bvid && subtitleData.bvid === videoId) {
+            isVideoIdMatch = true;
+        } else if (
+            subtitleData && subtitleData.epid &&
+            videoId === subtitleData.epid
+        ) {
+            isVideoIdMatch = true;
+        }
+
+        if (!subtitleData || (!subtitleData.bvid && !subtitleData.epid) || !isVideoIdMatch) {
+            adskipUtils.logDebug(`[AdSkip广告检测] 获取字幕数据失败或视频已切换 (bvid: ${subtitleData?.bvid}, epid: ${subtitleData?.epid} vs videoId: ${videoId}). 中止处理.`);
             // 视频已切换或数据错误，显示中性状态，避免误导
             updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "视频已切换或数据错误");
             return statusResult; // 返回默认错误结果
@@ -534,17 +548,45 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
                 autoDetectTimerId = null; // 清除 ID
                 try {
                     const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
-                    // 再次确认视频未切换
+                    // 再次确认视频未切换，支持bvid和epid两种情况
+                    let isVideoIdStillMatch = false;
                     if (currentVideoCheck === videoId) {
-                        // 获取最新数据以防万一
+                        isVideoIdStillMatch = true;
+                    } else {
+                        // videoId 可能是epid（不带ep前缀），currentVideoCheck可能是ep+数字
+                        // 允许epid和ep+epid互相匹配
+                        if (
+                            videoId &&
+                            currentVideoCheck &&
+                            (
+                                (videoId.startsWith('ep') && currentVideoCheck === videoId.slice(2)) ||
+                                (currentVideoCheck.startsWith('ep') && videoId === currentVideoCheck.slice(2))
+                            )
+                        ) {
+                            isVideoIdStillMatch = true;
+                        }
+                    }
+
+                    if (isVideoIdStillMatch) {
+                        // 获取最新数据
                         const latestSubtitleData = await getVideoSubtitleData();
-                        if (latestSubtitleData.hasSubtitle && latestSubtitleData.bvid === videoId) {
+                        if (
+                            latestSubtitleData.hasSubtitle &&
+                            (
+                                latestSubtitleData.bvid === videoId ||
+                                (latestSubtitleData.epid && (
+                                    videoId === latestSubtitleData.epid ||
+                                    (videoId.startsWith('ep') && latestSubtitleData.epid === videoId.slice(2)) ||
+                                    (latestSubtitleData.epid.startsWith('ep') && videoId === latestSubtitleData.epid.slice(2))
+                                ))
+                            )
+                        ) {
                             // 发送检测请求（内部会处理状态更新：DETECTING -> HAS_ADS/NO_ADS/UNDETECTED）
                             await sendDetectionRequest(latestSubtitleData);
                             adskipUtils.logDebug('[AdSkip广告检测] 自动检测请求已发送 (或尝试发送).');
                         } else {
                             adskipUtils.logDebug('[AdSkip广告检测] 自动检测取消：执行前字幕信息丢失.');
-                            if (currentVideoCheck === videoId) { // 避免干扰新视频
+                            if (isVideoIdStillMatch) { // 避免干扰新视频
                                 updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE, {}, "Subtitle lost before auto-detect");
                             }
                         }
@@ -692,19 +734,59 @@ async function sendDetectionRequest(subtitleData) {
         const apiUrl = 'https://izumilife.xyz:3000/api/detect';
 
         adskipUtils.logDebug('[AdSkip广告检测] - 发送请求，签名：', signedData);
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(signedData)
-        });
 
-        // 检查响应状态
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
+        // --- 添加重试逻辑 ---
+        const MAX_RETRIES = 3;
+        const INITIAL_DELAY_MS = 1000; // 1秒
+        let attempts = 0;
+        let currentDelay = INITIAL_DELAY_MS;
+        let response;
+        let lastError;
+
+        while (attempts < MAX_RETRIES) {
+            try {
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(signedData)
+                });
+
+                // 检查响应状态
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    // 对于服务器错误，不进行重试，直接抛出
+                    throw new Error(`服务器响应错误 (${response.status}): ${errorText}`);
+                }
+                // 如果fetch成功且response.ok，则跳出重试循环
+                break;
+
+            } catch (error) {
+                lastError = error;
+                adskipUtils.logDebug(`[AdSkip广告检测] - fetch尝试 #${attempts + 1} 失败:`, error.message);
+
+                // 只对网络相关的错误 (TypeError: Failed to fetch) 进行重试
+                // 其他如 response.ok === false 的错误由上面的 if (!response.ok) 抛出，不会进入这里重试
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) { // 增加对 NetworkError 的判断，以兼容不同浏览器
+                    attempts++;
+                    if (attempts < MAX_RETRIES) {
+                        adskipUtils.logDebug(`[AdSkip广告检测] - 等待 ${currentDelay / 1000}秒 后重试...`);
+                        await new Promise(resolve => setTimeout(resolve, currentDelay));
+                        currentDelay *= 2; // 指数退避
+                    } else {
+                        adskipUtils.logDebug('[AdSkip广告检测] - 已达到最大重试次数，放弃请求。');
+                        // 抛出最后一次的错误
+                        throw lastError;
+                    }
+                } else {
+                    // 对于非预期的 fetch 错误 (非网络错误)，直接抛出，不重试
+                    throw error;
+                }
+            }
         }
+        // --- 重试逻辑结束 ---
+
 
         const result = await response.json();
         adskipUtils.logDebug('[AdSkip广告检测] - 收到服务器响应JSON:', result);
