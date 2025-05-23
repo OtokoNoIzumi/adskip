@@ -1,6 +1,22 @@
 // 全局变量
 let whitelistData = [];
 
+// 检查管理员状态并更新UI
+function checkAdminStatus() {
+  adskipStorage.checkAdminStatus().then(isAdmin => {
+    const loginBtn = document.getElementById('admin-login-btn');
+    if (loginBtn) {
+      if (isAdmin) {
+        loginBtn.textContent = '🔓 退出管理员';
+        loginBtn.classList.add('admin-logout');
+      } else {
+        loginBtn.textContent = '🔑 管理员登录';
+        loginBtn.classList.remove('admin-logout');
+      }
+    }
+  });
+}
+
 // 加载白名单数据，使用adskipStorage接口
 function loadWhitelistData() {
   adskipStorage.loadUploaderWhitelist().then(function(whitelist) {
@@ -126,6 +142,66 @@ function deleteWhitelistItem(index) {
 document.addEventListener('DOMContentLoaded', function() {
   // 加载存储的设置
   loadSettings();
+
+  // 检查管理员状态
+  checkAdminStatus();
+
+  // 检查是否有标签切换请求
+  chrome.storage.local.get('adskip_open_tab', function(result) {
+    if (result.adskip_open_tab) {
+      // 切换到指定标签
+      const tabName = result.adskip_open_tab;
+      const targetTab = document.querySelector(`.tab-button[data-tab="${tabName}"]`);
+      if (targetTab) {
+        // 更新URL hash
+        history.pushState(null, null, `#${tabName}`);
+
+        // 更新选项卡状态
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+        targetTab.classList.add('active');
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+
+        // 如果是白名单选项卡，加载白名单数据
+        if (tabName === 'whitelist') {
+          loadWhitelistData();
+        }
+
+        // 清除标签切换请求
+        chrome.storage.local.remove('adskip_open_tab');
+      }
+    }
+  });
+
+  // 管理员登录/登出按钮
+  const adminLoginBtn = document.getElementById('admin-login-btn');
+  adminLoginBtn.addEventListener('click', function() {
+    adskipStorage.checkAdminStatus().then(isAdmin => {
+      if (isAdmin) {
+        // 已登录，执行登出
+        if (confirm('确定要退出管理员登录吗？')) {
+          chrome.storage.local.set({[adskipStorage.KEYS.ADMIN_AUTH]: false}, function() {
+            showStatus('已退出管理员登录', 'info');
+            checkAdminStatus();
+          });
+        }
+      } else {
+        // 未登录，执行登录
+        const apiKey = prompt('请输入管理员API密钥:');
+        if (!apiKey) return;
+
+        adskipStorage.verifyAdminAccess(apiKey).then(isValid => {
+          if (isValid) {
+            showStatus('验证成功，已获得管理员权限', 'success');
+            checkAdminStatus();
+          } else {
+            showStatus('API密钥无效', 'error');
+          }
+        });
+      }
+    });
+  });
 
   // 功能开关监听
   const adskipToggle = document.getElementById('enable-adskip');
@@ -387,6 +463,11 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
   console.log('namespace', namespace);
   console.log('typeof loadWhitelistData', typeof loadWhitelistData);
   console.log('window.location.hash', window.location.hash);
+
+  // 监听管理员状态变化
+  if (changes[adskipStorage.KEYS.ADMIN_AUTH] !== undefined) {
+    checkAdminStatus();
+  }
 
   // 监听广告跳过功能开关变化，使用adskipStorage.KEYS常量
   if (changes[adskipStorage.KEYS.ENABLED] !== undefined) {

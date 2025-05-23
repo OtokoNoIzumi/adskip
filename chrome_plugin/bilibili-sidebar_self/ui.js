@@ -176,11 +176,7 @@ function createLinkGenerator() {
                 <div class="adskip-admin-container">
                     <button id="adskip-admin" class="adskip-admin-btn">🔧 管理员设置</button>
                 </div>
-                ` : `
-                <div class="adskip-admin-container">
-                    <button id="adskip-login" class="adskip-admin-btn">🔑 管理员登录</button>
-                </div>
-                `}
+                ` : ``}
             `;
 
             // 添加样式
@@ -487,22 +483,6 @@ function createLinkGenerator() {
             if (isAdmin) {
                 document.getElementById('adskip-admin').addEventListener('click', function() {
                     adskipAdmin.showAdminPanel();
-                });
-            } else {
-                // 添加管理员登录功能
-                document.getElementById('adskip-login').addEventListener('click', function() {
-                    const apiKey = prompt('请输入管理员API密钥:');
-                    if (!apiKey) return;
-
-                    if (adskipStorage.verifyAdminAccess(apiKey)) {
-                        updateStatusDisplay('验证成功，已获得管理员权限', 'success');
-                        // 重新加载面板以显示管理员选项
-                        document.getElementById('adskip-panel').remove();
-                        createLinkGenerator();
-                        document.getElementById('adskip-button').click();
-                    } else {
-                        updateStatusDisplay('API密钥无效', 'error');
-                    }
                 });
             }
             // 重置按钮 - 清空已保存的视频广告数据
