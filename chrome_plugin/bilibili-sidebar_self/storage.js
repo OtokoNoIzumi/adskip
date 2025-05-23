@@ -15,6 +15,13 @@ const STORAGE_KEYS = {
     UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
     VIDEO_PREFIX: 'adskip_',
     VIDEO_WHITELIST: 'adskip_video_whitelist',
+    // 新增: 用户统计相关的键
+    USER_STATS: 'adskip_user_stats',
+    USER_STATS_CACHE: 'adskip_user_stats_cache',
+    LOCAL_VIDEOS_PROCESSED: 'adskip_local_videos_processed',
+    USER_UID: 'adskip_user_uid',
+    LAST_STATS_FETCH_TIME: 'adskip_last_stats_fetch_time',  // 记录上次获取用户统计的时间
+    LAST_FETCH_VIDEOS_COUNT: 'adskip_last_fetch_videos_count',  // 记录上次获取统计时的视频数
 
     // 分类集合，用于过滤操作
     CONFIG_KEYS: [
@@ -451,11 +458,11 @@ async function verifyAdminAccess(apiKey) {
     adskipUtils.logDebug('开始验证管理员权限');
 
     // 简单的哈希检查
-    const validKeyHash = '12d9853b'; // 对应 'adskip521' 的哈希值
+    const validKeyHash = '41e219d2'; // 对应 'adskip521' 的哈希值
     const inputHash = simpleHash(apiKey);
     const isValid = (inputHash === validKeyHash);
 
-    adskipUtils.logDebug(`管理员验证结果: ${isValid ? '通过' : '失败'}`);
+    adskipUtils.logDebug(`管理员验证结果: ${isValid ? '通过' : '失败'}, 输入哈希: ${inputHash}, 有效哈希: ${validKeyHash}`);
 
     return new Promise((resolve) => {
         if (isValid) {
@@ -1331,6 +1338,286 @@ function clearUploaderCache() {
     adskipUtils.logDebug('已清除UP主信息缓存');
 }
 
+/**
+ * 新增：获取本地处理过的视频数量
+ * @returns {Promise<number>} 本地处理视频数量
+ */
+async function getLocalVideosProcessedCount() {
+    adskipUtils.logDebug(`获取本地处理视频数量`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.LOCAL_VIDEOS_PROCESSED, (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`获取本地处理视频数量失败: ${chrome.runtime.lastError.message}`);
+                resolve(0);
+                return;
+            }
+
+            const count = result[STORAGE_KEYS.LOCAL_VIDEOS_PROCESSED] || 0;
+            adskipUtils.logDebug(`本地处理视频数量: ${count}`);
+            resolve(count);
+        });
+    });
+}
+
+/**
+ * 新增：增加本地处理过的视频数量
+ * @returns {Promise<number>} 更新后的数量
+ */
+async function incrementLocalVideosProcessedCount() {
+    adskipUtils.logDebug(`增加本地处理视频数量`);
+
+    const currentCount = await getLocalVideosProcessedCount();
+    const newCount = currentCount + 1;
+
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.LOCAL_VIDEOS_PROCESSED]: newCount
+        }, () => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`更新本地处理视频数量失败: ${chrome.runtime.lastError.message}`);
+                resolve(currentCount); // 如果失败，返回原值
+                return;
+            }
+
+            adskipUtils.logDebug(`本地处理视频数量已更新: ${newCount}`);
+            resolve(newCount);
+        });
+    });
+}
+
+/**
+ * 新增：保存用户信息缓存，包括从API获取的数据
+ * @param {Object} userStats 用户统计信息对象
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveUserStatsCache(userStats) {
+    adskipUtils.logDebug(`保存用户统计信息缓存`);
+
+    // 添加当前时间戳和可读的更新时间
+    const now = Date.now();
+    const updateTimeDisplay = new Date().toLocaleString();
+
+    // 将时间戳信息直接添加到数据对象中，而不是创建额外的wrapper
+    // 这样 popup.js 可以直接使用 data.updateTimeDisplay
+    userStats.timestamp = now;
+    userStats.updateTimeDisplay = updateTimeDisplay;
+
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.USER_STATS_CACHE]: userStats
+        }, () => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`保存用户统计信息缓存失败: ${chrome.runtime.lastError.message}`);
+                resolve(false);
+                return;
+            }
+
+            adskipUtils.logDebug(`用户统计信息缓存已保存，更新时间: ${updateTimeDisplay}`);
+            resolve(true);
+        });
+    });
+}
+
+/**
+ * 新增：获取用户信息缓存
+ * @param {number} maxAge 最大缓存年龄（毫秒），默认1小时
+ * @returns {Promise<Object|null>} 缓存的用户统计数据，如果过期或不存在则返回null
+ */
+async function getUserStatsCache(maxAge = 3600000) {
+    adskipUtils.logDebug(`获取用户统计信息缓存`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.USER_STATS_CACHE, (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`获取用户统计信息缓存失败: ${chrome.runtime.lastError.message}`);
+                resolve(null);
+                return;
+            }
+
+            const cacheData = result[STORAGE_KEYS.USER_STATS_CACHE];
+            if (!cacheData || !cacheData.timestamp) {
+                adskipUtils.logDebug(`用户统计信息缓存不存在或格式无效`);
+                resolve(null);
+                return;
+            }
+
+            // 检查缓存是否过期
+            const now = Date.now();
+            if (now - cacheData.timestamp > maxAge) {
+                adskipUtils.logDebug(`用户统计信息缓存已过期，过期时间：${(now - cacheData.timestamp) / 1000}秒`);
+                // 过期时依然返回缓存数据，让调用方决定如何使用
+                resolve(cacheData);
+                return;
+            }
+
+            adskipUtils.logDebug(`成功获取用户统计信息缓存，缓存时间：${(now - cacheData.timestamp) / 1000}秒`);
+            resolve(cacheData);
+        });
+    });
+}
+
+/**
+ * 新增：保存用户UID到本地，确保在非B站页面也能使用
+ * @param {string|number} uid 用户UID
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveUserUID(uid) {
+    if (!uid) {
+        adskipUtils.logDebug(`用户UID为空，无法保存`);
+        return false;
+    }
+
+    adskipUtils.logDebug(`保存用户UID: ${uid}`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.USER_UID]: uid.toString()
+        }, () => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`保存用户UID失败: ${chrome.runtime.lastError.message}`);
+                resolve(false);
+                return;
+            }
+
+            adskipUtils.logDebug(`用户UID已保存: ${uid}`);
+            resolve(true);
+        });
+    });
+}
+
+/**
+ * 新增：获取保存的用户UID
+ * @returns {Promise<string|null>} 用户UID或null（如果不存在）
+ */
+async function getUserUID() {
+    adskipUtils.logDebug(`获取保存的用户UID`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.USER_UID, (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`获取用户UID失败: ${chrome.runtime.lastError.message}`);
+                resolve(null);
+                return;
+            }
+
+            const uid = result[STORAGE_KEYS.USER_UID];
+            if (!uid) {
+                adskipUtils.logDebug(`未找到保存的用户UID`);
+                resolve(null);
+                return;
+            }
+
+            adskipUtils.logDebug(`成功获取用户UID: ${uid}`);
+            resolve(uid);
+        });
+    });
+}
+
+/**
+ * 记录上次获取用户统计的时间和视频处理数量
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function recordLastStatsFetch() {
+    adskipUtils.logDebug(`记录本次获取用户统计的信息`);
+
+    try {
+        // 获取当前本地处理的视频数量
+        const videoCount = await getLocalVideosProcessedCount();
+        const now = Date.now();
+
+        return new Promise(resolve => {
+            chrome.storage.local.set({
+                [STORAGE_KEYS.LAST_STATS_FETCH_TIME]: now,
+                [STORAGE_KEYS.LAST_FETCH_VIDEOS_COUNT]: videoCount
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`记录获取统计信息失败: ${chrome.runtime.lastError.message}`);
+                    resolve(false);
+                    return;
+                }
+
+                adskipUtils.logDebug(`已记录本次获取用户统计信息，时间: ${new Date(now).toLocaleString()}, 视频数: ${videoCount}`);
+                resolve(true);
+            });
+        });
+    } catch (error) {
+        adskipUtils.logDebug(`记录统计获取时发生错误: ${error.message}`);
+        return false;
+    }
+}
+
+/**
+ * 获取上次获取用户统计的信息
+ * @returns {Promise<Object>} 包含上次获取时间和视频数的对象
+ */
+async function getLastStatsFetchInfo() {
+    adskipUtils.logDebug(`获取上次统计获取信息`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get([
+            STORAGE_KEYS.LAST_STATS_FETCH_TIME,
+            STORAGE_KEYS.LAST_FETCH_VIDEOS_COUNT
+        ], (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`获取上次统计获取信息失败: ${chrome.runtime.lastError.message}`);
+                resolve({ time: 0, videoCount: 0 });
+                return;
+            }
+
+            const info = {
+                time: result[STORAGE_KEYS.LAST_STATS_FETCH_TIME] || 0,
+                videoCount: result[STORAGE_KEYS.LAST_FETCH_VIDEOS_COUNT] || 0
+            };
+
+            adskipUtils.logDebug(`获取到上次统计获取信息: 时间: ${new Date(info.time).toLocaleString()}, 视频数: ${info.videoCount}`);
+            resolve(info);
+        });
+    });
+}
+
+/**
+ * 检查是否需要更新用户统计数据
+ * @returns {Promise<boolean>} 是否需要更新
+ */
+async function shouldUpdateUserStats() {
+    try {
+        // 获取上次获取信息
+        const lastFetchInfo = await getLastStatsFetchInfo();
+
+        // 获取当前本地处理的视频数
+        const currentVideoCount = await getLocalVideosProcessedCount();
+
+        // 当前时间
+        const now = Date.now();
+
+        // 上次获取的时间距现在超过1小时
+        const timeCondition = now - lastFetchInfo.time >= 3600000; // 1小时 = 3600000毫秒
+
+        // 本地处理的视频数比上次获取时增加了2个或更多
+        const videoCountCondition = currentVideoCount - lastFetchInfo.videoCount >= 2;
+
+        // 如果是首次获取(时间为0)，也应该更新
+        const isFirstFetch = lastFetchInfo.time === 0;
+
+        const shouldUpdate = isFirstFetch || timeCondition || videoCountCondition;
+
+        adskipUtils.logDebug(`检查是否需要更新用户统计:
+            上次获取时间: ${new Date(lastFetchInfo.time).toLocaleString()}
+            上次视频数: ${lastFetchInfo.videoCount}
+            当前视频数: ${currentVideoCount}
+            时间条件满足: ${timeCondition}
+            视频数条件满足: ${videoCountCondition}
+            首次获取: ${isFirstFetch}
+            需要更新: ${shouldUpdate}`);
+
+        return shouldUpdate;
+    } catch (error) {
+        adskipUtils.logDebug(`检查是否需要更新统计时出错: ${error.message}`);
+        return true; // 出错时保守处理，返回需要更新
+    }
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -1398,5 +1685,18 @@ window.adskipStorage = {
     getVideoStatus,
 
     // 新添加的函数
-    clearUploaderCache
+    clearUploaderCache,
+
+    // 新增方法
+    getLocalVideosProcessedCount,
+    incrementLocalVideosProcessedCount,
+    saveUserStatsCache,
+    getUserStatsCache,
+    saveUserUID,
+    getUserUID,
+
+    // 新增方法
+    recordLastStatsFetch,
+    getLastStatsFetchInfo,
+    shouldUpdateUserStats
 };

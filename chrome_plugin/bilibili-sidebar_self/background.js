@@ -119,6 +119,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     sendResponse({ success: true });
   }
+  else if (message.action === 'getBilibiliUser') {
+    // 获取B站用户信息（从API直接获取）
+    getBilibiliUserInfo()
+      .then(userInfo => sendResponse({ success: true, ...userInfo }))
+      .catch(error => sendResponse({
+        success: false,
+        error: error.message,
+        isLoggedIn: false,
+        username: "guest",
+        uid: 0,
+        level: 0
+      }));
+
+    // 异步响应需要返回true
+    return true;
+  }
   else {
     sendResponse({ success: false, error: 'Unknown action' });
   }
@@ -144,4 +160,45 @@ async function handleFetch(url, options = {}) {
   }
 
   return await response.json();
+}
+
+/**
+ * 获取B站用户信息
+ * @returns {Promise<Object>} - 用户信息对象
+ */
+async function getBilibiliUserInfo() {
+  const url = 'https://api.bilibili.com/x/web-interface/nav';
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`获取用户信息失败: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    if (data.code !== 0) {
+      throw new Error(`获取用户信息失败: ${data.message}`);
+    }
+
+    const userInfo = data.data;
+
+    // 返回标准格式的用户信息
+    return {
+      isLoggedIn: userInfo.isLogin,
+      username: userInfo.uname || '未知用户',
+      uid: userInfo.mid,
+      level: userInfo.level_info?.current_level || 0
+    };
+  } catch (error) {
+    console.error('[AdSkip] 获取B站用户信息失败:', error);
+    throw error;
+  }
 }

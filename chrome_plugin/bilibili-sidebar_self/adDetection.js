@@ -720,7 +720,7 @@ async function sendDetectionRequest(subtitleData) {
             duration: subtitleData.duration || 0,
             // subtitles: subtitleData.subtitle_contents[0] || [],
             autoDetect: true, // 非付费用户
-            clientVersion: '1.0.0', // 客户端版本
+            clientVersion: '1.1.0', // 客户端版本
             videoData: subtitleData, // 保留完整原始数据，对服务器端处理很重要
             user: userInfo ? {
                 username: userInfo.username || '',
@@ -731,7 +731,8 @@ async function sendDetectionRequest(subtitleData) {
 
         const signedData = signRequest(requestData);
 
-        const apiUrl = 'https://izumilife.xyz:3000/api/detect';
+        // const apiUrl = 'https://izumilife.xyz:3000/api/detect';
+        const apiUrl = 'https://localhost:3000/api/detect';
 
         adskipUtils.logDebug('[AdSkip广告检测] - 发送请求，签名：', signedData);
 
@@ -818,11 +819,19 @@ async function sendDetectionRequest(subtitleData) {
         await adskipStorage.saveVideoStatus(videoId, newStatus);
         if (newStatus === VIDEO_STATUS.HAS_ADS) {
             await adskipStorage.saveAdTimestampsForVideo(videoId, adTimestamps);
-             adskipUtils.logDebug('[AdSkip广告检测] - 已保存 HAS_ADS 状态和时间戳');
+            adskipUtils.logDebug('[AdSkip广告检测] - 已保存 HAS_ADS 状态和时间戳');
         } else {
             // 如果检测结果是无广告，加入白名单
             await adskipStorage.addVideoToNoAdsWhitelist(videoId);
             adskipUtils.logDebug('[AdSkip广告检测] - 已保存 NO_ADS 状态并加入白名单');
+        }
+
+        // 无论检测到广告与否，都增加处理视频计数
+        try {
+            const newCount = await adskipStorage.incrementLocalVideosProcessedCount();
+            adskipUtils.logDebug(`[AdSkip广告检测] - 本地处理视频计数已更新为 ${newCount}`);
+        } catch (countError) {
+            adskipUtils.logDebug('[AdSkip广告检测] - 更新本地处理视频计数失败:', countError);
         }
 
         // 如果检测到广告，调用核心应用函数处理
@@ -928,4 +937,42 @@ window.adskipAdDetection = {
     // 移除了 checkAutoDetectionEligibility, startAutoDetectionProcess, initAutoDetection, onVideoUrlChange
 };
 
-// 初始化测试按钮的代码已移除
+
+// 设置消息监听，用于响应popup请求
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'getBilibiliUser' && message.target === 'content') {
+        adskipUtils.logDebug('[AdSkip消息处理] - 收到获取用户信息请求');
+
+        // 尝试获取B站用户信息
+        if (typeof adskipCredentialService !== 'undefined') {
+            adskipCredentialService.getBilibiliLoginStatus()
+                .then(userInfo => {
+                    adskipUtils.logDebug('[AdSkip消息处理] - 用户信息获取成功', userInfo);
+                    sendResponse(userInfo);
+                })
+                .catch(error => {
+                    adskipUtils.logDebug('[AdSkip消息处理] - 用户信息获取失败', error);
+                    sendResponse({
+                        isLoggedIn: false,
+                        username: "guest",
+                        uid: 0,
+                        level: 0,
+                        error: error.message
+                    });
+                });
+
+            // 返回true表示异步响应
+            return true;
+        } else {
+            adskipUtils.logDebug('[AdSkip消息处理] - 凭证服务未定义');
+            sendResponse({
+                isLoggedIn: false,
+                username: "guest",
+                uid: 0,
+                level: 0,
+                error: "凭证服务未定义"
+            });
+        }
+    }
+    // 不处理其他消息，让其他监听器处理
+});

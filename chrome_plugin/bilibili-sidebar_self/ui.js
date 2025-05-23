@@ -150,7 +150,7 @@ function createLinkGenerator() {
                 ${whitelistControls}
 
                 <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
-                <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 61-87,120-145">
+                <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 22-33,114-514">
 
                 <div class="adskip-percentage-container">
                     <div class="adskip-percentage-label">广告跳过触发范围：前 <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
@@ -510,7 +510,7 @@ function createLinkGenerator() {
                 // 使用storage模块的集中式方法，获取视频数据键
                 adskipStorage.getVideoDataKeys().then(function(videoKeys) {
                     if (videoKeys.length > 0) {
-                        if (confirm('确定要清空已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
+                        if (confirm('确定要清空【所有】已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
                             adskipStorage.removeKeys(videoKeys).then(() => {
                                 // 清空当前设置
                                 currentAdTimestamps = [];

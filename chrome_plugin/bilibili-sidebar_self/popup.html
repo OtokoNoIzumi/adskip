@@ -119,7 +119,7 @@
     自动跳过哔哩哔哩视频中的切片广告内容，可以通过URL参数共享数据。
   </div>
 
-  <div class="instructions">
+  <div class="instructions" id="usage-instructions">
     <h2>使用说明</h2>
     <p>1. 访问B站视频页面时，会在右上角显示"⏩ 广告跳过"按钮</p>
     <p>2. 点击按钮打开设置面板，可以输入广告时间段</p>
@@ -128,16 +128,20 @@
     <p>3. 设置完成后点击"更新跳过设置"按钮即可生效</p>
   </div>
 
-  <ul class="feature-list">
+  <ul class="feature-list" id="feature-list">
     <li>自动记住每个视频的广告时间段</li>
     <li>支持通过URL分享广告跳过设置</li>
     <li>适用于所有B站视频页面</li>
   </ul>
 
+  <div id="user-stats-area" style="margin-bottom: 20px; font-size: 14px;">
+    <!-- 用户信息将动态填充在这里 -->
+  </div>
+
   <button id="go-to-options" class="button">打开设置页面</button>
 
   <div class="footer">
-    版本 1.1 | 作者: Izumi屈源
+    版本 1.2.7 | 作者: Izumi屈源
   </div>
 
   <!-- 按顺序加载依赖的脚本 -->
