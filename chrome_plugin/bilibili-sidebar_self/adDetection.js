@@ -720,7 +720,7 @@ async function sendDetectionRequest(subtitleData) {
             duration: subtitleData.duration || 0,
             // subtitles: subtitleData.subtitle_contents[0] || [],
             autoDetect: true, // 非付费用户
-            clientVersion: '1.1.0', // 客户端版本
+            clientVersion: chrome.runtime.getManifest().version, // 从manifest获取客户端版本
             videoData: subtitleData, // 保留完整原始数据，对服务器端处理很重要
             user: userInfo ? {
                 username: userInfo.username || '',

@@ -458,7 +458,7 @@ async function verifyAdminAccess(apiKey) {
     adskipUtils.logDebug('开始验证管理员权限');
 
     // 简单的哈希检查
-    const validKeyHash = '41e219d2'; // 对应 'adskip521' 的哈希值
+    const validKeyHash = '41e219d2';
     const inputHash = simpleHash(apiKey);
     const isValid = (inputHash === validKeyHash);
 

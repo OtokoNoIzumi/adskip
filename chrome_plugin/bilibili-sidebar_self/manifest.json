@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bilibili 切片广告之友",
-  "version": "1.1",
+  "version": "1.2.7",
   "description": "自动识别并跳过B站视频中的切片广告，带来纯净的观影体验。",
   "background": {
     "service_worker": "background.js",
