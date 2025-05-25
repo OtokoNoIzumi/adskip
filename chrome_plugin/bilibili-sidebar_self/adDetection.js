@@ -710,7 +710,7 @@ async function sendDetectionRequest(subtitleData) {
                     return null;
                 });
         }
-
+        adskipUtils.logDebug('[AdSkip广告检测] - 用户信息:', userInfo);
         // 准备请求数据
         const requestData = {
             videoId: videoId,
@@ -725,7 +725,9 @@ async function sendDetectionRequest(subtitleData) {
             user: userInfo ? {
                 username: userInfo.username || '',
                 uid: userInfo.uid || '',
-                level: userInfo.level || 0
+                level: userInfo.level || 0,
+                vipType: userInfo.vipType || 0,
+                vipDueDate: userInfo.vipDueDate || 0
             } : null
         };
 

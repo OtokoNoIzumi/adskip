@@ -26,24 +26,26 @@ document.addEventListener('DOMContentLoaded', function() {
   // 获取manifest.json中的版本信息
   const manifestData = chrome.runtime.getManifest();
   const version = manifestData.version || '1.0';
-  const author = 'Izumi屈源'; // 作者名称固定
+  const author = 'Izumi.屈源'; // 作者名称固定
 
   // 修改页脚，作者名后面添加"个人主页"文字和B站、GitHub图标跳转，整体竖直居中
   const footer = document.querySelector('#footer-version');
   if (footer) {
     footer.innerHTML = `
-      <span style="vertical-align: middle;">版本 ${version} | 作者: ${author}</span>
-      <span style="vertical-align: middle; margin-left: 10px;">个人主页</span>
-      <a href="https://space.bilibili.com/82205" target="_blank" title="B站主页" style="display:inline-flex;align-items:center;margin-left:6px;">
-        <svg viewBox="0 0 1024 1024" width="16" height="16" style="fill: #00a1d6;">
-          <path d="M306.005333 117.632L444.330667 256h135.296l138.368-138.325333a42.666667 42.666667 0 0 1 60.373333 60.373333L700.330667 256H789.333333A149.333333 149.333333 0 0 1 938.666667 405.333333v341.333334a149.333333 149.333333 0 0 1-149.333334 149.333333h-554.666666A149.333333 149.333333 0 0 1 85.333333 746.666667v-341.333334A149.333333 149.333333 0 0 1 234.666667 256h88.96L245.632 177.962667a42.666667 42.666667 0 0 1 60.373333-60.373334zM789.333333 341.333333h-554.666666a64 64 0 0 0-63.701334 57.856L170.666667 405.333333v341.333334a64 64 0 0 0 57.856 63.701333L234.666667 810.666667h554.666666a64 64 0 0 0 63.701334-57.856L853.333333 746.666667v-341.333334a64 64 0 0 0-57.856-63.701333L789.333333 341.333333zM341.333333 469.333333a42.666667 42.666667 0 0 1 42.666667 42.666667v85.333333a42.666667 42.666667 0 0 1-85.333333 0v-85.333333a42.666667 42.666667 0 0 1 42.666666-42.666667z m341.333334 0a42.666667 42.666667 0 0 1 42.666666 42.666667v85.333333a42.666667 42.666667 0 0 1-85.333333 0v-85.333333a42.666667 42.666667 0 0 1 42.666667-42.666667z"></path>
-        </svg>
-      </a>
-      <a href="https://github.com/izumitomo/bilibili-adskip" target="_blank" title="GitHub" style="display:inline-flex;align-items:center;margin-left:6px;">
-        <svg viewBox="0 0 16 16" width="16" height="16" style="fill: #333;">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
-        </svg>
-      </a>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+        <span>版本 ${version} | 作者: ${author}</span>
+        <span>个人主页</span>
+        <a href="https://space.bilibili.com/82205" target="_blank" title="B站主页" style="display: flex; align-items: center; line-height: 1;">
+          <svg viewBox="0 0 1024 1024" width="16" height="16" style="fill: #00a1d6; display: block;">
+            <path d="M306.005333 117.632L444.330667 256h135.296l138.368-138.325333a42.666667 42.666667 0 0 1 60.373333 60.373333L700.330667 256H789.333333A149.333333 149.333333 0 0 1 938.666667 405.333333v341.333334a149.333333 149.333333 0 0 1-149.333334 149.333333h-554.666666A149.333333 149.333333 0 0 1 85.333333 746.666667v-341.333334A149.333333 149.333333 0 0 1 234.666667 256h88.96L245.632 177.962667a42.666667 42.666667 0 0 1 60.373333-60.373334zM789.333333 341.333333h-554.666666a64 64 0 0 0-63.701334 57.856L170.666667 405.333333v341.333334a64 64 0 0 0 57.856 63.701333L234.666667 810.666667h554.666666a64 64 0 0 0 63.701334-57.856L853.333333 746.666667v-341.333334a64 64 0 0 0-57.856-63.701333L789.333333 341.333333zM341.333333 469.333333a42.666667 42.666667 0 0 1 42.666667 42.666667v85.333333a42.666667 42.666667 0 0 1-85.333333 0v-85.333333a42.666667 42.666667 0 0 1 42.666666-42.666667z m341.333334 0a42.666667 42.666667 0 0 1 42.666666 42.666667v85.333333a42.666667 42.666667 0 0 1-85.333333 0v-85.333333a42.666667 42.666667 0 0 1 42.666667-42.666667z"></path>
+          </svg>
+        </a>
+        <a href="https://otokonoizumi.github.io" target="_blank" title="GitHub" style="display: flex; align-items: center; line-height: 1;">
+          <svg viewBox="0 0 16 16" width="16" height="16" style="fill: #333; display: block;">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+        </a>
+      </div>
     `;
   }
 
@@ -52,12 +54,13 @@ document.addEventListener('DOMContentLoaded', function() {
   appreciateArea.id = 'appreciate-area';
   appreciateArea.style.display = 'none';
   appreciateArea.style.textAlign = 'center';
-  appreciateArea.style.marginTop = '20px';
+  appreciateArea.style.marginTop = '8px';
   appreciateArea.innerHTML = `
-    <h3>支持作者</h3>
-    <p style="font-size: 13px; color: #666;">如果此插件对您有帮助，请赞赏支持！记得留下B站id</p>
-    <p style="font-size: 13px; color: #666;">B站年度大会员每月可以领免费的5B币券用来赞赏充电~</p>
-    <img src="https://otokonoizumi.github.io/appreciate.jpg" alt="赞赏码" style="max-width: 200px; border-radius: 5px;">
+    <div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>
+    <h3 style="margin: 5px 0 3px 0; font-size: 14px;">支持作者</h3>
+    <p style="font-size: 12px; color: #666; margin: 2px 0;">如果此插件对您有帮助，请赞赏支持！记得留下B站id</p>
+    <p style="font-size: 12px; color: #666; margin: 2px 0 5px 0;">B站年度大会员每月可以领免费的5B币券用来赞赏充电~</p>
+    <img src="https://otokonoizumi.github.io/appreciate.jpg" alt="赞赏码" style="max-width: 180px; border-radius: 5px;">
   `;
   // document.getElementById('go-to-options').insertAdjacentElement('afterend', appreciateArea);
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
@@ -236,7 +239,6 @@ document.addEventListener('DOMContentLoaded', function() {
       adskipUtils.logDebug('开始更新用户统计数据');
       const userPayload = await getUserPayload();
       adskipUtils.logDebug('请求API的用户信息载荷', userPayload);
-
       const response = await fetch(USER_STATS_API_URL, {
         method: 'POST',
         headers: USER_STATS_HEADERS,
@@ -307,26 +309,42 @@ document.addEventListener('DOMContentLoaded', function() {
       featureList.style.display = 'none';
     }
 
-    let statsHTML = `<h3>个人统计：</h3>`;
+    let statsHTML = `<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px;">
+      <div style="margin-top: 10px;"><strong>使用统计</strong></div>
+      <span style="font-size: 0.75em; color: #999;">更新时间: ${updateTimeDisplay}</span>
+    </div>`;
 
-    // 1. Account Type (assuming 'account_type' field from backend)
-    statsHTML += `<p>账号类型: ${data.account_type || 'N/A'}</p>`;
-
-    // 2. "今日可用的AI识别次数"
-    let availableRequests = 'N/A';
-    if (data.daily_gemini_limit !== undefined && data.daily_gemini_requests_used !== undefined) {
-      availableRequests = data.daily_gemini_limit - data.daily_gemini_requests_used;
+    // 1. 账号类型（包含试用期信息）
+    let accountTypeDisplay = data.account_type_display || '未知';
+    if (data.is_in_trial_period && data.trial_end_date) {
+      accountTypeDisplay += `<span style="color: #28a745;"> (推广体验期至${data.trial_end_date})</span>`;
     }
-    statsHTML += `<p>今日可用的AI识别次数: ${availableRequests}/${data.daily_gemini_limit || 'N/A'}</p>`;
+    statsHTML += `<p style="margin: 5px 0;"><strong>账号类型：</strong> ${accountTypeDisplay}</p>`;
 
-    // 3. "累计节省的广告时间"
-    statsHTML += `<p>累计节省的广告时间: ${data.total_ads_duration_display || 'N/A'}</p>`;
+    // 2. 今日AI识别次数（分两行显示，避免过长）
+    const remaining = data.daily_gemini_limit - data.daily_gemini_requests_used;
+    statsHTML += `<p style="margin: 5px 0;"><strong>今日可用AI识别次数:</strong> <span style="color: ${remaining > 0 ? '#28a745' : '#dc3545'};">${remaining}/${data.daily_gemini_limit}</span></p>`;
 
-    // 4. "累计处理的含广告视频数"
-    statsHTML += `<p>累计处理的含广告视频数: ${data.total_videos_with_ads !== undefined ? data.total_videos_with_ads : 'N/A'}</p>`;
+    // 分解信息单独一行，更小字体
+    let limitBreakdown = [];
+    if (data.base_limit_from_level) {
+      limitBreakdown.push(`B站等级${data.base_limit_from_level}`);
+    }
+    if (data.trial_bonus && data.is_in_trial_period) {
+      limitBreakdown.push(`推广期${data.trial_bonus}`);
+    }
+    if (data.vip_bonus && data.is_vip_active) {
+      limitBreakdown.push(`年度大会员${data.vip_bonus}`);
+    }
 
-    // 显示更新时间
-    statsHTML += `<p style="font-size: 0.8em; color: #666;">数据更新时间: ${updateTimeDisplay}</p>`;
+    if (limitBreakdown.length > 0) {
+      statsHTML += `<p style="margin: 2px 0 5px 0; font-size: 0.85em; color: #666;">　　(${limitBreakdown.join(' + ')})</p>`;
+    }
+
+    // 3. 累计统计（紧凑显示）
+    statsHTML += `<p style="margin: 5px 0;"><strong>节省广告时间:</strong> ${data.total_ads_duration_display || 'N/A'}</p>`;
+    statsHTML += `<p style="margin: 5px 0;"><strong>处理含广告视频:</strong> ${data.total_videos_with_ads !== undefined ? data.total_videos_with_ads : 'N/A'}个</p>`;
+
 
     userStatsArea.innerHTML = statsHTML;
 

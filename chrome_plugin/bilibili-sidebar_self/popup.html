@@ -118,22 +118,23 @@
   <button id="go-to-options" class="button">打开设置页面</button>
 
   <div class="instructions" id="usage-instructions">
-    <p style="color:#666;">自动跳过哔哩哔哩视频中的切片广告内容。</p>
+    <p style="color:#666;">AI智能识别并自动跳过哔哩哔哩视频中的广告内容。</p>
     <h2>使用说明</h2>
-    <p>1. 访问B站视频页面时，会在右上角显示"⏩ 广告跳过"按钮</p>
-    <p>2. 点击按钮打开设置面板，可以输入广告时间段</p>
-    <p> 格式: <span class="format">开始秒数-结束秒数</span>，多个时间段用逗号分隔</p>
-    <p> 例如输入 <span class="format">22-33,114-514</span> 将自动跳过这两段广告</p>
-    <p>3. 设置完成后点击"更新跳过设置"按钮就能生效咯</p>
+    <p>1. <strong>功能入口：</strong>在B站视频页面右上角会显示"⏩ 广告跳过"悬浮按钮，包含当前视频的设置和基础功能</p>
+    <p>2. <strong>灵活设置：</strong>如果AI错误识别了广告区间，您可以手动拖拽进度条跳回，或在悬浮按钮菜单里临时切换手动跳过模式</p>
+    <p>3. <strong>识别次数：</strong>处理视频时可能不会消耗AI识别次数，这是因为该视频已在数据库中有识别记录</p>
+    <p>4. <strong>处理条件：</strong>仅对总时长30秒以上的视频进行AI识别处理，短视频会被自动跳过</p>
+    <p>5. <strong>本地缓存：</strong>重复观看同一个视频不会消耗识别次数，识别结果会保存在本地浏览器中</p>
   </div>
 
   <ul class="feature-list" id="feature-list">
-    <li>自动记住每个视频的广告时间段</li>
-    <li>支持通过URL分享广告跳过设置</li>
+    <li>AI智能识别视频中的广告片段</li>
+    <li>自动记住每个视频的处理结果</li>
+    <li>支持手动设置和临时关闭功能</li>
     <li>适用于所有B站视频页面</li>
   </ul>
 
-  <div id="user-stats-area" style="margin-bottom: 20px; font-size: 14px;">
+  <div id="user-stats-area" style="margin-bottom: 10px; font-size: 14px;">
     <!-- 用户信息将动态填充在这里 -->
   </div>
 

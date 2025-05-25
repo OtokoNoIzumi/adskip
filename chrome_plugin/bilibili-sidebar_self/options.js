@@ -1,6 +1,32 @@
 // 全局变量
 let whitelistData = [];
 
+// 检查是否应该在options页面显示使用说明
+async function checkAndShowUsageInstructions() {
+  try {
+    const videoCount = await adskipStorage.getLocalVideosProcessedCount();
+    const instructionsElement = document.getElementById('options-usage-instructions');
+
+    if (instructionsElement) {
+      // 相反的条件：当处理视频数大于等于3时显示说明（与popup.js相反）
+      if (videoCount >= 3) {
+        instructionsElement.style.display = 'block';
+        adskipUtils.logDebug('在options页面显示使用说明，当前处理视频数:', videoCount);
+      } else {
+        instructionsElement.style.display = 'none';
+        adskipUtils.logDebug('在options页面隐藏使用说明，当前处理视频数:', videoCount);
+      }
+    }
+  } catch (error) {
+    adskipUtils.logDebug('获取本地视频数量失败', error);
+    // 出错时不显示说明
+    const instructionsElement = document.getElementById('options-usage-instructions');
+    if (instructionsElement) {
+      instructionsElement.style.display = 'none';
+    }
+  }
+}
+
 // 检查管理员状态并更新UI
 function checkAdminStatus() {
   adskipStorage.checkAdminStatus().then(isAdmin => {
@@ -145,6 +171,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 检查管理员状态
   checkAdminStatus();
+
+  // 检查是否显示使用说明（相反的条件）
+  checkAndShowUsageInstructions();
 
   // 检查是否有标签切换请求
   chrome.storage.local.get('adskip_open_tab', function(result) {

@@ -384,6 +384,31 @@
     .admin-btn.admin-logout:hover {
       background-color: #555;
     }
+
+    /* 使用说明样式 */
+    .usage-instructions {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      border-left: 4px solid #FB7299;
+    }
+
+    .usage-instructions h2 {
+      color: #FB7299;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+
+    .usage-instructions p {
+      margin: 8px 0;
+      line-height: 1.6;
+    }
+
+    .usage-instructions strong {
+      color: #FB7299;
+    }
   </style>
 </head>
 <body>
@@ -461,6 +486,17 @@
           <br>• <strong>前[X]%</strong> 时间段内进入将自动跳至广告结尾
           <br>• 如果想回看广告，就要把值设置低一些</p>
       </div>
+    </div>
+
+    <!-- 使用说明区域（条件显示） -->
+    <div class="usage-instructions" id="options-usage-instructions" style="display: none;">
+      <h2>使用说明</h2>
+      <p style="color:#666;">AI智能识别并自动跳过哔哩哔哩视频中的广告内容。</p>
+      <p>1. <strong>功能入口：</strong>在B站视频页面右上角会显示"⏩ 广告跳过"悬浮按钮，包含当前视频的设置和基础功能</p>
+      <p>2. <strong>灵活设置：</strong>如果AI错误识别了广告区间，您可以手动拖拽进度条跳回，或在悬浮按钮菜单里临时切换手动跳过模式</p>
+      <p>3. <strong>识别次数：</strong>处理视频时可能不会消耗AI识别次数，这是因为该视频已在数据库中有识别记录</p>
+      <p>4. <strong>处理条件：</strong>仅对总时长30秒以上的视频进行AI识别处理，短视频会被自动跳过</p>
+      <p>5. <strong>本地缓存：</strong>重复观看同一个视频不会消耗识别次数，识别结果会保存在本地浏览器中</p>
     </div>
   </div>
 
