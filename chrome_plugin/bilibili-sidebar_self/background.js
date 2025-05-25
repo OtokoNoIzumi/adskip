@@ -195,7 +195,9 @@ async function getBilibiliUserInfo() {
       isLoggedIn: userInfo.isLogin,
       username: userInfo.uname || '未知用户',
       uid: userInfo.mid,
-      level: userInfo.level_info?.current_level || 0
+      level: userInfo.level_info?.current_level || 0,
+      vipType: userInfo.vipType || 0,
+      vipDueDate: userInfo.vipDueDate || 0
     };
   } catch (error) {
     console.error('[AdSkip] 获取B站用户信息失败:', error);

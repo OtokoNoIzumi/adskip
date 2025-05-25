@@ -733,8 +733,8 @@ async function sendDetectionRequest(subtitleData) {
 
         const signedData = signRequest(requestData);
 
-        // const apiUrl = 'https://izumilife.xyz:3000/api/detect';
-        const apiUrl = 'https://localhost:3000/api/detect';
+        const apiUrl = 'https://izumilife.xyz:3000/api/detect';
+        // const apiUrl = 'https://localhost:3000/api/detect';
 
         adskipUtils.logDebug('[AdSkip广告检测] - 发送请求，签名：', signedData);
 
@@ -959,6 +959,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         username: "guest",
                         uid: 0,
                         level: 0,
+                        vipType: 0,
+                        vipDueDate: 0,
                         error: error.message
                     });
                 });
@@ -972,6 +974,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 username: "guest",
                 uid: 0,
                 level: 0,
+                vipType: 0,
+                vipDueDate: 0,
                 error: "凭证服务未定义"
             });
         }

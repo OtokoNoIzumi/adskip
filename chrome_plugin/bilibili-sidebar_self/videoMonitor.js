@@ -64,24 +64,27 @@ function setupPlaybackTimeMonitor() {
 function setupAdSkipMonitor(adTimestamps) {
     adskipUtils.logDebug('设置广告跳过监控:', adTimestamps);
 
-    if (!adTimestamps || !Array.isArray(adTimestamps) || adTimestamps.length === 0) {
-        adskipUtils.logDebug('无效的广告时间段，不设置监控');
-        return;
-    }
-
-    // 更新当前生效的时间段
-    currentAdTimestamps = adTimestamps;
-
-    // 保存到本地存储
-    if (currentVideoId) {
-        adskipStorage.saveAdTimestampsForVideo(currentVideoId, adTimestamps);
-    }
-
-    // 清除旧监控
+    // 清除旧监控（无论是否有新的时间段）
     if (window.adSkipCheckInterval) {
         clearInterval(window.adSkipCheckInterval);
         adskipUtils.logDebug('清除旧的广告监控定时器', { throttle: 2000 });
         window.adSkipCheckInterval = null;
+    }
+
+    // 更新当前生效的时间段（包括空数组的情况）
+    currentAdTimestamps = adTimestamps || [];
+
+    // 保存到本地存储（包括空数组的情况）
+    if (currentVideoId) {
+        adskipStorage.saveAdTimestampsForVideo(currentVideoId, currentAdTimestamps);
+    }
+
+    // 如果没有有效的广告时间段，清空标记并返回
+    if (!adTimestamps || !Array.isArray(adTimestamps) || adTimestamps.length === 0) {
+        adskipUtils.logDebug('无有效广告时间段，已清空监控和标记');
+        // 清除进度条上的广告标记
+        markAdPositionsOnProgressBar();
+        return;
     }
 
     // 添加window unload事件监听，确保在页面卸载时清理资源

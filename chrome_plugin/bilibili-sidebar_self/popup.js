@@ -66,7 +66,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
 
   // API details for user stats
-  const USER_STATS_API_URL = "https://localhost:3000/api/user/stats";
+  // const USER_STATS_API_URL = "https://localhost:3000/api/user/stats";
+  const USER_STATS_API_URL = "https://izumilife.xyz:3000/api/user/stats";
   const USER_STATS_HEADERS = { "Content-Type": "application/json" };
 
   const userStatsArea = document.getElementById('user-stats-area');
@@ -110,7 +111,9 @@ document.addEventListener('DOMContentLoaded', function() {
             payload = {
               username: response.username || "guest",
               uid: response.uid,
-              level: response.level || 0
+              level: response.level || 0,
+              vipType: response.vipType || 0,
+              vipDueDate: response.vipDueDate || 0
             };
 
             // 保存UID到本地存储
@@ -132,7 +135,9 @@ document.addEventListener('DOMContentLoaded', function() {
               payload = {
                 username: biliUser.username || "guest",
                 uid: biliUser.uid,
-                level: biliUser.level || 0
+                level: biliUser.level || 0,
+                vipType: biliUser.vipType || 0,
+                vipDueDate: biliUser.vipDueDate || 0
               };
 
               // 保存UID到本地存储
