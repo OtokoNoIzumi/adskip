@@ -35,7 +35,17 @@ const STORAGE_KEYS = {
     ],
     // 所有保留的键（不会被数据清除操作删除的键）
     RESERVED_KEYS: function() {
-        return [...this.CONFIG_KEYS, ...this.WHITELIST_KEYS, this.VIDEO_WHITELIST];
+        return [
+            ...this.CONFIG_KEYS,
+            ...this.WHITELIST_KEYS,
+            this.VIDEO_WHITELIST,
+            this.USER_STATS,
+            this.USER_STATS_CACHE,
+            this.USER_UID,
+            this.LOCAL_VIDEOS_PROCESSED,
+            this.LAST_STATS_FETCH_TIME,
+            this.LAST_FETCH_VIDEOS_COUNT
+        ];
     }
 };
 
@@ -82,6 +92,7 @@ async function getVideoDataKeys() {
                 const videoPrefix = STORAGE_KEYS.VIDEO_PREFIX;
                 const videoKeys = allKeys.filter(key =>
                     key.startsWith(videoPrefix) &&
+                    !key.startsWith(`${videoPrefix}status_`) && // 排除状态记录键
                     !STORAGE_KEYS.RESERVED_KEYS().includes(key)
                 );
 
@@ -1068,7 +1079,7 @@ function removeKeys(keys) {
 
 /**
  * 加载视频ID白名单
- * @returns {Promise<Array>} 视频ID白名单数组
+ * @returns {Promise<Array>} 视频ID白名单数组（按添加时间倒序排列）
  */
 function loadVideoWhitelist() {
     return new Promise((resolve) => {
@@ -1076,8 +1087,16 @@ function loadVideoWhitelist() {
             if (result[STORAGE_KEYS.VIDEO_WHITELIST]) {
                 try {
                     const whitelist = JSON.parse(result[STORAGE_KEYS.VIDEO_WHITELIST]);
-                    adskipUtils.logDebug('已加载视频白名单', { data: whitelist, throttle: 5000 });
-                    resolve(whitelist);
+
+                    // 按添加时间倒序排列（最新的在前面）
+                    const sortedWhitelist = whitelist.sort((a, b) => {
+                        const timeA = (typeof a === 'string') ? 0 : (a.addedAt || a.updatedAt || 0);
+                        const timeB = (typeof b === 'string') ? 0 : (b.addedAt || b.updatedAt || 0);
+                        return timeB - timeA; // 倒序：新的在前
+                    });
+
+                    adskipUtils.logDebug('已加载视频白名单（按时间倒序）', { data: sortedWhitelist, throttle: 5000 });
+                    resolve(sortedWhitelist);
                 } catch (e) {
                     console.error('解析视频白名单失败', e);
                     resolve([]);

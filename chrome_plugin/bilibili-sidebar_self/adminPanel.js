@@ -415,9 +415,13 @@ function loadVideoData() {
                     const parsedData = JSON.parse(data);
 
                     const timestamps = parsedData.timestamps || [];
-                    const savedAt = parsedData.savedAt || Date.now();
+                    // 处理savedAt字段，将ISO字符串格式转换为时间戳
+                    let savedAt = parsedData.savedAt;
+                    if (typeof savedAt === 'string') {
+                        savedAt = new Date(savedAt).getTime();
+                    }
 
-                    if (Array.isArray(timestamps) && timestamps.length > 0) {
+                    if (Array.isArray(timestamps)) {
                         let videoTitle = '未知视频';
                         let uploader = '未知UP主';
 
@@ -430,20 +434,23 @@ function loadVideoData() {
                             videoId,
                             timestamps,
                             timeString: adskipUtils.timestampsToString(timestamps),
-                            displayTime: adskipUtils.formatTimestampsForDisplay(timestamps),
+                            displayTime: timestamps.length > 0 ? adskipUtils.formatTimestampsForDisplay(timestamps) : '无广告时间段',
                             videoTitle,
                             uploader,
                             savedAt
                         });
                     } else {
-                        adskipUtils.logDebug(`数据格式错误或空数据: ${key}`, { throttle: 5000 });
+                        // 只有当timestamps不是数组时才报错
+                        const hasTimestamps = parsedData.timestamps !== undefined;
+                        const timestampsType = typeof parsedData.timestamps;
+                        adskipUtils.logDebug(`跳过无效视频数据: ${key} (有timestamps字段: ${hasTimestamps}, 类型: ${timestampsType})`, { throttle: 5000 });
                     }
                 } catch (e) {
                     adskipUtils.logDebug(`解析存储数据失败: ${key}`, e);
                 }
             }
 
-            // 按保存时间排序，最新的在前面
+            // 按保存时间倒序排列（最新的在前面）
             videoData.sort((a, b) => b.savedAt - a.savedAt);
 
             // 更新视频数量统计
@@ -740,8 +747,7 @@ async function loadSubtitleInfo() {
 
             // 如果有字幕内容，显示预览
             if (subtitlePreview.subtitleContent && subtitlePreview.subtitleContent.length > 0) {
-                infoHTML += `
-                    <div class="subtitle-preview-header">字幕预览 (${subtitlePreview.availableLanguages[0] || ''})</div>
+                infoHTML += `                    <div class="subtitle-preview-header">字幕预览 (${subtitlePreview.availableLanguages[0] || ''})</div>
                     <div class="subtitle-preview-list">`;
 
                 subtitlePreview.subtitleContent.forEach(item => {
@@ -1036,3 +1042,4 @@ window.adskipAdmin = {
     loadCredentialInfo,
     loadSubtitleInfo
 };
+
