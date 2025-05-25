@@ -149,7 +149,7 @@ function createLinkGenerator() {
 
                 ${whitelistControls}
 
-                <p>输入广告时间段（格式: 开始-结束,开始-结束）</p>
+                <p>设置广告时间段（格式: 开始-结束,开始-结束）</p>
                 <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 22-33,114-514">
 
                 <div class="adskip-percentage-container">

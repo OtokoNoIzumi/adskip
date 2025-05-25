@@ -397,8 +397,8 @@ async function loadAdSkipPercentage() {
         chrome.storage.local.get(STORAGE_KEYS.PERCENTAGE, data => {
             // Chrome API错误是唯一必须处理的异常情况
             if (chrome.runtime.lastError) {
-                adskipUtils.logDebug(`加载广告跳过百分比配置失败: ${chrome.runtime.lastError.message}，使用默认值 50%`);
-                resolve(50);
+                adskipUtils.logDebug(`加载广告跳过百分比配置失败: ${chrome.runtime.lastError.message}，使用默认值 1%`);
+                resolve(1);
                 return;
             }
 
@@ -406,8 +406,8 @@ async function loadAdSkipPercentage() {
 
             // 简单的有效性检查，几乎不会触发，但作为最后保障
             if (isNaN(percent) || percent < 0 || percent > 100) {
-                adskipUtils.logDebug(`配置值无效或未设置，使用默认值 50%`);
-                resolve(50);
+                adskipUtils.logDebug(`配置值无效或未设置，使用默认值 1%`);
+                resolve(1);
             } else {
                 adskipUtils.logDebug(`已加载广告跳过百分比配置: ${percent}%`);
                 resolve(percent);
@@ -423,7 +423,7 @@ async function loadAdSkipPercentage() {
  */
 async function saveAdSkipPercentage(percentage) {
     // 简单转换，UI层已经确保了值的有效性
-    const percent = parseInt(percentage, 10) || 50; // 无效时使用默认值
+    const percent = parseInt(percentage, 10) || 1; // 无效时使用默认值
 
     adskipUtils.logDebug(`准备保存广告跳过百分比配置: ${percent}%`);
 
