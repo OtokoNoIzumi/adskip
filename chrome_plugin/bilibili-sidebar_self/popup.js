@@ -49,21 +49,117 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
   }
 
-  // 添加赞赏码区域（初始隐藏）
+  // 添加支持区域（初始完全隐藏，加载成功后再显示）
   const appreciateArea = document.createElement('div');
   appreciateArea.id = 'appreciate-area';
   appreciateArea.style.display = 'none';
   appreciateArea.style.textAlign = 'center';
   appreciateArea.style.marginTop = '8px';
-  appreciateArea.innerHTML = `
-    <div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>
-    <h3 style="margin: 5px 0 3px 0; font-size: 14px;">支持作者</h3>
-    <p style="font-size: 12px; color: #666; margin: 2px 0;">如果此插件对您有帮助，请赞赏支持！记得留下B站id</p>
-    <p style="font-size: 12px; color: #666; margin: 2px 0 5px 0;">B站年度大会员每月可以领免费的5B币券用来赞赏充电~</p>
-    <img src="https://otokonoizumi.github.io/appreciate.jpg" alt="赞赏码" style="max-width: 180px; border-radius: 5px;">
-  `;
-  // document.getElementById('go-to-options').insertAdjacentElement('afterend', appreciateArea);
+  // 初始为空，等待API加载后再填充内容
+  appreciateArea.innerHTML = '';
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
+
+  // 加载支持信息的API
+  const SUPPORT_INFO_API_URL = "https://izumilife.xyz:3000/api/getSupportPicUrl";
+  const SUPPORT_INFO_CACHE_KEY = 'bilibili_adskip_support_cache';
+  const SUPPORT_INFO_CACHE_DURATION = 48 * 60 * 60 * 1000; // 48小时
+
+  // 获取缓存的支持信息
+  async function getCachedSupportInfo() {
+    try {
+      // 清理旧的缓存键（如果存在）
+      chrome.storage.local.remove('adskip_support_info_cache');
+
+      const result = await new Promise(resolve => {
+        chrome.storage.local.get(SUPPORT_INFO_CACHE_KEY, resolve);
+      });
+
+      const cached = result[SUPPORT_INFO_CACHE_KEY];
+      if (cached && cached.timestamp && cached.data) {
+        const now = Date.now();
+        if (now - cached.timestamp < SUPPORT_INFO_CACHE_DURATION) {
+          console.log('使用缓存的支持信息');
+          return cached.data;
+        } else {
+          console.log('支持信息缓存已过期');
+        }
+      }
+      return null;
+    } catch (error) {
+      console.log('获取支持信息缓存失败:', error);
+      return null;
+    }
+  }
+
+  // 保存支持信息到缓存
+  async function cacheSupportInfo(data) {
+    try {
+      const cacheData = {
+        timestamp: Date.now(),
+        data: data
+      };
+      await new Promise(resolve => {
+        chrome.storage.local.set({[SUPPORT_INFO_CACHE_KEY]: cacheData}, resolve);
+      });
+      console.log('支持信息已缓存');
+    } catch (error) {
+      console.log('缓存支持信息失败:', error);
+    }
+  }
+
+  // 加载支持信息
+  async function loadSupportInfo() {
+    try {
+      // 先尝试使用缓存
+      let data = await getCachedSupportInfo();
+
+      if (!data) {
+        // 缓存不存在或已过期，请求API
+        console.log('请求支持信息API');
+        const response = await fetch(SUPPORT_INFO_API_URL);
+        data = await response.json();
+
+        // 缓存新数据
+        await cacheSupportInfo(data);
+      }
+
+      // 添加调试信息
+      console.log('支持信息API返回数据:', data);
+
+      if (data.enabled) {
+        // 构建完整内容
+        let contentHTML = `<div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>`;
+
+        if (data.supportPicUrl) {
+          console.log('显示图片模式, type:', data.supportType);
+          contentHTML += `
+            <h3 style="margin: 5px 0 3px 0; font-size: 14px;">${data.title}</h3>
+            <p style="font-size: 12px; color: #666; margin: 2px 0;">${data.description}</p>
+            ${data.supportType === 'donate' ? '<p style="font-size: 12px; color: #666; margin: 2px 0 5px 0;">B站年度大会员每月可以领免费的5B币券用来赞赏充电~</p>' : ''}
+            <img src="${data.supportPicUrl}" alt="${data.altText}" style="max-width: 180px; border-radius: 5px;">
+          `;
+        } else {
+          console.log('显示纯文字模式, type:', data.supportType);
+          contentHTML += `
+            <h3 style="margin: 5px 0 3px 0; font-size: 14px;">${data.title}</h3>
+            <p style="font-size: 12px; color: #666; margin: 2px 0 5px 0;">${data.description}</p>
+            <p style="font-size: 12px; color: #999; margin: 2px 0;">点击下方"个人主页"了解更多项目信息</p>
+          `;
+        }
+
+        // 设置内容并显示
+        appreciateArea.innerHTML = contentHTML;
+        appreciateArea.style.display = 'block';
+      } else {
+        // 如果禁用，保持隐藏
+        appreciateArea.style.display = 'none';
+      }
+    } catch (error) {
+      console.log('加载支持信息失败:', error);
+      // 失败时保持隐藏
+      appreciateArea.style.display = 'none';
+    }
+  }
 
   // API details for user stats
   // const USER_STATS_API_URL = "https://localhost:3000/api/user/stats";
@@ -216,6 +312,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const showAppreciate = await shouldShowAppreciateCode();
     if (showAppreciate && appreciateContainer) {
       appreciateContainer.style.display = 'block';
+      // 动态加载支持信息
+      await loadSupportInfo();
       adskipUtils.logDebug('显示赞赏码');
     } else if (appreciateContainer) {
       appreciateContainer.style.display = 'none';
