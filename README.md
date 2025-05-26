@@ -4,6 +4,11 @@
 
 > **注意：** 由于版本管理和模板的原因，核心业务代码位于 `./chrome_plugin/bilibili-sidebar_self` 目录内，外层目录不包含相关业务逻辑。
 
+## Chrome商店安装
+
+您可以通过以下链接在Chrome商店安装此扩展：
+[BiliBili 切片广告之友](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb)
+
 ## 功能特点
 
 - 🎯 自动检测和跳过视频中的广告
