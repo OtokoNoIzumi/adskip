@@ -457,4 +457,450 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Call the function to fetch and display user stats
   fetchAndDisplayUserStats();
+
+  // 添加分享功能区域
+  const shareContainer = document.createElement('div');
+  shareContainer.id = 'share-container';
+  shareContainer.style.marginTop = '15px';
+  shareContainer.style.textAlign = 'center';
+
+  const shareButton = document.createElement('button');
+  shareButton.textContent = '📤 分享给朋友';
+  shareButton.style.cssText = `
+    background-color: #FB7299;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    width: 100%;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(230, 73, 128, 0.3);
+  `;
+
+  shareButton.addEventListener('mouseenter', () => {
+    shareButton.style.transform = 'translateY(-2px)';
+    shareButton.style.boxShadow = '0 4px 12px rgba(230, 73, 128, 0.4)';
+  });
+
+  shareButton.addEventListener('mouseleave', () => {
+    shareButton.style.transform = 'translateY(0)';
+    shareButton.style.boxShadow = '0 2px 8px rgba(230, 73, 128, 0.3)';
+  });
+
+  const shareStatus = document.createElement('div');
+  shareStatus.id = 'share-status';
+  shareStatus.style.cssText = `
+    margin-top: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: none;
+  `;
+
+  shareContainer.appendChild(shareButton);
+  shareContainer.appendChild(shareStatus);
+
+  // 在版本信息前插入分享容器
+  const footerElement = document.querySelector('#footer-version');
+  footerElement.insertAdjacentElement('afterend', shareContainer);
+
+  /**
+   * 获取用于分享的用户统计数据 - 使用现有的popup.js方法
+   * @returns {Promise<Object>} 用户统计数据
+   */
+  async function getShareUserStats() {
+    try {
+      // 获取本地处理的视频数量
+      const localVideoCount = await adskipStorage.getLocalVideosProcessedCount();
+
+      // 获取缓存的用户统计数据
+      const cachedStats = await adskipStorage.getUserStatsCache();
+
+      // 获取用户信息 - 复用现有的getUserPayload方法
+      const userPayload = await getUserPayload();
+
+      // 计算节省时间 - 使用服务端数据优先，本地数据作为后备
+      let timeSavedDisplay = '0秒';
+      if (cachedStats && cachedStats.total_ads_duration_display) {
+        timeSavedDisplay = cachedStats.total_ads_duration_display;
+      } else {
+        // 后备计算：假设每个广告平均30秒
+        const avgAdDuration = 30;
+        const timeSavedSeconds = localVideoCount * avgAdDuration;
+        const timeSavedMinutes = Math.floor(timeSavedSeconds / 60);
+        const timeSavedHours = Math.floor(timeSavedMinutes / 60);
+
+        if (timeSavedHours > 0) {
+          timeSavedDisplay = `${timeSavedHours}小时${timeSavedMinutes % 60}分钟`;
+        } else if (timeSavedMinutes > 0) {
+          timeSavedDisplay = `${timeSavedMinutes}分钟`;
+        } else {
+          timeSavedDisplay = `${timeSavedSeconds}秒`;
+        }
+      }
+
+      return {
+        userName: userPayload.username || '匿名用户',
+        videoCount: cachedStats ? (cachedStats.total_videos_with_ads || localVideoCount) : localVideoCount,
+        timeSaved: timeSavedDisplay,
+        apiRequests: cachedStats ? cachedStats.total_gemini_requests : 0,
+        accountType: cachedStats ? cachedStats.account_type_display : '免费用户'
+      };
+    } catch (error) {
+      adskipUtils.logDebug('获取分享数据失败:', error);
+      return {
+        userName: '匿名用户',
+        videoCount: 0,
+        timeSaved: '0秒',
+        apiRequests: 0,
+        accountType: '免费用户'
+      };
+    }
+  }
+
+  /**
+   * 生成QR码数据URL
+   * @param {string} text - 要编码的文本
+   * @returns {Promise<string>} QR码的data URL
+   */
+  async function generateQRCode(text) {
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(text)}`;
+
+    try {
+      const response = await fetch(qrApiUrl);
+      const blob = await response.blob();
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      adskipUtils.logDebug('生成QR码失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 圆角矩形辅助函数
+   * @param {CanvasRenderingContext2D} ctx - Canvas上下文
+   * @param {number} x - x坐标
+   * @param {number} y - y坐标
+   * @param {number} width - 宽度
+   * @param {number} height - 高度
+   * @param {number} radius - 圆角半径
+   */
+  function roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  /**
+   * 生成分享图片 - 使用现代化设计
+   * @param {Object} userStats - 用户统计数据
+   * @returns {Promise<Blob>} 生成的图片Blob
+   */
+  async function generateShareImage(userStats) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 设置画布尺寸 - 更大气的尺寸
+    canvas.width = 800;
+    canvas.height = 1200;
+
+    // 使用更精致的渐变配色
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#ff7eb3'); // 更柔和的粉色
+    gradient.addColorStop(0.5, '#ff5c8d');
+    gradient.addColorStop(1, '#d83770'); // 更深的品红
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 添加现代感纹理
+    ctx.globalAlpha = 0.05;
+    for (let i = 0; i < 50; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const radius = Math.random() * 20 + 5;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // 重新规划布局 - 平衡分布
+    const sections = {
+      header: { start: 80, height: 200 },      // 顶部标题区域
+      content: { start: 320, height: 380 },    // 内容卡片区域
+      qr: { start: 780, height: 280 },         // 二维码区域
+      footer: { start: 1060, height: 120 }     // 底部区域
+    };
+
+    // 主标题区域 - 居中但不过分靠上
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+
+    // 主标题
+    ctx.font = 'bold 48px PingFang SC, Microsoft YaHei, sans-serif';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+    ctx.fillText('和我一起用新姿势逛B站吧~✨', canvas.width/2, sections.header.start + 45);
+
+    // 副标题
+    ctx.font = '500 36px PingFang SC, Microsoft YaHei, sans-serif';
+    ctx.shadowBlur = 6;
+    ctx.fillText('AI智能跳广告，防不胜防也能防', canvas.width/2, sections.header.start + 120);
+
+    // 功能描述
+    ctx.font = '300 30px PingFang SC, Microsoft YaHei, sans-serif';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillText('AI智能识别 • 自动跳过 • 免费畅享', canvas.width/2, sections.header.start + 170);
+
+    // 用户信息卡片 - 居中放置
+    const cardY = sections.content.start;
+    const cardHeight = sections.content.height;
+
+    // 卡片背景
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    roundRect(ctx, 80, cardY, canvas.width - 160, cardHeight, 25);
+    ctx.fill();
+
+    // 卡片标题
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 38px PingFang SC, Microsoft YaHei, sans-serif';
+    ctx.fillText(`🏆  ${userStats.userName} 的使用成就`, canvas.width/2, cardY + 90);
+
+    // 统计数据 - 调整为两行布局
+    ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
+    const stats = [
+      { icon: '📺', text: `处理含广告视频 ${userStats.videoCount} 个` },
+      { icon: '⏰', text: `累计节省时间 ${userStats.timeSaved}` }
+    ];
+
+    // 计算统计数据的垂直居中位置 - 两行数据重新计算间距
+    const statsStartY = cardY + 200;
+    const statsSpacing = 100; // 增加间距让两行数据更舒适
+
+    stats.forEach((stat, i) => {
+      const y = statsStartY + i * statsSpacing;
+
+      // 图标
+      ctx.font = '36px sans-serif';
+      ctx.fillText(stat.icon, canvas.width/2 - 180, y);
+
+      // 文字
+      ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
+      ctx.fillText(stat.text, canvas.width/2 + 20, y);
+    });
+
+    // 生成并绘制QR码 - 给予充足空间
+    const personalPageUrl = 'https://otokonoizumi.github.io/#projects';
+    const qrCodeDataUrl = await generateQRCode(personalPageUrl);
+
+    if (qrCodeDataUrl) {
+      const qrImg = new Image();
+      return new Promise((resolve) => {
+        qrImg.onload = () => {
+          // QR码区域 - 居中且有充足空间
+          const qrContainerY = sections.qr.start;
+          const qrSize = 160;
+
+          // 装饰性背景
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+          roundRect(ctx, (canvas.width - qrSize - 90) / 2, qrContainerY - 30, qrSize + 90, qrSize + 120, 30);
+          ctx.fill();
+
+          // QR码
+          ctx.shadowBlur = 0;
+          ctx.drawImage(qrImg, (canvas.width - qrSize) / 2, qrContainerY, qrSize, qrSize);
+
+          // QR码说明
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
+          ctx.fillText('扫码上车 告别广告', canvas.width/2, qrContainerY + qrSize + 60);
+
+          // 底部区域 - 简洁不拥挤
+          const footerY = sections.footer.start;
+
+          // 底部装饰线
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(200, footerY);
+          ctx.lineTo(canvas.width - 200, footerY);
+          ctx.stroke();
+
+          // 装饰点
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+          ctx.beginPath();
+          ctx.arc(canvas.width/2, footerY, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 底部文案 - 给予充足间距
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
+          ctx.fillText('♪(´▽｀) 守护您的观影情绪 (´∀｀)♡', canvas.width/2, footerY + 50);
+
+          // 项目名称
+          ctx.font = 'bold 36px PingFang SC, Microsoft YaHei, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+          ctx.fillText('B站切片广告之友', canvas.width/2, footerY + 100);
+
+          // // 小装饰
+          // ctx.font = '20px sans-serif';
+          // ctx.fillText('♪(´▽｀)', canvas.width/2 - 120, footerY + 125);
+          // ctx.fillText('(´∀｀)♡', canvas.width/2 + 120, footerY + 125);
+
+          canvas.toBlob(resolve, 'image/png', 0.9);
+        };
+        qrImg.src = qrCodeDataUrl;
+      });
+    } else {
+      // 如果QR码生成失败，直接返回不含QR码的图片
+      return new Promise(resolve => {
+        canvas.toBlob(resolve, 'image/png', 0.9);
+      });
+    }
+  }
+
+  /**
+   * 显示生成的分享图片
+   * @param {Blob} imageBlob - 图片Blob
+   */
+  async function displayShareImage(imageBlob) {
+    try {
+      // 创建图片URL
+      const imageUrl = URL.createObjectURL(imageBlob);
+
+      // 创建预览图片
+      const previewImg = document.createElement('img');
+      previewImg.src = imageUrl;
+      previewImg.style.cssText = `
+        max-width: 280px;
+        border-radius: 8px;
+        margin: 10px auto;
+        display: block;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      `;
+
+      // 创建下载链接
+      const downloadLink = document.createElement('a');
+      downloadLink.href = imageUrl;
+      downloadLink.download = `B站切片广告之友_分享图片_${new Date().getTime()}.png`;
+      downloadLink.style.cssText = `
+        display: inline-block;
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        margin: 8px 4px;
+        font-size: 12px;
+        transition: all 0.3s ease;
+      `;
+      downloadLink.textContent = '💾 保存到本地';
+
+      // 添加下载链接悬停效果
+      downloadLink.addEventListener('mouseenter', () => {
+        downloadLink.style.transform = 'translateY(-1px)';
+        downloadLink.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.3)';
+      });
+
+      downloadLink.addEventListener('mouseleave', () => {
+        downloadLink.style.transform = 'translateY(0)';
+        downloadLink.style.boxShadow = 'none';
+      });
+
+      // 移除图片点击保存功能
+      // previewImg.addEventListener('click', () => {
+      //   downloadLink.click();
+      // });
+
+      // 更新状态显示
+      shareStatus.innerHTML = '';
+      shareStatus.appendChild(previewImg);
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.style.textAlign = 'center';
+      actionsDiv.appendChild(downloadLink);
+
+      shareStatus.appendChild(actionsDiv);
+      shareStatus.style.display = 'block';
+      shareStatus.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
+      shareStatus.style.borderLeft = '3px solid #28a745';
+      shareStatus.style.color = '#155724';
+
+      const successText = document.createElement('div');
+      successText.innerHTML = '✅ 分享图片生成成功！';
+      successText.style.marginTop = '8px';
+      successText.style.fontSize = '12px';
+      shareStatus.appendChild(successText);
+
+      // 延长URL生命周期，但设置最长清理时间
+      setTimeout(() => {
+        URL.revokeObjectURL(imageUrl);
+      }, 300000); // 5分钟后清理
+
+    } catch (error) {
+      adskipUtils.logDebug('显示分享图片失败:', error);
+      shareStatus.textContent = '❌ 显示图片失败';
+      shareStatus.style.display = 'block';
+      shareStatus.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
+      shareStatus.style.borderLeft = '3px solid #dc3545';
+      shareStatus.style.color = '#721c24';
+    }
+  }
+
+  // 分享按钮事件监听
+  shareButton.addEventListener('click', async () => {
+    try {
+      shareButton.disabled = true;
+      shareButton.textContent = '🎨 生成中...';
+      shareStatus.style.display = 'block';
+      shareStatus.style.backgroundColor = 'rgba(23, 162, 184, 0.1)';
+      shareStatus.style.borderLeft = '3px solid #17a2b8';
+      shareStatus.style.color = '#0c5460';
+      shareStatus.textContent = '正在生成分享图片，请稍候...';
+
+      // 获取用户数据
+      const userStats = await getShareUserStats();
+
+      // 生成分享图片
+      const shareImage = await generateShareImage(userStats);
+
+      // 显示生成的图片
+      await displayShareImage(shareImage);
+
+    } catch (error) {
+      adskipUtils.logDebug('生成分享图片失败:', error);
+      shareStatus.style.display = 'block';
+      shareStatus.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
+      shareStatus.style.borderLeft = '3px solid #dc3545';
+      shareStatus.style.color = '#721c24';
+      shareStatus.textContent = '❌ 生成失败，请稍后重试';
+    } finally {
+      shareButton.disabled = false;
+      shareButton.textContent = '📤 分享给朋友';
+    }
+  });
 });
