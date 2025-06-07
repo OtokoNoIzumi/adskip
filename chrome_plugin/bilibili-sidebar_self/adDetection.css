@@ -58,6 +58,15 @@
   margin-right: 4px;
 }
 
+/* 次数耗尽状态 - 橙红色 */
+.adskip-button.quota-exhausted {
+  background-color: #ff6b6b !important;
+}
+.adskip-button.quota-exhausted::before {
+  content: "🚫";
+  margin-right: 4px;
+}
+
 /* 鼠标悬停效果 */
 .adskip-button:hover {
   opacity: 0.9 !important;

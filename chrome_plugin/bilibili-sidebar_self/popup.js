@@ -328,16 +328,33 @@ document.addEventListener('DOMContentLoaded', function() {
       updateStatsUI(cachedStats);
     }
 
-    // 3. 检查是否需要更新用户数据
-    const shouldUpdate = await adskipStorage.shouldUpdateUserStats();
-    adskipUtils.logDebug(`是否需要更新用户统计数据: ${shouldUpdate}`);
+    // 3. 检查次数耗尽与缓存数据的一致性
+    // 如果当日次数耗尽 且 缓存显示还有次数，则强制更新
+    let forceUpdateDueToQuotaInconsistency = false;
+    if (cachedStats && cachedStats.daily_gemini_limit && cachedStats.daily_gemini_requests_used !== undefined) {
+      const cachedRemaining = cachedStats.daily_gemini_limit - cachedStats.daily_gemini_requests_used;
+
+      // 检查是否处于次数耗尽状态
+      const quotaExhaustedStatus = await adskipStorage.getQuotaExhaustedStatus();
+      const today = new Date().toISOString().split('T')[0];
+      const isQuotaExhausted = quotaExhaustedStatus === today;
+
+      if (isQuotaExhausted && cachedRemaining > 0) {
+        adskipUtils.logDebug(`检测到数据不一致：当日次数已耗尽但缓存显示还有${cachedRemaining}次，强制更新`);
+        forceUpdateDueToQuotaInconsistency = true;
+      }
+    }
+
+    // 4. 检查是否需要更新用户数据（包含强制更新条件）
+    const shouldUpdate = forceUpdateDueToQuotaInconsistency || await adskipStorage.shouldUpdateUserStats();
+    adskipUtils.logDebug(`是否需要更新用户统计数据: ${shouldUpdate} (强制更新: ${forceUpdateDueToQuotaInconsistency})`);
 
     if (!shouldUpdate) {
       adskipUtils.logDebug('不需要更新用户统计数据，使用缓存数据');
       return; // 不需要更新，直接返回
     }
 
-    // 4. 需要更新，获取用户信息并请求API
+    // 5. 需要更新，获取用户信息并请求API
     try {
       adskipUtils.logDebug('开始更新用户统计数据');
       const userPayload = await getUserPayload();

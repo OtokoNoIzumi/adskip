@@ -22,6 +22,9 @@ const STORAGE_KEYS = {
     USER_UID: 'adskip_user_uid',
     LAST_STATS_FETCH_TIME: 'adskip_last_stats_fetch_time',  // 记录上次获取用户统计的时间
     LAST_FETCH_VIDEOS_COUNT: 'adskip_last_fetch_videos_count',  // 记录上次获取统计时的视频数
+    // 新增: 次数耗尽相关的键
+    QUOTA_EXHAUSTED_DATE: 'adskip_quota_exhausted_date',     // 次数耗尽日期
+    QUOTA_FAILED_VIDEOS: 'adskip_quota_failed_videos',       // 次数耗尽失败的视频缓存
 
     // 分类集合，用于过滤操作
     CONFIG_KEYS: [
@@ -44,7 +47,9 @@ const STORAGE_KEYS = {
             this.USER_UID,
             this.LOCAL_VIDEOS_PROCESSED,
             this.LAST_STATS_FETCH_TIME,
-            this.LAST_FETCH_VIDEOS_COUNT
+            this.LAST_FETCH_VIDEOS_COUNT,
+            this.QUOTA_EXHAUSTED_DATE,
+            this.QUOTA_FAILED_VIDEOS
         ];
     }
 };
@@ -1310,7 +1315,7 @@ async function getVideoStatus(videoId) {
 
                 try {
                     const data = JSON.parse(result[key]);
-                    adskipUtils.logDebug(`[AdSkip存储] 成功获取视频 ${videoId} 的状态: ${data.status}`);
+                    adskipUtils.logDebug(`[AdSkip存储] 成功获取视频 ${videoId} 的状态: ${data.status}，数据：`, data);
                     resolve(data.status);
                 } catch (e) {
                     adskipUtils.logDebug(`[AdSkip存储] 解析视频状态时发生异常: ${e.message}`);
@@ -1637,6 +1642,228 @@ async function shouldUpdateUserStats() {
     }
 }
 
+/**
+ * 强制刷新用户统计缓存，在次数耗尽等情况下使用
+ * 清除缓存数据并重置获取时间，使下次popup打开时重新获取最新数据
+ * @returns {Promise<boolean>} 操作是否成功
+ */
+async function forceRefreshUserStatsCache() {
+    try {
+        adskipUtils.logDebug('[AdSkip存储] 强制刷新用户统计缓存');
+
+        return new Promise(resolve => {
+            // 清除用户统计缓存和上次获取时间记录
+            chrome.storage.local.remove([
+                STORAGE_KEYS.USER_STATS_CACHE,
+                STORAGE_KEYS.LAST_STATS_FETCH_TIME,
+                STORAGE_KEYS.LAST_FETCH_VIDEOS_COUNT
+            ], () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug('[AdSkip存储] 用户统计缓存已强制刷新，popup下次打开将重新获取最新数据');
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 强制刷新用户统计缓存失败: ${chrome.runtime.lastError?.message}`);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 强制刷新用户统计缓存异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 保存次数耗尽状态到本地存储
+ * @param {string} date - 次数耗尽的日期 (YYYY-MM-DD格式)
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveQuotaExhaustedStatus(date) {
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.set({ [STORAGE_KEYS.QUOTA_EXHAUSTED_DATE]: date }, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug(`[AdSkip存储] 次数耗尽状态已保存，日期: ${date}`);
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 保存次数耗尽状态失败: ${chrome.runtime.lastError?.message}`);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 保存次数耗尽状态异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 获取次数耗尽状态
+ * @returns {Promise<string|null>} 次数耗尽的日期或null
+ */
+async function getQuotaExhaustedStatus() {
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.get(STORAGE_KEYS.QUOTA_EXHAUSTED_DATE, result => {
+                if (chrome.runtime.lastError || !result[STORAGE_KEYS.QUOTA_EXHAUSTED_DATE]) {
+                    resolve(null);
+                    return;
+                }
+                resolve(result[STORAGE_KEYS.QUOTA_EXHAUSTED_DATE]);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 获取次数耗尽状态异常: ${e.message}`);
+        return null;
+    }
+}
+
+/**
+ * 清除次数耗尽状态
+ * @returns {Promise<boolean>} 清除是否成功
+ */
+async function clearQuotaExhaustedStatus() {
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.remove(STORAGE_KEYS.QUOTA_EXHAUSTED_DATE, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug('[AdSkip存储] 次数耗尽状态已清除');
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 清除次数耗尽状态失败: ${chrome.runtime.lastError?.message}`);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 清除次数耗尽状态异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 检查是否应该清除次数耗尽状态（如果已经到了第二天）
+ * @returns {Promise<boolean>} 是否已清除状态
+ */
+async function checkAndClearQuotaIfNewDay() {
+    try {
+        const quotaDate = await getQuotaExhaustedStatus();
+        if (!quotaDate) {
+            return false; // 没有次数耗尽记录
+        }
+
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD格式
+
+        if (quotaDate !== today) {
+            // 不是同一天，清除次数耗尽状态
+            await clearQuotaExhaustedStatus();
+            // 同时清除次数耗尽失败视频缓存
+            await clearQuotaFailedCache();
+            adskipUtils.logDebug(`[AdSkip存储] 检测到新的一天 (${today})，已清除昨日的次数耗尽状态和失败视频缓存 (${quotaDate})`);
+            return true;
+        }
+
+        adskipUtils.logDebug(`[AdSkip存储] 仍在同一天 (${today})，次数耗尽状态保持`);
+        return false;
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 检查次数耗尽状态异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 添加视频到次数耗尽失败缓存
+ * @param {string} videoId - 视频ID
+ * @returns {Promise<boolean>} 添加是否成功
+ */
+async function addVideoToQuotaFailedCache(videoId) {
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.get(STORAGE_KEYS.QUOTA_FAILED_VIDEOS, result => {
+                const failedVideos = result[STORAGE_KEYS.QUOTA_FAILED_VIDEOS]
+                    ? JSON.parse(result[STORAGE_KEYS.QUOTA_FAILED_VIDEOS]) : [];
+
+                if (!failedVideos.includes(videoId)) {
+                    failedVideos.push(videoId);
+                    chrome.storage.local.set({
+                        [STORAGE_KEYS.QUOTA_FAILED_VIDEOS]: JSON.stringify(failedVideos)
+                    }, () => {
+                        const success = !chrome.runtime.lastError;
+                        if (success) {
+                            adskipUtils.logDebug(`[AdSkip存储] 视频 ${videoId} 已添加到次数耗尽失败缓存`);
+                        } else {
+                            adskipUtils.logDebug(`[AdSkip存储] 添加视频到失败缓存失败: ${chrome.runtime.lastError?.message}`);
+                        }
+                        resolve(success);
+                    });
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 视频 ${videoId} 已在失败缓存中`);
+                    resolve(true);
+                }
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 添加视频到失败缓存异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 检查视频是否在次数耗尽失败缓存中
+ * @param {string} videoId - 视频ID
+ * @returns {Promise<boolean>} 是否在缓存中
+ */
+async function checkVideoInQuotaFailedCache(videoId) {
+    try {
+        // 首先检查并清除过期的次数耗尽状态
+        await checkAndClearQuotaIfNewDay();
+
+        return new Promise(resolve => {
+            chrome.storage.local.get(STORAGE_KEYS.QUOTA_FAILED_VIDEOS, result => {
+                if (chrome.runtime.lastError || !result[STORAGE_KEYS.QUOTA_FAILED_VIDEOS]) {
+                    resolve(false);
+                    return;
+                }
+                try {
+                    const failedVideos = JSON.parse(result[STORAGE_KEYS.QUOTA_FAILED_VIDEOS]);
+                    const isInCache = failedVideos.includes(videoId);
+                    adskipUtils.logDebug(`[AdSkip存储] 检查视频 ${videoId} 是否在失败缓存中: ${isInCache}`);
+                    resolve(isInCache);
+                } catch (e) {
+                    adskipUtils.logDebug(`[AdSkip存储] 解析失败缓存时异常: ${e.message}`);
+                    resolve(false);
+                }
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 检查失败缓存异常: ${e.message}`);
+        return false;
+    }
+}
+
+/**
+ * 清除次数耗尽失败视频缓存
+ * @returns {Promise<boolean>} 清除是否成功
+ */
+async function clearQuotaFailedCache() {
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.remove(STORAGE_KEYS.QUOTA_FAILED_VIDEOS, () => {
+                const success = !chrome.runtime.lastError;
+                if (success) {
+                    adskipUtils.logDebug('[AdSkip存储] 次数耗尽失败视频缓存已清除');
+                } else {
+                    adskipUtils.logDebug(`[AdSkip存储] 清除失败视频缓存失败: ${chrome.runtime.lastError?.message}`);
+                }
+                resolve(success);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`[AdSkip存储] 清除失败视频缓存异常: ${e.message}`);
+        return false;
+    }
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -1717,5 +1944,17 @@ window.adskipStorage = {
     // 新增方法
     recordLastStatsFetch,
     getLastStatsFetchInfo,
-    shouldUpdateUserStats
+    shouldUpdateUserStats,
+
+    // 新增方法
+    saveQuotaExhaustedStatus,
+    getQuotaExhaustedStatus,
+    clearQuotaExhaustedStatus,
+    checkAndClearQuotaIfNewDay,
+    addVideoToQuotaFailedCache,
+    checkVideoInQuotaFailedCache,
+    clearQuotaFailedCache,
+
+    // 新增方法
+    forceRefreshUserStatsCache
 };

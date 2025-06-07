@@ -76,9 +76,24 @@ function createLinkGenerator() {
             return;
         }
 
-        // 如果面板已经存在，则移除它
+        // 检查点击来源
+        const isFromManualSetup = button.dataset.triggerSource === 'manual-setup';
+
+        // 如果面板已经存在，且不是来自手动设置的点击，则移除它
         if (document.getElementById('adskip-panel')) {
+            if (!isFromManualSetup) {
+                document.getElementById('adskip-panel').remove();
+                return;
+            }
+            // 如果是来自手动设置，移除现有面板但继续创建新面板
             document.getElementById('adskip-panel').remove();
+        }
+
+        // 检查是否为次数耗尽状态，但如果是来自手动设置则跳过特殊面板
+        const isQuotaExhausted = button.classList.contains('quota-exhausted');
+        if (isQuotaExhausted && !isFromManualSetup) {
+            // 显示次数耗尽状态的特殊面板
+            createQuotaExhaustedPanel();
             return;
         }
 
@@ -90,8 +105,6 @@ function createLinkGenerator() {
         // 检查UP主是否在白名单中及其状态
         const whitelistItem = await adskipStorage.loadUploaderWhitelist()
             .then(list => list.find(item => item.name === currentUploader));
-        // adskipUtils.logDebug(`adskipStorage.loadUploaderWhitelist(): ${JSON.stringify(await adskipStorage.loadUploaderWhitelist())}`);
-        // adskipUtils.logDebug(`whitelistItem: ${JSON.stringify(whitelistItem)}`);
         const isInWhitelist = !!whitelistItem;
         const isWhitelistEnabled = whitelistItem && whitelistItem.enabled !== false;
 
@@ -522,6 +535,153 @@ function createLinkGenerator() {
     document.body.appendChild(button);
 }
 
+/**
+ * 创建次数耗尽状态的引导面板
+ */
+function createQuotaExhaustedPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'adskip-panel';
+    panel.className = 'adskip-panel quota-exhausted-panel';
+
+    panel.innerHTML = `
+        <div class="adskip-panel-header">
+            <h3 class="adskip-title">🚫 AI识别次数已用完</h3>
+        </div>
+
+        <div class="quota-exhausted-content">
+            <div class="quota-message">
+                <p><strong>🔍 </strong>AI识别广告次数已达到每日限制</p>
+                <p><strong>⏰ </strong>请明天再试，次数会在每日0点重置</p>
+            </div>
+
+            <div class="quota-tips">
+                <h4>💡 使用建议：</h4>
+                <ol>
+                    <li><strong>查看次数使用情况：</strong>在浏览器插件管理页面，点击"B站 切片广告之友"图标，可以查看次数的构成和消耗情况</li>
+                    <li><strong>碰碰运气：</strong>如果您查看的新视频在服务器已有识别记录，可以不消耗次数直接加载广告跳过信息</li>
+                    <li><strong>提升B站等级：</strong>更高B站等级和年度大会员都会增加每日可用次数</li>
+                    <li><strong>手动设置：</strong>您仍可以手动设置广告时间段来跳过广告</li>
+                </ol>
+            </div>
+
+            <div class="quota-actions">
+                <button id="open-extension-popup" class="adskip-btn quota-btn">📊 查看次数详情</button>
+                <button id="manual-setup" class="adskip-btn quota-btn">⚙️ 手动设置广告</button>
+            </div>
+        </div>
+    `;
+
+    // 添加特殊样式
+    const style = document.createElement('style');
+    style.textContent = `
+        .quota-exhausted-panel {
+            background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
+            border: 2px solid #ff6b6b;
+            box-shadow: 0 4px 20px rgba(255, 107, 107, 0.15);
+        }
+
+        .quota-exhausted-content {
+            padding: 10px 0;
+        }
+
+        .quota-message {
+            background: rgba(255, 107, 107, 0.1);
+            border-left: 4px solid #ff6b6b;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .quota-message p {
+            margin: 5px 0;
+            color: #d63031;
+            font-size: 14px;
+        }
+
+        .quota-tips {
+            margin: 15px 0;
+        }
+
+        .quota-tips h4 {
+            color: #e17055;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        .quota-tips ol {
+            padding-left: 18px;
+            color: #2d3436;
+        }
+
+        .quota-tips li {
+            margin: 8px 0;
+            line-height: 1.4;
+            font-size: 13px;
+        }
+
+        .quota-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .quota-btn {
+            flex: 1;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .quota-btn:hover {
+            background: linear-gradient(135deg, #ff5252 0%, #ff3d3d 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 10px rgba(255, 107, 107, 0.3);
+        }
+
+        .quota-btn:active {
+            transform: translateY(0);
+        }
+    `;
+
+    if (!document.getElementById('quota-exhausted-styles')) {
+        style.id = 'quota-exhausted-styles';
+        document.head.appendChild(style);
+    }
+
+    // 添加事件监听器
+    panel.addEventListener('click', function(e) {
+        if (e.target.id === 'open-extension-popup') {
+            // 尝试打开扩展弹窗
+            if (chrome.runtime && chrome.runtime.openOptionsPage) {
+                chrome.runtime.openOptionsPage();
+            } else {
+                // 备用方案：提示用户手动操作
+                alert('请在浏览器右上角扩展图标中找到"B站 切片广告之友"并点击查看');
+            }
+        } else if (e.target.id === 'manual-setup') {
+            // 切换到手动设置模式
+            panel.remove();
+
+            // 不修改按钮状态，直接创建正常面板
+            // 复制正常面板创建逻辑，但不通过按钮点击触发
+            const button = document.getElementById('adskip-button');
+            if (button) {
+                // 触发正常的面板创建逻辑，但标记为来自手动设置
+                button.dataset.triggerSource = 'manual-setup';
+                button.click();
+                delete button.dataset.triggerSource;
+            }
+        }
+    });
+
+    document.body.appendChild(panel);
+}
+
 // 添加存储变更监听器
 chrome.storage.onChanged.addListener(function(changes, namespace) {
     if (namespace !== 'local') return;
@@ -564,8 +724,8 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     }
 });
 
-// 导出模块函数
+// 导出函数到全局
 window.adskipUI = {
-    createLinkGenerator,
-    updateStatusDisplay
+    updateStatusDisplay,
+    createLinkGenerator
 };
