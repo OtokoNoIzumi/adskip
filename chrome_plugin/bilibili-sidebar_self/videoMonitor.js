@@ -484,18 +484,22 @@ function setupUrlChangeMonitor() {
     // 记录上一次URL参数
     let lastBvid = new URLSearchParams(window.location.search).get('bvid') || '';
     let lastOid = new URLSearchParams(window.location.search).get('oid') || '';
+    // 监控分P参数变化以触发重新检查
+    let lastP = new URLSearchParams(window.location.search).get('p') || '1';
 
-    // 每秒检查一次URL参数变化（特别是播放列表模式下的bvid和oid参数）
+    // 每秒检查一次URL参数变化（特别是播放列表模式下的bvid和oid参数，以及分P参数）
     const paramCheckInterval = setInterval(function() {
         const currentParams = new URLSearchParams(window.location.search);
         const currentBvid = currentParams.get('bvid') || '';
         const currentOid = currentParams.get('oid') || '';
+        const currentP = currentParams.get('p') || '1';
 
-        // 检查播放列表参数是否变化
-        if (currentBvid !== lastBvid || currentOid !== lastOid) {
-            adskipUtils.logDebug(`播放列表参数变化: bvid ${lastBvid}->${currentBvid}, oid ${lastOid}->${currentOid}`);
+        // 检查播放列表参数或分P参数是否变化
+        if (currentBvid !== lastBvid || currentOid !== lastOid || currentP !== lastP) {
+            adskipUtils.logDebug(`URL参数变化: bvid ${lastBvid}->${currentBvid}, oid ${lastOid}->${currentOid}, p ${lastP}->${currentP}`);
             lastBvid = currentBvid;
             lastOid = currentOid;
+            lastP = currentP;
 
             // 刷新当前视频ID
             checkForVideoChange();
@@ -519,6 +523,7 @@ function setupUrlChangeMonitor() {
             const currentParams = new URLSearchParams(window.location.search);
             lastBvid = currentParams.get('bvid') || '';
             lastOid = currentParams.get('oid') || '';
+            lastP = currentParams.get('p') || '1';
 
             // 刷新当前视频ID
             const newVideoId = adskipUtils.getCurrentVideoId().id;

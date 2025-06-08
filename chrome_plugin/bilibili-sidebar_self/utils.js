@@ -176,12 +176,22 @@ function getCurrentVideoId() {
         return result;
     }
 
-    // 3. 标准视频页面处理
+    // 3. 标准视频页面处理（支持多P）
     const bvMatch = pathname.match(/\/video\/(BV[\w]+)/);
     if (bvMatch && bvMatch[1]) {
         result.bvid = bvMatch[1];
-        result.id = bvMatch[1];
-        logSuccess('BV ID', result.id, '路径');
+
+        // 检查分P参数
+        const pParam = urlParams.get('p');
+        if (pParam && pParam !== '1') {
+            // 如果有分P参数且不是第1P，将分P信息加入ID中
+            result.id = `${bvMatch[1]}_p${pParam}`;
+            logSuccess('BV ID (多P)', result.id, '路径+分P参数');
+        } else {
+            // 第1P或没有分P参数，使用原始BV ID
+            result.id = bvMatch[1];
+            logSuccess('BV ID', result.id, '路径');
+        }
         return result;
     }
 
@@ -451,6 +461,23 @@ function getTodayInEast8() {
     return `${year}-${month}-${day}`;
 }
 
+/**
+ * 检查当前是否是多P视频的非第1P
+ * @returns {boolean} 如果是多P视频的第2P或更高分P，返回true
+ */
+function isMultiPartVideoNonFirstPart() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pParam = urlParams.get('p');
+
+    // 如果有p参数且不是'1'，则认为是非第1P
+    if (pParam && pParam !== '1') {
+        logDebug(`检测到多P视频非第1P: p=${pParam}`);
+        return true;
+    }
+
+    return false;
+}
+
 // 导出模块函数
 window.adskipUtils = {
     logDebug,
@@ -464,5 +491,6 @@ window.adskipUtils = {
     findProgressBar,
     maskSensitiveInfo,
     isLogFiltered,
-    getTodayInEast8
+    getTodayInEast8,
+    isMultiPartVideoNonFirstPart
 };

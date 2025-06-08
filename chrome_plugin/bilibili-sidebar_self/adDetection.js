@@ -240,6 +240,25 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
     adskipUtils.logDebug(`[AdSkip广告检测] 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Result Type: ${urlAdSkipResult.type}`);
     // adskipUtils.logDebug(`[AdSkip广告检测] 开始处理视频状态. VideoID: ${videoId}, isInitialLoad: ${isInitialLoad}, URL Params Count: ${urlAdSkipResult.timestamps.length}`);
 
+    // 保守策略：如果是多P视频的非第1P，直接返回无广告状态
+    if (adskipUtils.isMultiPartVideoNonFirstPart()) {
+        adskipUtils.logDebug(`[AdSkip广告检测] 检测到多P视频非第1P，根据保守策略直接返回无广告状态`);
+
+        const noAdsResult = {
+            source: 'multi_part_conservative',
+            status: VIDEO_STATUS.NO_ADS,
+            skipDataProcessing: true,
+            currentAdTimestamps: [],
+            urlAdTimestamps: [],
+            statusData: {},
+            hasSubtitle: true, // 假设有字幕，避免影响其他逻辑
+            duration: 0
+        };
+
+        updateVideoStatus(VIDEO_STATUS.NO_ADS, {}, "多P视频非第1P（保守策略）");
+        return noAdsResult;
+    }
+
     // 1. 清理工作：清除上一个视频的自动检测定时器
     if (autoDetectTimerId) {
         clearTimeout(autoDetectTimerId);
@@ -355,9 +374,17 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
         const subtitleData = await getVideoSubtitleData(!isInitialLoad);
 
         // 判断bvid和videoId是否一致，或者videoId和epid是否一致（允许epid作为videoId的情况，不加'ep'前缀）
+        // 支持多P视频ID匹配（格式：BV1234567890_p2）
         let isVideoIdMatch = false;
-        if (subtitleData && subtitleData.bvid && subtitleData.bvid === videoId) {
-            isVideoIdMatch = true;
+        if (subtitleData && subtitleData.bvid) {
+            // 直接匹配BV ID
+            if (subtitleData.bvid === videoId) {
+                isVideoIdMatch = true;
+            } else if (videoId.includes('_p') && videoId.startsWith(subtitleData.bvid)) {
+                // 匹配多P格式：BV1234567890_p2
+                isVideoIdMatch = true;
+                adskipUtils.logDebug(`[AdSkip广告检测] 多P视频ID匹配成功: ${videoId} (基础BV: ${subtitleData.bvid})`);
+            }
         } else if (
             subtitleData && subtitleData.epid &&
             videoId === subtitleData.epid
@@ -421,7 +448,7 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
                 autoDetectTimerId = null; // 清除 ID
                 try {
                     const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
-                    // 再次确认视频未切换，支持bvid和epid两种情况
+                    // 再次确认视频未切换，支持bvid、epid和多P格式
                     let isVideoIdStillMatch = false;
                     if (currentVideoCheck === videoId) {
                         isVideoIdStillMatch = true;
@@ -437,6 +464,18 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
                             )
                         ) {
                             isVideoIdStillMatch = true;
+                        }
+                        // 支持多P视频检查：比较基础BV ID
+                        else if (videoId.includes('_p') && currentVideoCheck.includes('_p')) {
+                            const videoBaseBV = videoId.split('_p')[0];
+                            const currentBaseBV = currentVideoCheck.split('_p')[0];
+                            if (videoBaseBV === currentBaseBV) {
+                                // 基础BV相同但分P不同，说明切换了分P，不匹配
+                                adskipUtils.logDebug(`[AdSkip广告检测] 检测到分P切换: ${videoId} -> ${currentVideoCheck}`);
+                            } else {
+                                // 不同的视频
+                                adskipUtils.logDebug(`[AdSkip广告检测] 检测到视频切换: ${videoId} -> ${currentVideoCheck}`);
+                            }
                         }
                     }
 
@@ -712,7 +751,7 @@ async function sendDetectionRequest(subtitleData) {
         // 更新按钮状态和数据
         updateVideoStatus(newStatus, { adTimestamps: adTimestamps }, "检测成功");
 
-        // 保存状态和时间戳到本地存储
+        // 保存状态和时间戳到本地存储（使用包含分P信息的完整videoId）
         await adskipStorage.saveVideoStatus(videoId, newStatus);
         if (newStatus === VIDEO_STATUS.HAS_ADS) {
             await adskipStorage.saveAdTimestampsForVideo(videoId, adTimestamps);
