@@ -435,6 +435,22 @@ function maskSensitiveInfo(text) {
     return text.substring(0, 4) + '****' + text.substring(text.length - 4);
 }
 
+/**
+ * 获取东八区的今天日期（YYYY-MM-DD格式）
+ * 统一时区处理，避免时区不一致导致的问题
+ * @returns {string} 格式为YYYY-MM-DD的日期字符串
+ */
+function getTodayInEast8() {
+    const now = new Date();
+    // UTC+8:00，计算东八区时间
+    const east8 = new Date(now.getTime() + (8 - now.getTimezoneOffset() / 60) * 60 * 60 * 1000);
+    // 取东八区的年月日
+    const year = east8.getUTCFullYear();
+    const month = String(east8.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(east8.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // 导出模块函数
 window.adskipUtils = {
     logDebug,
@@ -447,5 +463,6 @@ window.adskipUtils = {
     findVideoPlayer,
     findProgressBar,
     maskSensitiveInfo,
-    isLogFiltered
+    isLogFiltered,
+    getTodayInEast8
 };

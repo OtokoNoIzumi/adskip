@@ -681,8 +681,9 @@ async function sendDetectionRequest(subtitleData) {
                  result.message.includes('Gemini权限不足') ||
                  result.message.includes('已达限制')
              )) {
-                 // 保存次数耗尽状态
-                 const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD格式
+                 // 保存次数耗尽状态（使用统一的东八区日期函数）
+                 const today = adskipUtils.getTodayInEast8();
+
                  await adskipStorage.saveQuotaExhaustedStatus(today);
 
                  // 将视频添加到次数耗尽失败缓存

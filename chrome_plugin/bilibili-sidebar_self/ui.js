@@ -500,8 +500,8 @@ function createLinkGenerator() {
             }
             // 重置按钮 - 清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                // 使用storage模块的集中式方法，获取视频数据键
-                adskipStorage.getVideoDataKeys().then(function(videoKeys) {
+                // 使用storage模块的集中式方法，获取视频数据和状态记录键
+                adskipStorage.getVideoDataAndStatusKeys().then(function(videoKeys) {
                     if (videoKeys.length > 0) {
                         if (confirm('确定要清空【所有】已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
                             adskipStorage.removeKeys(videoKeys).then(() => {

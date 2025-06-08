@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
+  // 简单统计：增加popup打开计数
+  incrementPopupOpenCount();
+
   // 为选项按钮添加点击事件
   document.getElementById('go-to-options').addEventListener('click', function() {
     // 打开选项页面
@@ -203,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
           const response = await chrome.tabs.sendMessage(currentTab.id, message);
           if (response && response.isLoggedIn && response.uid) {
-            adskipUtils.logDebug('B站用户信息获取成功', response);
+            console.log('B站用户信息获取成功', response);
             payload = {
               username: response.username || "guest",
               uid: response.uid,
@@ -216,10 +219,10 @@ document.addEventListener('DOMContentLoaded', function() {
             await adskipStorage.saveUserUID(response.uid);
             return payload;  // 成功获取B站信息，直接返回
           } else {
-            adskipUtils.logDebug('B站未登录或获取用户信息失败', response);
+            console.log('B站未登录或获取用户信息失败', response);
           }
         } catch (error) {
-          adskipUtils.logDebug('发送消息到内容脚本失败', error);
+          console.log('发送消息到内容脚本失败', error);
           // 尝试备用方式: 使用后台服务获取信息
           try {
             const biliUser = await chrome.runtime.sendMessage({
@@ -241,7 +244,7 @@ document.addEventListener('DOMContentLoaded', function() {
               return payload;  // 成功获取B站信息，直接返回
             }
           } catch (bgError) {
-            adskipUtils.logDebug('后台获取B站用户信息失败', bgError);
+            console.log('后台获取B站用户信息失败', bgError);
           }
         }
       }
@@ -249,13 +252,13 @@ document.addEventListener('DOMContentLoaded', function() {
       // 如果无法从B站获取，尝试使用本地存储的UID
       const storedUid = await adskipStorage.getUserUID();
       if (storedUid) {
-        adskipUtils.logDebug('使用本地存储的UID', storedUid);
+        console.log('使用本地存储的UID', storedUid);
         payload.uid = storedUid;
       } else {
-        adskipUtils.logDebug('无法获取UID，使用默认信息');
+        console.log('无法获取UID，使用默认信息');
       }
     } catch (error) {
-      adskipUtils.logDebug('获取用户信息出错', error);
+      console.log('获取用户信息出错', error);
     }
 
     return payload;
@@ -270,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const videoCount = await adskipStorage.getLocalVideosProcessedCount();
       return videoCount >= 10; // 当处理视频数大于等于10时显示赞赏码
     } catch (error) {
-      adskipUtils.logDebug('获取本地视频数量失败', error);
+      console.log('获取本地视频数量失败', error);
       return false; // 出错时不显示赞赏码
     }
   }
@@ -284,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const videoCount = await adskipStorage.getLocalVideosProcessedCount();
       return videoCount < 3; // 当处理视频数小于3时显示说明
     } catch (error) {
-      adskipUtils.logDebug('获取本地视频数量失败', error);
+      console.log('获取本地视频数量失败', error);
       return true; // 出错时保守处理，显示说明
     }
   }
@@ -297,7 +300,6 @@ document.addEventListener('DOMContentLoaded', function() {
       console.warn("User stats area not found in popup.html");
       return;
     }
-
     // 1. 检查本地视频数量，决定是否显示使用说明和特性列表
     const showInstructions = await shouldShowInstructions();
     if (!showInstructions) {
@@ -314,16 +316,16 @@ document.addEventListener('DOMContentLoaded', function() {
       appreciateContainer.style.display = 'block';
       // 动态加载支持信息
       await loadSupportInfo();
-      adskipUtils.logDebug('显示赞赏码');
+      console.log('显示赞赏码');
     } else if (appreciateContainer) {
       appreciateContainer.style.display = 'none';
-      adskipUtils.logDebug('隐藏赞赏码，当前处理视频数不足10个');
+      console.log('隐藏赞赏码，当前处理视频数不足10个');
     }
 
     // 2. 尝试获取缓存的用户统计数据
     let cachedStats = await adskipStorage.getUserStatsCache();
     if (cachedStats) {
-      adskipUtils.logDebug('使用缓存的用户统计数据', cachedStats);
+      console.log('使用缓存的用户统计数据', cachedStats);
       // 先展示缓存数据
       updateStatsUI(cachedStats);
     }
@@ -333,36 +335,57 @@ document.addEventListener('DOMContentLoaded', function() {
     let forceUpdateDueToQuotaInconsistency = false;
     if (cachedStats && cachedStats.daily_gemini_limit && cachedStats.daily_gemini_requests_used !== undefined) {
       const cachedRemaining = cachedStats.daily_gemini_limit - cachedStats.daily_gemini_requests_used;
-
-      // 检查是否处于次数耗尽状态
+      // 检查是否处于次数耗尽状态（修正时区问题，强制用东八区日期）
       const quotaExhaustedStatus = await adskipStorage.getQuotaExhaustedStatus();
-      const today = new Date().toISOString().split('T')[0];
+      // 用东八区时间获取今天的日期
+      function getTodayInEast8() {
+        const now = new Date();
+        // UTC+8:00
+        const east8 = new Date(now.getTime() + (8 - now.getTimezoneOffset() / 60) * 60 * 60 * 1000);
+        // 取东八区的年月日
+        const year = east8.getUTCFullYear();
+        const month = String(east8.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(east8.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      const today = getTodayInEast8();
       const isQuotaExhausted = quotaExhaustedStatus === today;
+      console.log("quotaExhaustedStatus:", quotaExhaustedStatus, "today:", today, "isQuotaExhausted:", isQuotaExhausted)
 
       if (isQuotaExhausted && cachedRemaining > 0) {
-        adskipUtils.logDebug(`检测到数据不一致：当日次数已耗尽但缓存显示还有${cachedRemaining}次，强制更新`);
+        console.log(`检测到数据不一致：当日次数已耗尽但缓存显示还有${cachedRemaining}次，强制更新`);
         forceUpdateDueToQuotaInconsistency = true;
       }
     }
 
     // 4. 检查是否需要更新用户数据（包含强制更新条件）
     const shouldUpdate = forceUpdateDueToQuotaInconsistency || await adskipStorage.shouldUpdateUserStats();
-    adskipUtils.logDebug(`是否需要更新用户统计数据: ${shouldUpdate} (强制更新: ${forceUpdateDueToQuotaInconsistency})`);
+    console.log(`是否需要更新用户统计数据: ${shouldUpdate} (强制更新: ${forceUpdateDueToQuotaInconsistency})`);
 
     if (!shouldUpdate) {
-      adskipUtils.logDebug('不需要更新用户统计数据，使用缓存数据');
+      console.log('不需要更新用户统计数据，使用缓存数据');
       return; // 不需要更新，直接返回
     }
 
     // 5. 需要更新，获取用户信息并请求API
     try {
-      adskipUtils.logDebug('开始更新用户统计数据');
+      console.log('开始更新用户统计数据');
       const userPayload = await getUserPayload();
-      adskipUtils.logDebug('请求API的用户信息载荷', userPayload);
+
+      // 添加本地统计计数器到请求中
+      const usageStats = await adskipStorage.getUsageStats();
+      const requestPayload = {
+        ...userPayload,
+        // 本地使用统计
+        local_popup_opens: usageStats.popupOpens,
+        local_share_clicks: usageStats.shareClicks
+      };
+
+      console.log('请求API的用户信息载荷（含本地统计）', requestPayload);
       const response = await fetch(USER_STATS_API_URL, {
         method: 'POST',
-        headers: USER_STATS_HEADERS,
-        body: JSON.stringify(userPayload)
+        headers: USER_STATS_HEADERS, // 恢复原状，去掉 connection:close
+        body: JSON.stringify(requestPayload)
       });
 
       if (!response.ok) {
@@ -381,7 +404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 更新UI
         updateStatsUI(data);
 
-        adskipUtils.logDebug('用户统计数据更新成功');
+        console.log('用户统计数据更新成功');
       } else {
         throw new Error("API response indicates failure or malformed data: " + JSON.stringify(data));
       }
@@ -418,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 获取缓存时间显示
     const updateTimeDisplay = data.updateTimeDisplay || (data._updateTimeDisplay || "尚未更新");
-    adskipUtils.logDebug('数据更新时间', updateTimeDisplay);
+    console.log('数据更新时间', updateTimeDisplay);
 
     // Hide usage instructions when stats are successfully displayed
     if (usageInstructions) {
@@ -447,6 +470,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 分解信息单独一行，更小字体
     let limitBreakdown = [];
+    if (data.accountType<2) {
     if (data.base_limit_from_level) {
       limitBreakdown.push(`B站等级${data.base_limit_from_level}`);
     }
@@ -455,6 +479,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (data.vip_bonus && data.is_vip_active) {
       limitBreakdown.push(`年度大会员${data.vip_bonus}`);
+    }
     }
 
     if (limitBreakdown.length > 0) {
@@ -567,7 +592,7 @@ document.addEventListener('DOMContentLoaded', function() {
         accountType: cachedStats ? cachedStats.account_type_display : '免费用户'
       };
     } catch (error) {
-      adskipUtils.logDebug('获取分享数据失败:', error);
+      console.log('获取分享数据失败:', error);
       return {
         userName: '匿名用户',
         videoCount: 0,
@@ -595,7 +620,7 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsDataURL(blob);
       });
     } catch (error) {
-      adskipUtils.logDebug('生成QR码失败:', error);
+      console.log('生成QR码失败:', error);
       return null;
     }
   }
@@ -879,12 +904,24 @@ document.addEventListener('DOMContentLoaded', function() {
       }, 300000); // 5分钟后清理
 
     } catch (error) {
-      adskipUtils.logDebug('显示分享图片失败:', error);
+      console.log('显示分享图片失败:', error);
       shareStatus.textContent = '❌ 显示图片失败';
       shareStatus.style.display = 'block';
       shareStatus.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
       shareStatus.style.borderLeft = '3px solid #dc3545';
       shareStatus.style.color = '#721c24';
+    }
+  }
+
+    /**
+   * 简单统计：增加popup打开计数
+   */
+  async function incrementPopupOpenCount() {
+    try {
+      await adskipStorage.incrementPopupOpenCount();
+      console.log('Popup打开计数已增加');
+    } catch (error) {
+      console.log(`增加popup打开计数失败: ${error.message}`);
     }
   }
 
@@ -899,6 +936,9 @@ document.addEventListener('DOMContentLoaded', function() {
       shareStatus.style.color = '#0c5460';
       shareStatus.textContent = '正在生成分享图片，请稍候...';
 
+      // 简单统计：增加分享按钮点击计数
+      await adskipStorage.incrementShareClickCount();
+
       // 获取用户数据
       const userStats = await getShareUserStats();
 
@@ -909,12 +949,14 @@ document.addEventListener('DOMContentLoaded', function() {
       await displayShareImage(shareImage);
 
     } catch (error) {
-      adskipUtils.logDebug('生成分享图片失败:', error);
+      console.log('生成分享图片失败:', error);
       shareStatus.style.display = 'block';
       shareStatus.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
       shareStatus.style.borderLeft = '3px solid #dc3545';
       shareStatus.style.color = '#721c24';
       shareStatus.textContent = '❌ 生成失败，请稍后重试';
+
+
     } finally {
       shareButton.disabled = false;
       shareButton.textContent = '📤 分享给朋友';

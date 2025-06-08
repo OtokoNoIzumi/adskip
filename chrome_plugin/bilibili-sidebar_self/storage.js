@@ -25,6 +25,9 @@ const STORAGE_KEYS = {
     // 新增: 次数耗尽相关的键
     QUOTA_EXHAUSTED_DATE: 'adskip_quota_exhausted_date',     // 次数耗尽日期
     QUOTA_FAILED_VIDEOS: 'adskip_quota_failed_videos',       // 次数耗尽失败的视频缓存
+    // 新增: 用户行为统计相关的键
+    POPUP_OPEN_COUNT: 'adskip_popup_open_count',            // popup打开计数
+    SHARE_CLICK_COUNT: 'adskip_share_click_count',          // 分享按钮点击计数
 
     // 分类集合，用于过滤操作
     CONFIG_KEYS: [
@@ -49,7 +52,9 @@ const STORAGE_KEYS = {
             this.LAST_STATS_FETCH_TIME,
             this.LAST_FETCH_VIDEOS_COUNT,
             this.QUOTA_EXHAUSTED_DATE,
-            this.QUOTA_FAILED_VIDEOS
+            this.QUOTA_FAILED_VIDEOS,
+            this.POPUP_OPEN_COUNT,
+            this.SHARE_CLICK_COUNT
         ];
     }
 };
@@ -1752,7 +1757,7 @@ async function checkAndClearQuotaIfNewDay() {
             return false; // 没有次数耗尽记录
         }
 
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD格式
+        const today = adskipUtils.getTodayInEast8(); // 使用统一的东八区日期函数
 
         if (quotaDate !== today) {
             // 不是同一天，清除次数耗尽状态
@@ -1864,6 +1869,135 @@ async function clearQuotaFailedCache() {
     }
 }
 
+/**
+ * 增加popup打开计数
+ * @returns {Promise<number>} 当前计数值
+ */
+async function incrementPopupOpenCount() {
+    adskipUtils.logDebug(`[AdSkip存储] 增加popup打开计数`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.POPUP_OPEN_COUNT, (result) => {
+            const currentCount = result[STORAGE_KEYS.POPUP_OPEN_COUNT] || 0;
+            const newCount = currentCount + 1;
+
+            chrome.storage.local.set({
+                [STORAGE_KEYS.POPUP_OPEN_COUNT]: newCount
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`[AdSkip存储] 增加popup打开计数失败: ${chrome.runtime.lastError.message}`);
+                    resolve(currentCount);
+                    return;
+                }
+
+                adskipUtils.logDebug(`[AdSkip存储] popup打开计数已更新: ${newCount}`);
+                resolve(newCount);
+            });
+        });
+    });
+}
+
+/**
+ * 增加分享按钮点击计数
+ * @returns {Promise<number>} 当前计数值
+ */
+async function incrementShareClickCount() {
+    adskipUtils.logDebug(`[AdSkip存储] 增加分享按钮点击计数`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SHARE_CLICK_COUNT, (result) => {
+            const currentCount = result[STORAGE_KEYS.SHARE_CLICK_COUNT] || 0;
+            const newCount = currentCount + 1;
+
+            chrome.storage.local.set({
+                [STORAGE_KEYS.SHARE_CLICK_COUNT]: newCount
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`[AdSkip存储] 增加分享按钮点击计数失败: ${chrome.runtime.lastError.message}`);
+                    resolve(currentCount);
+                    return;
+                }
+
+                adskipUtils.logDebug(`[AdSkip存储] 分享按钮点击计数已更新: ${newCount}`);
+                resolve(newCount);
+            });
+        });
+    });
+}
+
+/**
+ * 获取使用统计数据
+ * @returns {Promise<Object>} 包含各种计数的对象
+ */
+async function getUsageStats() {
+    adskipUtils.logDebug(`[AdSkip存储] 获取使用统计数据`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get([
+            STORAGE_KEYS.POPUP_OPEN_COUNT,
+            STORAGE_KEYS.SHARE_CLICK_COUNT
+        ], (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`[AdSkip存储] 获取使用统计数据失败: ${chrome.runtime.lastError.message}`);
+                resolve({
+                    popupOpens: 0,
+                    shareClicks: 0
+                });
+                return;
+            }
+
+            const stats = {
+                popupOpens: result[STORAGE_KEYS.POPUP_OPEN_COUNT] || 0,
+                shareClicks: result[STORAGE_KEYS.SHARE_CLICK_COUNT] || 0
+            };
+
+            adskipUtils.logDebug(`[AdSkip存储] 使用统计数据:`, stats);
+            resolve(stats);
+        });
+    });
+}
+
+/**
+ * 获取所有视频数据相关的键（包括状态记录键）
+ * 用于彻底清除视频相关数据，包括广告时间戳和处理状态记录
+ * @returns {Promise<Array>} 过滤后的键名数组
+ */
+async function getVideoDataAndStatusKeys() {
+    adskipUtils.logDebug('开始获取所有视频数据键（包括状态记录）');
+
+    try {
+        return new Promise(resolve => {
+            chrome.storage.local.get(null, allData => {
+                if (chrome.runtime.lastError) {
+                    adskipUtils.logDebug(`获取所有存储键失败: ${chrome.runtime.lastError.message}`);
+                    resolve([]);
+                    return;
+                }
+
+                // 过滤出视频数据键（以STORAGE_KEYS.VIDEO_PREFIX开头，包括状态记录）
+                const allKeys = Object.keys(allData || {});
+                const videoPrefix = STORAGE_KEYS.VIDEO_PREFIX;
+                const videoKeys = allKeys.filter(key =>
+                    key.startsWith(videoPrefix) &&
+                    !STORAGE_KEYS.RESERVED_KEYS().includes(key)
+                );
+
+                adskipUtils.logDebug(`找到 ${allKeys.length} 个存储键，其中 ${videoKeys.length} 个是视频数据键（包括状态记录）`);
+
+                if (videoKeys.length > 0) {
+                    adskipUtils.logDebug(`视频数据键示例: ${videoKeys.slice(0, 3).join(', ')}${videoKeys.length > 3 ? '...' : ''}`);
+                }
+
+                resolve(videoKeys);
+            });
+        });
+    } catch (e) {
+        adskipUtils.logDebug(`获取视频数据键时发生异常: ${e.message}`);
+        console.error('获取视频数据键时发生异常:', e);
+        return [];
+    }
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -1911,6 +2045,7 @@ window.adskipStorage = {
 
     // 新添加的函数
     getVideoDataKeys,
+    getVideoDataAndStatusKeys,
     getConfigKeys,
     getWhitelistKeys,
     getReservedKeys,
@@ -1956,5 +2091,10 @@ window.adskipStorage = {
     clearQuotaFailedCache,
 
     // 新增方法
-    forceRefreshUserStatsCache
+    forceRefreshUserStatsCache,
+
+    // 新增: 用户行为统计相关函数
+    incrementPopupOpenCount,
+    incrementShareClickCount,
+    getUsageStats
 };
