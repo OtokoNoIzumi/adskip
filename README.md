@@ -36,7 +36,7 @@
 
 点击下方按钮直接从Chrome商店安装：
 
-[![安装扩展](https://storage.googleapis.com/web-dev-uploads/image/WlD8wC6g8khYWPJUsQceQkhXSlv1/UV4C4ybeBTsZt43U4xis.png)](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb)
+[Chrome商店安装地址](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb)
 
 ### 本地安装
 
