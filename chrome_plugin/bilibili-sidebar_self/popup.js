@@ -63,7 +63,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
 
   // 加载支持信息的API
-  const SUPPORT_INFO_API_URL = "https://izumilife.xyz:3000/api/getSupportPicUrl";
+  // const SUPPORT_INFO_API_URL = "https://izumilife.xyz:3000/api/getSupportPicUrl";
+  const SUPPORT_INFO_API_URL = "https://izumihostpab.life:3000/api/getSupportPicUrl";
   const SUPPORT_INFO_CACHE_KEY = 'bilibili_adskip_support_cache';
   const SUPPORT_INFO_CACHE_DURATION = 48 * 60 * 60 * 1000; // 48小时
 
@@ -166,7 +167,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // API details for user stats
   // const USER_STATS_API_URL = "https://localhost:3000/api/user/stats";
-  const USER_STATS_API_URL = "https://izumilife.xyz:3000/api/user/stats";
+  // const USER_STATS_API_URL = "https://izumilife.xyz:3000/api/user/stats";
+  const USER_STATS_API_URL = "https://izumihostpab.life:3000/api/user/stats";
   const USER_STATS_HEADERS = { "Content-Type": "application/json" };
 
   const userStatsArea = document.getElementById('user-stats-area');

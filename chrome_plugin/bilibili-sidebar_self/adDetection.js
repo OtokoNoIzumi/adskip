@@ -645,7 +645,8 @@ async function sendDetectionRequest(subtitleData) {
 
         const signedData = signRequest(requestData);
 
-        const apiUrl = 'https://izumilife.xyz:3000/api/detect';
+        // const apiUrl = 'https://izumilife.xyz:3000/api/detect';
+        const apiUrl = 'https://izumihostpab.life:3000/api/detect';
         // const apiUrl = 'https://localhost:3000/api/detect';
 
         adskipUtils.logDebug('[AdSkip广告检测] - 发送请求，签名：', signedData);
