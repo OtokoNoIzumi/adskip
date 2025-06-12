@@ -4,15 +4,15 @@
 
 *切片广告之友 - Chrome扩展*
 
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dicbndgaokkkafcehlfmkllbipeekfhi?label=Chrome%20商店版本&color=blue)](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb)
-[![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/dicbndgaokkkafcehlfmkllbipeekfhi?label=活跃用户&color=green)](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/dicbndgaokkkafcehlfmkllbipeekfhi?label=Chrome%20商店版本&color=blue)](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip)
+[![Chrome Web Store Users](https://img.shields.io/chrome-web-store/users/dicbndgaokkkafcehlfmkllbipeekfhi?label=活跃用户&color=green)](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip)
 [![GitHub stars](https://img.shields.io/github/stars/OtokoNoIzumi/adskip?color=yellow&label=GitHub%20Stars)](https://github.com/OtokoNoIzumi/adskip/stargazers)
 [![GitHub license](https://img.shields.io/github/license/OtokoNoIzumi/adskip?color=blue)](https://github.com/OtokoNoIzumi/adskip/blob/main/LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/OtokoNoIzumi/adskip)](https://github.com/OtokoNoIzumi/adskip/commits)
 
 **一个智能的Chrome扩展，用于自动检测和跳过哔哩哔哩(Bilibili)视频中的广告内容**
 
-[🏪 Chrome商店安装](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb) · [📋 使用说明](#使用说明) · [🛠️ 本地安装](#本地安装) · [❓ 问题反馈](https://github.com/OtokoNoIzumi/adskip/issues)
+[🏪 Chrome商店安装](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip) · [📋 使用说明](#使用说明) · [🛠️ 本地安装](#本地安装) · [❓ 问题反馈](https://github.com/OtokoNoIzumi/adskip/issues)
 
 </div>
 
@@ -36,7 +36,7 @@
 
 点击下方按钮直接从Chrome商店安装：
 
-[Chrome商店安装地址](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=item-share-cb)
+[Chrome商店安装地址](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip)
 
 ### 本地安装
 
@@ -115,6 +115,9 @@
 - [ ] **合作模式**: 解决合作视频下UP主信息获取问题
 - [x] **清理数据问题**: 清理数据时只清理了广告数据，没清理状态数据，导致无法更新数据——管理员模式清除所有数据是有效的
 - [x] **多P问题**: 目前假设广告只在1P这没问题，但似乎多P的同时间也被设置了广告区间——虽然没有外显，但会跳过
+- [ ] **BaseURL更新问题**: 解决服务器地址更换需要修改本地硬编码的网址的问题
+- [ ] **更直接的社交联系**: 一定情况的自动信件，邀请反馈和分享；关注可以增加次数
+- [ ] **排查为什么没日志**: 我自己的点开菜单没日志
 
 ### 后端优化 ⚙️
 - [ ] **数据库重构**: 迁移到ORM方法
