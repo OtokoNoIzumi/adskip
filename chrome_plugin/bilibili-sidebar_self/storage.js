@@ -5,6 +5,33 @@
 
 'use strict';
 
+// 开发环境优先配置 - 设置后会覆盖外部配置的baseURL
+// const PRIME_BASE_URL = null; // 开发时设置为 "https://localhost:3000" 等
+const PRIME_BASE_URL = "https://localhost:3000"; // 开发环境
+// const PRIME_BASE_URL = "https://izumilife.xyz:3000"; // 测试环境
+// const PRIME_BASE_URL = "https://izumihostpab.life:3000"; // 生产环境
+
+// 外部配置文件常量
+const EXTERNAL_CONFIG_URL = "https://otokonoizumi.github.io/config.json";
+const EXTERNAL_CONFIG_CACHE_KEY = 'bilibili_adskip_external_config_cache';
+const EXTERNAL_CONFIG_CACHE_DURATION = 60 * 60 * 1000; // 1小时
+const EXTERNAL_CONFIG_TIMEOUT = 5000; // 5秒超时
+
+// 默认配置（超时时使用）
+const DEFAULT_CONFIG = {
+    version: "1.0.0",
+    api: {
+        adSkipServerBaseURL: "https://localhost:3000"
+    },
+    version_hint: {
+        "default": [
+            "感谢您使用本插件！",
+            "AI智能识别，守护观影体验！",
+            "遇到问题可以在设置页面查看帮助信息。"
+        ]
+    }
+};
+
 // 存储键名常量定义
 const STORAGE_KEYS = {
     PREFIX: 'adskip_',
@@ -20,6 +47,7 @@ const STORAGE_KEYS = {
     USER_STATS_CACHE: 'adskip_user_stats_cache',
     LOCAL_VIDEOS_PROCESSED: 'adskip_local_videos_processed',
     USER_UID: 'adskip_user_uid',
+    USER_USERNAME: 'adskip_user_username',  // 新增: 用户名存储
     LAST_STATS_FETCH_TIME: 'adskip_last_stats_fetch_time',  // 记录上次获取用户统计的时间
     LAST_FETCH_VIDEOS_COUNT: 'adskip_last_fetch_videos_count',  // 记录上次获取统计时的视频数
     // 新增: 次数耗尽相关的键
@@ -48,6 +76,7 @@ const STORAGE_KEYS = {
             this.USER_STATS,
             this.USER_STATS_CACHE,
             this.USER_UID,
+            this.USER_USERNAME,  // 新增: 用户名也是保留键
             this.LOCAL_VIDEOS_PROCESSED,
             this.LAST_STATS_FETCH_TIME,
             this.LAST_FETCH_VIDEOS_COUNT,
@@ -1544,6 +1573,63 @@ async function getUserUID() {
 }
 
 /**
+ * 新增：保存用户名到本地，确保在非B站页面也能使用
+ * @param {string} username 用户名
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveUserUsername(username) {
+    if (!username || username === 'guest') {
+        adskipUtils.logDebug(`用户名为空或为guest，不保存`);
+        return false;
+    }
+
+    adskipUtils.logDebug(`保存用户名: ${username}`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.USER_USERNAME]: username
+        }, () => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`保存用户名失败: ${chrome.runtime.lastError.message}`);
+                resolve(false);
+                return;
+            }
+
+            adskipUtils.logDebug(`用户名已保存: ${username}`);
+            resolve(true);
+        });
+    });
+}
+
+/**
+ * 新增：获取保存的用户名
+ * @returns {Promise<string|null>} 用户名或null（如果不存在）
+ */
+async function getUserUsername() {
+    adskipUtils.logDebug(`获取保存的用户名`);
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.USER_USERNAME, (result) => {
+            if (chrome.runtime.lastError) {
+                adskipUtils.logDebug(`获取用户名失败: ${chrome.runtime.lastError.message}`);
+                resolve(null);
+                return;
+            }
+
+            const username = result[STORAGE_KEYS.USER_USERNAME];
+            if (!username) {
+                adskipUtils.logDebug(`未找到保存的用户名`);
+                resolve(null);
+                return;
+            }
+
+            adskipUtils.logDebug(`成功获取用户名: ${username}`);
+            resolve(username);
+        });
+    });
+}
+
+/**
  * 记录上次获取用户统计的时间和视频处理数量
  * @returns {Promise<boolean>} 保存是否成功
  */
@@ -1998,6 +2084,234 @@ async function getVideoDataAndStatusKeys() {
     }
 }
 
+// ==================== 统一配置管理 ====================
+
+/**
+ * 带超时的fetch函数
+ * @param {string} url - 请求URL
+ * @param {number} timeout - 超时时间（毫秒）
+ * @param {Object} options - fetch选项
+ * @returns {Promise<Response>} fetch响应
+ */
+async function fetchWithTimeout(url, timeout = 5000, options = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+}
+
+/**
+ * 获取缓存的外部配置
+ * @returns {Promise<Object|null>} 缓存的配置或null
+ */
+async function getCachedExternalConfig() {
+    try {
+        const result = await new Promise(resolve => {
+            chrome.storage.local.get(EXTERNAL_CONFIG_CACHE_KEY, resolve);
+        });
+
+        const cached = result[EXTERNAL_CONFIG_CACHE_KEY];
+        if (cached && cached.timestamp && cached.data) {
+            const now = Date.now();
+            if (now - cached.timestamp < EXTERNAL_CONFIG_CACHE_DURATION) {
+                console.log('[AdSkip存储] 使用缓存的外部配置');
+                return cached.data;
+            } else {
+                console.log('[AdSkip存储] 外部配置缓存已过期');
+            }
+        }
+        return null;
+    } catch (error) {
+        console.log('[AdSkip存储] 获取外部配置缓存失败:', error);
+        return null;
+    }
+}
+
+/**
+ * 保存外部配置到缓存
+ * @param {Object} data - 配置数据
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function cacheExternalConfig(data) {
+    try {
+        const cacheData = {
+            timestamp: Date.now(),
+            data: data
+        };
+        await new Promise(resolve => {
+            chrome.storage.local.set({[EXTERNAL_CONFIG_CACHE_KEY]: cacheData}, resolve);
+        });
+        console.log('[AdSkip存储] 外部配置已缓存');
+        return true;
+    } catch (error) {
+        console.log('[AdSkip存储] 缓存外部配置失败:', error);
+        return false;
+    }
+}
+
+/**
+ * 加载外部配置
+ * @returns {Promise<Object>} 外部配置对象
+ */
+async function loadExternalConfig() {
+    // 如果设置了PRIME_BASE_URL，仍然加载外部配置以获取version_hint等信息
+    // 但API base URL会被PRIME_BASE_URL覆盖
+    if (PRIME_BASE_URL) {
+        console.log('[AdSkip存储] 检测到PRIME_BASE_URL设置，API请求将使用开发环境地址:', PRIME_BASE_URL);
+    }
+
+    try {
+        // 先尝试使用缓存
+        let config = await getCachedExternalConfig();
+
+        if (!config) {
+            // 缓存不存在或已过期，请求API
+            console.log('[AdSkip存储] 请求外部配置文件');
+
+            try {
+                const response = await fetchWithTimeout(EXTERNAL_CONFIG_URL, EXTERNAL_CONFIG_TIMEOUT);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                config = await response.json();
+                console.log('[AdSkip存储] 外部配置加载成功:', config);
+
+                // 缓存新数据
+                await cacheExternalConfig(config);
+            } catch (fetchError) {
+                console.log('[AdSkip存储] 外部配置请求失败，使用默认配置:', fetchError.message);
+                config = DEFAULT_CONFIG;
+
+                // 缓存默认配置（较短的缓存时间）
+                const shortCacheData = {
+                    timestamp: Date.now(),
+                    data: config
+                };
+                await new Promise(resolve => {
+                    chrome.storage.local.set({[EXTERNAL_CONFIG_CACHE_KEY]: shortCacheData}, resolve);
+                });
+            }
+        }
+
+        return config;
+    } catch (error) {
+        console.log('[AdSkip存储] 加载外部配置失败，使用默认配置:', error);
+        return DEFAULT_CONFIG;
+    }
+}
+
+/**
+ * 动态构建API URL
+ * @param {Object} config - 外部配置对象
+ * @returns {Object} 包含各种API URL的对象
+ */
+function buildApiUrls(config) {
+    // 优先级：PRIME_BASE_URL > 外部配置 > 默认配置
+    let baseURL;
+
+    if (PRIME_BASE_URL) {
+        baseURL = PRIME_BASE_URL;
+        console.log('[AdSkip存储] 使用开发环境配置的PRIME_BASE_URL:', baseURL);
+    } else {
+        baseURL = config?.api?.adSkipServerBaseURL || DEFAULT_CONFIG.api.adSkipServerBaseURL;
+        console.log('[AdSkip存储] 使用外部配置或默认配置的baseURL:', baseURL);
+    }
+
+    return {
+        detect: `${baseURL}/api/detect`,
+        supportInfo: `${baseURL}/api/getSupportPicUrl`,
+        userStats: `${baseURL}/api/user/stats`
+    };
+}
+
+/**
+ * 获取API URLs（统一接口）
+ * @returns {Promise<Object>} 包含各种API URL的对象
+ */
+async function getApiUrls() {
+    try {
+        const config = await loadExternalConfig();
+        return buildApiUrls(config);
+    } catch (error) {
+        console.log('[AdSkip存储] 获取API URLs失败，使用默认配置:', error);
+        return buildApiUrls(DEFAULT_CONFIG);
+    }
+}
+
+/**
+ * 新增：同步服务端数据到本地存储
+ * @param {Object} serverData 服务端返回的统计数据
+ * @returns {Promise<boolean>} 同步是否成功
+ */
+async function syncServerDataToLocal(serverData) {
+    adskipUtils.logDebug(`[AdSkip存储] 开始同步服务端数据到本地`);
+
+    try {
+        const updates = {};
+        let hasUpdates = false;
+
+        // 获取当前本地数据
+        const currentUsageStats = await getUsageStats();
+
+        // 同步popup打开次数（使用较大值）
+        if (serverData.local_popup_opens !== undefined) {
+            const serverPopupOpens = serverData.local_popup_opens;
+            const localPopupOpens = currentUsageStats.popupOpens;
+
+            if (serverPopupOpens > localPopupOpens) {
+                updates[STORAGE_KEYS.POPUP_OPEN_COUNT] = serverPopupOpens;
+                hasUpdates = true;
+                adskipUtils.logDebug(`[AdSkip存储] 更新popup打开次数: ${localPopupOpens} -> ${serverPopupOpens}`);
+            }
+        }
+
+        // 同步分享按钮点击次数（使用较大值）
+        if (serverData.local_share_clicks !== undefined) {
+            const serverShareClicks = serverData.local_share_clicks;
+            const localShareClicks = currentUsageStats.shareClicks;
+
+            if (serverShareClicks > localShareClicks) {
+                updates[STORAGE_KEYS.SHARE_CLICK_COUNT] = serverShareClicks;
+                hasUpdates = true;
+                adskipUtils.logDebug(`[AdSkip存储] 更新分享点击次数: ${localShareClicks} -> ${serverShareClicks}`);
+            }
+        }
+
+        // 如果有更新，批量执行
+        if (hasUpdates) {
+            return new Promise(resolve => {
+                chrome.storage.local.set(updates, () => {
+                    const success = !chrome.runtime.lastError;
+                    if (success) {
+                        adskipUtils.logDebug(`[AdSkip存储] 服务端数据同步完成`);
+                    } else {
+                        adskipUtils.logDebug(`[AdSkip存储] 服务端数据同步失败: ${chrome.runtime.lastError?.message}`);
+                    }
+                    resolve(success);
+                });
+            });
+        } else {
+            adskipUtils.logDebug(`[AdSkip存储] 无需同步，本地数据已是最新`);
+            return true;
+        }
+    } catch (error) {
+        adskipUtils.logDebug(`[AdSkip存储] 同步服务端数据异常: ${error.message}`);
+        return false;
+    }
+}
+
 // 导出模块接口
 window.adskipStorage = {
     // 存储键常量
@@ -2075,6 +2389,8 @@ window.adskipStorage = {
     getUserStatsCache,
     saveUserUID,
     getUserUID,
+    saveUserUsername,     // 新增: 用户名相关方法
+    getUserUsername,      // 新增: 用户名相关方法
 
     // 新增方法
     recordLastStatsFetch,
@@ -2096,5 +2412,13 @@ window.adskipStorage = {
     // 新增: 用户行为统计相关函数
     incrementPopupOpenCount,
     incrementShareClickCount,
-    getUsageStats
+    getUsageStats,
+
+    // 新增: 统一配置管理
+    loadExternalConfig,
+    getApiUrls,
+    buildApiUrls,
+
+    // 新增: 服务端数据同步
+    syncServerDataToLocal  // 新增: 服务端数据同步方法
 };

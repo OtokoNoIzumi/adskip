@@ -467,15 +467,68 @@ function getTodayInEast8() {
  */
 function isMultiPartVideoNonFirstPart() {
     const urlParams = new URLSearchParams(window.location.search);
-    const pParam = urlParams.get('p');
+    const p = urlParams.get('p');
+    return p && parseInt(p) > 1;
+}
 
-    // 如果有p参数且不是'1'，则认为是非第1P
-    if (pParam && pParam !== '1') {
-        logDebug(`检测到多P视频非第1P: p=${pParam}`);
-        return true;
+/**
+ * 解析时间字符串，支持多种格式
+ * @param {string} timeStr 时间字符串，支持格式：
+ *   - 纯秒数：123
+ *   - 分:秒：3:39
+ *   - 时:分:秒：1:34:05
+ * @returns {number} 转换后的秒数，如果解析失败返回 NaN
+ */
+function parseTimeString(timeStr) {
+    if (!timeStr || typeof timeStr !== 'string') {
+        return NaN;
     }
 
-    return false;
+    const trimmed = timeStr.trim();
+
+    // 如果是纯数字，直接转换
+    if (/^\d+(\.\d+)?$/.test(trimmed)) {
+        return parseFloat(trimmed);
+    }
+
+    // 如果包含冒号，按时分秒格式解析
+    if (trimmed.includes(':')) {
+        const parts = trimmed.split(':').map(part => {
+            const num = parseInt(part, 10);
+            return isNaN(num) ? NaN : num;
+        });
+
+        // 检查是否有任何部分解析失败
+        if (parts.some(part => isNaN(part))) {
+            return NaN;
+        }
+
+        let totalSeconds = 0;
+
+        if (parts.length === 2) {
+            // MM:SS 格式
+            const [minutes, seconds] = parts;
+            if (minutes < 0 || seconds < 0 || seconds >= 60) {
+                return NaN;
+            }
+            totalSeconds = minutes * 60 + seconds;
+        } else if (parts.length === 3) {
+            // HH:MM:SS 格式
+            const [hours, minutes, seconds] = parts;
+            if (hours < 0 || minutes < 0 || seconds < 0 || minutes >= 60 || seconds >= 60) {
+                return NaN;
+            }
+            totalSeconds = hours * 3600 + minutes * 60 + seconds;
+        } else {
+            // 不支持的格式
+            return NaN;
+        }
+
+        return totalSeconds;
+    }
+
+    // 无法识别的格式
+    return NaN;
 }
 
 // 导出模块函数
@@ -492,5 +545,6 @@ window.adskipUtils = {
     maskSensitiveInfo,
     isLogFiltered,
     getTodayInEast8,
-    isMultiPartVideoNonFirstPart
+    isMultiPartVideoNonFirstPart,
+    parseTimeString
 };

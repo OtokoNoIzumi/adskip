@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B站 切片广告之友",
-  "version": "1.2.12",
+  "version": "1.3.0",
   "description": "AI智能识别并自动跳过B站视频中的切片广告，带来纯净的观影体验。",
   "background": {
     "service_worker": "background.js",

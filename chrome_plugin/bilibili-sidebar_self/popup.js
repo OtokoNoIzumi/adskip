@@ -62,11 +62,12 @@ document.addEventListener('DOMContentLoaded', function() {
   appreciateArea.innerHTML = '';
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
 
-  // 加载支持信息的API
-  // const SUPPORT_INFO_API_URL = "https://izumilife.xyz:3000/api/getSupportPicUrl";
-  const SUPPORT_INFO_API_URL = "https://izumihostpab.life:3000/api/getSupportPicUrl";
+  // API相关常量
   const SUPPORT_INFO_CACHE_KEY = 'bilibili_adskip_support_cache';
   const SUPPORT_INFO_CACHE_DURATION = 48 * 60 * 60 * 1000; // 48小时
+
+  // 注意：配置常量已移至 storage.js 中统一管理
+  // 这里的常量仅用于备注，实际配置从 adskipStorage 获取
 
   // 获取缓存的支持信息
   async function getCachedSupportInfo() {
@@ -111,28 +112,140 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // 注意：外部配置缓存函数已移至 storage.js 中统一管理
+
+  // 版本比较函数
+  function compareVersions(version1, version2) {
+    const v1Parts = version1.split('.').map(Number);
+    const v2Parts = version2.split('.').map(Number);
+
+    const maxLength = Math.max(v1Parts.length, v2Parts.length);
+
+    for (let i = 0; i < maxLength; i++) {
+      const v1Part = v1Parts[i] || 0;
+      const v2Part = v2Parts[i] || 0;
+
+      if (v1Part > v2Part) return 1;
+      if (v1Part < v2Part) return -1;
+    }
+
+    return 0;
+  }
+
+  // 获取版本提示信息
+  function getVersionHint(currentVersion, versionHints) {
+    try {
+      // 首先尝试完全匹配
+      if (versionHints[currentVersion]) {
+        console.log(`找到完全匹配的版本提示: ${currentVersion}`);
+        return versionHints[currentVersion];
+      }
+
+      // 获取配置中所有版本号（排除 default 和 degrade）
+      const configVersions = Object.keys(versionHints).filter(v =>
+        v !== 'default' && v !== 'degrade' && /^\d+\.\d+\.\d+$/.test(v)
+      );
+
+      if (configVersions.length === 0) {
+        console.log('配置中没有版本号，使用 default');
+        return versionHints.default || [];
+      }
+
+      // 比较当前版本与配置中的版本
+      let isNewerThanAll = true;
+      let isOlderThanAll = true;
+
+      for (const configVersion of configVersions) {
+        const comparison = compareVersions(currentVersion, configVersion);
+        if (comparison <= 0) isNewerThanAll = false;
+        if (comparison >= 0) isOlderThanAll = false;
+      }
+
+      if (isNewerThanAll) {
+        console.log(`当前版本 ${currentVersion} 比配置中所有版本都新，使用 default`);
+        return versionHints.default || [];
+      } else if (isOlderThanAll) {
+        console.log(`当前版本 ${currentVersion} 比配置中所有版本都旧，使用 degrade`);
+        return versionHints.degrade || [];
+      } else {
+        console.log(`当前版本 ${currentVersion} 在配置版本范围内，使用 default`);
+        return versionHints.default || [];
+      }
+    } catch (error) {
+      console.log('获取版本提示失败:', error);
+      return versionHints.default || [];
+    }
+  }
+
+  // 注意：外部配置和API URL管理函数已移至 storage.js 中统一管理
+
   // 加载支持信息
   async function loadSupportInfo() {
     try {
+      // 使用统一的外部配置加载函数
+      const externalConfig = await adskipStorage.loadExternalConfig();
+      let versionHintHTML = '';
+
+      if (externalConfig && externalConfig.version_hint) {
+        // 获取当前版本
+        const manifestData = chrome.runtime.getManifest();
+        const currentVersion = manifestData.version || '1.0.0';
+
+        // 获取版本提示数组
+        const versionHints = getVersionHint(currentVersion, externalConfig.version_hint);
+
+        if (versionHints && versionHints.length > 0) {
+          // 从数组中随机选择一条
+          const randomIndex = Math.floor(Math.random() * versionHints.length);
+          const selectedHint = versionHints[randomIndex];
+
+          console.log(`版本提示选择: 版本${currentVersion}, 提示: ${selectedHint}`);
+
+          // 构建版本提示HTML
+          versionHintHTML = `
+            <div style="margin: 8px 0; padding: 8px; background-color: rgba(255, 235, 59, 0.1); border-left: 3px solid #ffeb3b; border-radius: 4px;">
+              <div style="font-size: 12px; color: #e65100; font-weight: bold; margin-bottom: 4px;">💡 使用提示</div>
+              <div style="font-size: 12px; color: #333; line-height: 1.4;">${selectedHint}</div>
+            </div>
+          `;
+        }
+      }
+
+      // 使用统一的API URL获取函数
+      const apiUrls = await adskipStorage.getApiUrls();
+
       // 先尝试使用缓存
       let data = await getCachedSupportInfo();
 
       if (!data) {
         // 缓存不存在或已过期，请求API
-        console.log('请求支持信息API');
-        const response = await fetch(SUPPORT_INFO_API_URL);
-        data = await response.json();
+        console.log('请求支持信息API:', apiUrls.supportInfo);
+        try {
+          const response = await fetch(apiUrls.supportInfo, {
+            signal: AbortSignal.timeout(10000) // 10秒超时
+          });
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          data = await response.json();
 
-        // 缓存新数据
-        await cacheSupportInfo(data);
+          // 缓存新数据
+          await cacheSupportInfo(data);
+        } catch (fetchError) {
+          console.log('支持信息API请求失败:', fetchError.message);
+          // 如果API请求失败，使用一个默认的禁用状态
+          data = { enabled: false };
+        }
       }
 
       // 添加调试信息
       console.log('支持信息API返回数据:', data);
 
       if (data.enabled) {
-        // 构建完整内容
-        let contentHTML = `<div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>`;
+        // 构建完整内容 - 版本提示放在最前面
+        let contentHTML = versionHintHTML; // 版本提示在最前面
+
+        contentHTML += `<div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>`;
 
         if (data.supportPicUrl) {
           console.log('显示图片模式, type:', data.supportType);
@@ -155,8 +268,14 @@ document.addEventListener('DOMContentLoaded', function() {
         appreciateArea.innerHTML = contentHTML;
         appreciateArea.style.display = 'block';
       } else {
-        // 如果禁用，保持隐藏
-        appreciateArea.style.display = 'none';
+        // 如果禁用但有版本提示，只显示版本提示
+        if (versionHintHTML) {
+          appreciateArea.innerHTML = versionHintHTML;
+          appreciateArea.style.display = 'block';
+        } else {
+          // 如果都禁用，保持隐藏
+          appreciateArea.style.display = 'none';
+        }
       }
     } catch (error) {
       console.log('加载支持信息失败:', error);
@@ -166,9 +285,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // API details for user stats
-  // const USER_STATS_API_URL = "https://localhost:3000/api/user/stats";
-  // const USER_STATS_API_URL = "https://izumilife.xyz:3000/api/user/stats";
-  const USER_STATS_API_URL = "https://izumihostpab.life:3000/api/user/stats";
   const USER_STATS_HEADERS = { "Content-Type": "application/json" };
 
   const userStatsArea = document.getElementById('user-stats-area');
@@ -217,8 +333,9 @@ document.addEventListener('DOMContentLoaded', function() {
               vipDueDate: response.vipDueDate || 0
             };
 
-            // 保存UID到本地存储
+            // 保存UID和用户名到本地存储
             await adskipStorage.saveUserUID(response.uid);
+            await adskipStorage.saveUserUsername(response.username);
             return payload;  // 成功获取B站信息，直接返回
           } else {
             console.log('B站未登录或获取用户信息失败', response);
@@ -241,8 +358,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 vipDueDate: biliUser.vipDueDate || 0
               };
 
-              // 保存UID到本地存储
+              // 保存UID和用户名到本地存储
               await adskipStorage.saveUserUID(biliUser.uid);
+              await adskipStorage.saveUserUsername(biliUser.username);
               return payload;  // 成功获取B站信息，直接返回
             }
           } catch (bgError) {
@@ -251,11 +369,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
 
-      // 如果无法从B站获取，尝试使用本地存储的UID
+      // 如果无法从B站获取，尝试使用本地存储的UID和用户名
       const storedUid = await adskipStorage.getUserUID();
+      const storedUsername = await adskipStorage.getUserUsername();
+
       if (storedUid) {
         console.log('使用本地存储的UID', storedUid);
         payload.uid = storedUid;
+
+        if (storedUsername) {
+          console.log('使用本地存储的用户名', storedUsername);
+          payload.username = storedUsername;
+        }
       } else {
         console.log('无法获取UID，使用默认信息');
       }
@@ -267,29 +392,55 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /**
-   * 检查是否应该显示赞赏码，基于本地处理视频数
+   * 检查是否应该显示赞赏码，优先基于云端同步的视频数，本地数据作为备选
    * @returns {Promise<boolean>} 是否应该显示赞赏码
    */
   async function shouldShowAppreciateCode() {
     try {
-      const videoCount = await adskipStorage.getLocalVideosProcessedCount();
+      // 优先使用缓存的云端数据
+      const cachedStats = await adskipStorage.getUserStatsCache();
+      let videoCount = 0;
+
+      if (cachedStats && cachedStats.total_videos_with_ads !== undefined) {
+        // 使用云端同步的含广告视频数
+        videoCount = cachedStats.total_videos_with_ads;
+        console.log('使用云端同步的含广告视频数:', videoCount);
+      } else {
+        // 备选方案：使用本地处理视频数
+        videoCount = await adskipStorage.getLocalVideosProcessedCount();
+        console.log('使用本地处理视频数作为备选:', videoCount);
+      }
+
       return videoCount >= 10; // 当处理视频数大于等于10时显示赞赏码
     } catch (error) {
-      console.log('获取本地视频数量失败', error);
+      console.log('获取视频数量失败', error);
       return false; // 出错时不显示赞赏码
     }
   }
 
   /**
-   * 检查是否应该显示使用说明，基于本地处理视频数
+   * 检查是否应该显示使用说明，优先基于云端同步的视频数，本地数据作为备选
    * @returns {Promise<boolean>} 是否应该显示使用说明
    */
   async function shouldShowInstructions() {
     try {
-      const videoCount = await adskipStorage.getLocalVideosProcessedCount();
+      // 优先使用缓存的云端数据
+      const cachedStats = await adskipStorage.getUserStatsCache();
+      let videoCount = 0;
+
+      if (cachedStats && cachedStats.total_videos_with_ads !== undefined) {
+        // 使用云端同步的含广告视频数
+        videoCount = cachedStats.total_videos_with_ads;
+        console.log('使用云端同步的含广告视频数判断显示说明:', videoCount);
+      } else {
+        // 备选方案：使用本地处理视频数
+        videoCount = await adskipStorage.getLocalVideosProcessedCount();
+        console.log('使用本地处理视频数作为备选判断显示说明:', videoCount);
+      }
+
       return videoCount < 3; // 当处理视频数小于3时显示说明
     } catch (error) {
-      console.log('获取本地视频数量失败', error);
+      console.log('获取视频数量失败', error);
       return true; // 出错时保守处理，显示说明
     }
   }
@@ -369,9 +520,13 @@ document.addEventListener('DOMContentLoaded', function() {
       return; // 不需要更新，直接返回
     }
 
-    // 5. 需要更新，获取用户信息并请求API
+        // 5. 需要更新，获取用户信息并请求API
     try {
       console.log('开始更新用户统计数据');
+
+      // 使用统一的API URL获取函数
+      const apiUrls = await adskipStorage.getApiUrls();
+
       const userPayload = await getUserPayload();
 
       // 添加本地统计计数器到请求中
@@ -384,10 +539,13 @@ document.addEventListener('DOMContentLoaded', function() {
       };
 
       console.log('请求API的用户信息载荷（含本地统计）', requestPayload);
-      const response = await fetch(USER_STATS_API_URL, {
+      console.log('用户统计API URL:', apiUrls.userStats);
+
+      const response = await fetch(apiUrls.userStats, {
         method: 'POST',
-        headers: USER_STATS_HEADERS, // 恢复原状，去掉 connection:close
-        body: JSON.stringify(requestPayload)
+        headers: USER_STATS_HEADERS,
+        body: JSON.stringify(requestPayload),
+        signal: AbortSignal.timeout(15000) // 15秒超时
       });
 
       if (!response.ok) {
@@ -397,6 +555,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const data = await response.json();
       if (data.message === '获取成功' && data.uid) {
+        // 同步服务端数据到本地存储
+        await adskipStorage.syncServerDataToLocal(data);
+
         // 记录本次获取时间和视频处理数量
         await adskipStorage.recordLastStatsFetch();
 
@@ -588,10 +749,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
       return {
         userName: userPayload.username || '匿名用户',
-        videoCount: cachedStats ? (cachedStats.total_videos_with_ads || localVideoCount) : localVideoCount,
+        videoCount: cachedStats && cachedStats.total_videos_with_ads !== undefined ?
+                   cachedStats.total_videos_with_ads : localVideoCount,
         timeSaved: timeSavedDisplay,
-        apiRequests: cachedStats ? cachedStats.total_gemini_requests : 0,
-        accountType: cachedStats ? cachedStats.account_type_display : '免费用户'
+        apiRequests: cachedStats ? (cachedStats.total_gemini_requests || 0) : 0,
+        accountType: cachedStats ? (cachedStats.account_type_display || '免费用户') : '免费用户'
       };
     } catch (error) {
       console.log('获取分享数据失败:', error);
@@ -656,6 +818,19 @@ document.addEventListener('DOMContentLoaded', function() {
    * @returns {Promise<Blob>} 生成的图片Blob
    */
   async function generateShareImage(userStats) {
+    // 统计分享图片生成次数
+    try {
+      const workspace = 'adskip';
+      const baseUrl = 'https://api.counterapi.dev/v2';
+
+      // 递增总访问量（按官方文档格式）
+      await fetch(`${baseUrl}/${workspace}/share-post/up`, {
+        method: 'GET'
+      });
+    } catch (error) {
+      console.log('countapi统计失败:', error);
+    }
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -756,7 +931,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 生成并绘制QR码 - 给予充足空间
-    const personalPageUrl = 'https://otokonoizumi.github.io/#projects';
+    const personalPageUrl = 'https://otokonoizumi.github.io/?source=adskip-post#projects';
     const qrCodeDataUrl = await generateQRCode(personalPageUrl);
 
     if (qrCodeDataUrl) {

@@ -163,7 +163,7 @@ function createLinkGenerator() {
                 ${whitelistControls}
 
                 <p>设置广告时间段（格式: 开始-结束,开始-结束）</p>
-                <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 22-33,114-514">
+                                        <input id="adskip-input" type="text" value="${currentTimeString}" placeholder="例如: 22-33,114-514 或 03:39-1:34:05">
 
                 <div class="adskip-percentage-container">
                     <div class="adskip-percentage-label">广告跳过触发范围：前 <span id="adskip-percentage-value">${adSkipPercentage}</span>%</div>
@@ -460,10 +460,18 @@ function createLinkGenerator() {
 
                 try {
                     const adTimestamps = input.split(',').map(segment => {
-                        const [start, end] = segment.split('-').map(Number);
-                        if (isNaN(start) || isNaN(end) || start >= end) {
+                        const [startStr, endStr] = segment.split('-');
+                        if (!startStr || !endStr) {
+                            throw new Error('时间段格式无效');
+                        }
+
+                        const start = adskipUtils.parseTimeString(startStr);
+                        const end = adskipUtils.parseTimeString(endStr);
+
+                        if (isNaN(start) || isNaN(end) || start >= end || start < 0 || end < 0) {
                             throw new Error('时间格式无效');
                         }
+
                         return {
                             start_time: start,
                             end_time: end
@@ -473,7 +481,7 @@ function createLinkGenerator() {
                     adskipVideoMonitor.setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
                     updateStatusDisplay('设置已应用: ' + input, 'success');
                 } catch (e) {
-                    updateStatusDisplay('格式错误，请使用正确的格式：开始-结束,开始-结束', 'error');
+                    updateStatusDisplay('格式错误，请使用正确的格式：开始-结束,开始-结束 (支持秒数或时:分:秒格式)', 'error');
                 }
             });
 
