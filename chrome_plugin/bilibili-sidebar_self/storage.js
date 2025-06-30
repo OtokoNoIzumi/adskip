@@ -19,15 +19,152 @@ const EXTERNAL_CONFIG_TIMEOUT = 5000; // 5秒超时
 
 // 默认配置（超时时使用）
 const DEFAULT_CONFIG = {
-    version: "1.0.0",
+    version: "1.3.0",
     api: {
-        adSkipServerBaseURL: "https://localhost:3000"
+        adSkipServerBaseURL: "https://izumihostpab.life:3000"
     },
     version_hint: {
         "default": [
-            "感谢您使用本插件！",
-            "AI智能识别，守护观影体验！",
-            "遇到问题可以在设置页面查看帮助信息。"
+            "没有字幕的视频也可以手动添加广告时间",
+            "自己发布的视频默认不会进行AI识别",
+            "打开生成的分享链接不会消耗AI识别次数"
+        ]
+    },
+    "post_setting": {
+        "default": {
+            "main_title": "重新爱上了没广告的B站~✨",
+            "sub_title": "朋友们，这波操作你们学会了吗",
+            "sub_title_offset": 120,
+            "description": "今天也是没被广告打扰的一天",
+            "description_offset": 170,
+            "conversion_unit_minutes": 1,
+            "conversion_template": "✨ 相当于伸了{count}次懒腰",
+            "video_count_template": "📺 在 {count} 个含广告视频里进行了跃迁"
+        },
+        "ranges": [
+            {
+                "min_seconds": 0,
+                "max_seconds": 1200,
+                "options": [
+                    {
+                        "main_title": "舒展一下，放松心情~🧘‍♀️",
+                        "sub_title": "伸个懒腰的功夫",
+                        "sub_title_offset": 120,
+                        "description": "连伸懒腰都比看广告有意义",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 1,
+                        "conversion_template": "✨ 相当于伸了{count}次懒腰",
+                        "video_count_template": "🧘 享受了 {count} 个无广告视频"
+                    },
+                    {
+                        "main_title": "精致生活从这里开始🥚",
+                        "sub_title": "煮个完美溏心蛋的时间",
+                        "sub_title_offset": 120,
+                        "description": "连做早餐都比广告更温暖",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 1,
+                        "conversion_template": "✨ 相当于煮了{count}个完美溏心蛋",
+                        "video_count_template": "🥚 体验了 {count} 个清爽视频"
+                    }
+                ]
+            },
+            {
+                "min_seconds": 1201,
+                "max_seconds": 12000,
+                "options": [
+                    {
+                        "main_title": "二次元快乐时光！🎌",
+                        "sub_title": "追番党的胜利",
+                        "sub_title_offset": 120,
+                        "description": "没有广告打断的纯净观番体验",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 20,
+                        "conversion_template": "✨ 相当于追了{count}集新番",
+                        "video_count_template": "🎌 沉浸享受了 {count} 个视频"
+                    },
+                    {
+                        "main_title": "午后时光，惬意舒适☀️",
+                        "sub_title": "美好的小憩时间",
+                        "sub_title_offset": 120,
+                        "description": "连午休都比看广告更香甜",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 20,
+                        "conversion_template": "✨ 相当于舒服地午休了{count}次",
+                        "video_count_template": "☀️ 惬意观看了 {count} 个视频"
+                    },
+                    {
+                        "main_title": "洗去一身疲惫🛁",
+                        "sub_title": "舒爽沐浴时光",
+                        "sub_title_offset": 120,
+                        "description": "清爽的感觉，就像没有广告的B站",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 20,
+                        "conversion_template": "✨ 相当于冲了{count}个舒服的澡",
+                        "video_count_template": "🛁 舒爽看完了 {count} 个视频"
+                    }
+                ]
+            },
+            {
+                "min_seconds": 12001,
+                "max_seconds": 54000,
+                "options": [
+                    {
+                        "main_title": "电影院级观影体验🎬",
+                        "sub_title": "沉浸式大片时间",
+                        "sub_title_offset": 120,
+                        "description": "没有广告的观影才是真正的享受",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 90,
+                        "conversion_template": "✨ 相当于看了{count}部电影",
+                        "video_count_template": "🎬 深度沉浸享受了 {count} 个视频"
+                    },
+                    {
+                        "main_title": "火锅聚会的温暖时光🍲",
+                        "sub_title": "和朋友共享美食",
+                        "sub_title_offset": 120,
+                        "description": "热气腾腾的快乐，就像清爽的B站",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 90,
+                        "conversion_template": "✨ 相当于和朋友吃了{count}顿火锅",
+                        "video_count_template": "🍲 开心地观赏了 {count} 个视频"
+                    },
+                    {
+                        "main_title": "身心和谐的瑜伽时间🧘‍♀️",
+                        "sub_title": "健康生活的选择",
+                        "sub_title_offset": 120,
+                        "description": "内心平静，就像没广告的纯净体验",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 90,
+                        "conversion_template": "✨ 相当于做了{count}套完整瑜伽",
+                        "video_count_template": "🧘‍♀️ 身心舒畅地享受了 {count} 个视频"
+                    }
+                ]
+            },
+            {
+                "min_seconds": 54001,
+                "options": [
+                    {
+                        "main_title": "悠闲下午的完美时光☕",
+                        "sub_title": "充实而惬意的午后",
+                        "sub_title_offset": 120,
+                        "description": "这样的下午时光，值得慢慢品味",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 360,
+                        "conversion_template": "✨ 相当于度过了{count}个充实的下午",
+                        "video_count_template": "📺 悠然品味了 {count} 个视频"
+                    },
+                    {
+                        "main_title": "高效工作日的成就感💼",
+                        "sub_title": "完美的一天",
+                        "sub_title_offset": 120,
+                        "description": "充实的工作时光，如此美好",
+                        "description_offset": 170,
+                        "conversion_unit_minutes": 480,
+                        "conversion_template": "✨ 相当于享受了{count}个完美的工作日",
+                        "video_count_template": "📺 专注观看了 {count} 个视频"
+                    }
+                ]
+            }
         ]
     }
 };

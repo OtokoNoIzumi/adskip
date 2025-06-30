@@ -807,7 +807,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // 获取用户信息 - 复用现有的getUserPayload方法
       const userPayload = await getUserPayload();
-
       // 计算节省时间 - 使用服务端数据优先，本地数据作为后备
       let timeSavedDisplay = '0秒';
       if (cachedStats && cachedStats.total_ads_duration_display) {
@@ -894,189 +893,358 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   /**
-   * 生成分享图片 - 使用现代化设计
+   * 解析时间字符串为总秒数
+   * 支持格式：HH:MM:SS, MM:SS, 纯秒数
+   * @param {string|number} timeSaved - 时间字符串或秒数
+   * @returns {number} 总秒数
+   */
+  function parseTimeSavedToSeconds(timeSaved) {
+    // 如果已经是数字，直接返回
+    if (typeof timeSaved === 'number') {
+      return Math.max(0, timeSaved);
+    }
+
+    // 如果是字符串，尝试解析
+    if (typeof timeSaved === 'string') {
+      const timeStr = timeSaved.trim();
+
+      // 尝试解析时间格式 HH:MM:SS 或 MM:SS
+      const timeMatch = timeStr.match(/^(\d+):(\d+):(\d+)$|^(\d+):(\d+)$/);
+      if (timeMatch) {
+        if (timeMatch[1] !== undefined && timeMatch[2] !== undefined && timeMatch[3] !== undefined) {
+          // HH:MM:SS 格式
+          const hours = parseInt(timeMatch[1], 10);
+          const minutes = parseInt(timeMatch[2], 10);
+          const seconds = parseInt(timeMatch[3], 10);
+          return hours * 3600 + minutes * 60 + seconds;
+        } else if (timeMatch[4] !== undefined && timeMatch[5] !== undefined) {
+          // MM:SS 格式
+          const minutes = parseInt(timeMatch[4], 10);
+          const seconds = parseInt(timeMatch[5], 10);
+          return minutes * 60 + seconds;
+        }
+      }
+
+      // 尝试直接解析为数字（纯秒数格式）
+      const directNum = parseFloat(timeStr);
+      if (!isNaN(directNum)) {
+        return Math.max(0, directNum);
+      }
+    }
+
+    // 解析失败，返回0
+    console.warn('无法解析时间格式:', timeSaved);
+    return 0;
+  }
+
+  /**
+   * 根据时间匹配海报配置
+   * @param {number} totalSeconds - 总秒数
+   * @param {Object} postSettings - 海报配置对象
+   * @returns {Object} 匹配的配置项
+   */
+  function matchPostConfigByTime(totalSeconds, postSettings) {
+    try {
+      // 如果没有配置或配置无效，使用默认配置
+      if (!postSettings || !postSettings.ranges || !Array.isArray(postSettings.ranges)) {
+        console.warn('海报配置无效，使用默认配置');
+        return postSettings?.default || {};
+      }
+
+      // 在ranges中查找匹配的范围
+      for (const range of postSettings.ranges) {
+        const minSeconds = range.min_seconds || 0;
+        const maxSeconds = range.max_seconds;
+
+        // 检查是否在范围内
+        const inRange = totalSeconds >= minSeconds &&
+                       (maxSeconds === undefined || totalSeconds <= maxSeconds);
+
+        if (inRange && range.options && Array.isArray(range.options) && range.options.length > 0) {
+          // 从匹配的选项中随机选择一个
+          const randomIndex = Math.floor(Math.random() * range.options.length);
+          const selectedOption = range.options[randomIndex];
+
+          console.log(`匹配到时间范围: ${minSeconds}-${maxSeconds || '∞'}秒，选择配置:`, selectedOption);
+          return selectedOption;
+        }
+      }
+
+      // 没有匹配到任何范围，使用默认配置
+      console.log('没有匹配到任何时间范围，使用默认配置');
+      return postSettings.default || {};
+    } catch (error) {
+      console.error('匹配海报配置时出错:', error);
+      return postSettings?.default || {};
+    }
+  }
+
+  /**
+   * 计算换算文案
+   * @param {number} totalSeconds - 总秒数
+   * @param {number} unitMinutes - 单位时间（分钟）
+   * @param {string} template - 模板字符串
+   * @returns {string} 换算后的文案
+   */
+  function calculateConversionText(totalSeconds, unitMinutes, template) {
+    try {
+      if (!unitMinutes || unitMinutes <= 0) {
+        return '';
+      }
+
+      const unitSeconds = unitMinutes * 60;
+      const count = Math.floor(totalSeconds / unitSeconds);
+
+      if (count <= 0) {
+        return '';
+      }
+
+      return template.replace('{count}', count);
+    } catch (error) {
+      console.error('计算换算文案时出错:', error);
+      return '';
+    }
+  }
+
+  /**
+   * 生成分享图片 - 使用现代化设计和动态配置
    * @param {Object} userStats - 用户统计数据
    * @returns {Promise<Blob>} 生成的图片Blob
    */
   async function generateShareImage(userStats) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // 设置画布尺寸 - 更大气的尺寸
-    canvas.width = 800;
-    canvas.height = 1200;
-
-    // 使用更精致的渐变配色
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#ff7eb3'); // 更柔和的粉色
-    gradient.addColorStop(0.5, '#ff5c8d');
-    gradient.addColorStop(1, '#d83770'); // 更深的品红
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // 添加现代感纹理
-    ctx.globalAlpha = 0.05;
-    for (let i = 0; i < 50; i++) {
-      const x = Math.random() * canvas.width;
-      const y = Math.random() * canvas.height;
-      const radius = Math.random() * 20 + 5;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = 'white';
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    // 重新规划布局 - 平衡分布
-    const sections = {
-      header: { start: 80, height: 200 },      // 顶部标题区域
-      content: { start: 320, height: 380 },    // 内容卡片区域
-      qr: { start: 780, height: 280 },         // 二维码区域
-      footer: { start: 1060, height: 120 }     // 底部区域
-    };
-
-    // 主标题区域 - 居中但不过分靠上
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-
-    // 主标题
-    ctx.font = 'bold 48px PingFang SC, Microsoft YaHei, sans-serif';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 4;
-    ctx.fillText('和我一起用新姿势逛B站吧~✨', canvas.width/2, sections.header.start + 45);
-
-    // 副标题
-    ctx.font = '500 36px PingFang SC, Microsoft YaHei, sans-serif';
-    ctx.shadowBlur = 6;
-    ctx.fillText('AI智能跳广告，防不胜防也能防', canvas.width/2, sections.header.start + 120);
-
-    // 功能描述
-    ctx.font = '300 30px PingFang SC, Microsoft YaHei, sans-serif';
-    ctx.shadowBlur = 4;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.fillText('AI智能识别 • 自动跳过 • 免费畅享', canvas.width/2, sections.header.start + 170);
-
-    // 用户信息卡片 - 居中放置
-    const cardY = sections.content.start;
-    const cardHeight = sections.content.height;
-
-    // 卡片背景
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    roundRect(ctx, 80, cardY, canvas.width - 160, cardHeight, 25);
-    ctx.fill();
-
-    // 卡片标题
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 38px PingFang SC, Microsoft YaHei, sans-serif';
-    ctx.fillText(`🏆  ${userStats.userName} 的使用成就`, canvas.width/2, cardY + 90);
-
-    // 统计数据 - 调整为两行布局
-    ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
-    const stats = [
-      { icon: '📺', text: `处理含广告视频 ${userStats.videoCount} 个` },
-      { icon: '⏰', text: `累计节省时间 ${userStats.timeSaved}` }
-    ];
-
-    // 计算统计数据的垂直居中位置 - 两行数据重新计算间距
-    const statsStartY = cardY + 200;
-    const statsSpacing = 100; // 增加间距让两行数据更舒适
-
-    stats.forEach((stat, i) => {
-      const y = statsStartY + i * statsSpacing;
-
-      // 图标
-      ctx.font = '36px sans-serif';
-      ctx.fillText(stat.icon, canvas.width/2 - 180, y);
-
-      // 文字
-      ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
-      ctx.fillText(stat.text, canvas.width/2 + 20, y);
-    });
-
-    // 生成并绘制QR码 - 给予充足空间
-    const personalPageUrl = 'https://otokonoizumi.github.io/?source=adskip-post#projects';
-    const qrCodeDataUrl = await generateQRCode(personalPageUrl);
-
-    // 统计分享图片生成次数
     try {
-      const workspace = 'adskip';
-      const baseUrl = 'https://api.counterapi.dev/v2';
+      // 加载外部配置
+      const externalConfig = await adskipStorage.loadExternalConfig();
+      const postSettings = externalConfig?.post_setting || {};
 
-      // 递增总访问量（按官方文档格式）
-      await fetch(`${baseUrl}/${workspace}/share-post/up`, {
-        method: 'GET'
+      // 解析时间为秒数
+      const totalSeconds = parseTimeSavedToSeconds(userStats.timeSaved);
+      console.log(`解析时间: ${userStats.timeSaved} -> ${totalSeconds}秒`);
+
+      // 根据时间匹配配置
+      const selectedConfig = matchPostConfigByTime(totalSeconds, postSettings);
+      console.log('选择的海报配置:', selectedConfig);
+
+      // 使用默认配置作为回退
+      const config = {
+        main_title: selectedConfig.main_title || '重新爱上了没广告的B站~✨',
+        sub_title: selectedConfig.sub_title || '朋友们，这波操作你们学会了吗',
+        sub_title_offset: selectedConfig.sub_title_offset || 120,
+        description: selectedConfig.description || '今天也是没被广告打扰的一天',
+        description_offset: selectedConfig.description_offset || 170,
+        conversion_unit_minutes: selectedConfig.conversion_unit_minutes || 1,
+        conversion_template: selectedConfig.conversion_template || '✨ 相当于伸了{count}次懒腰',
+        video_count_template: selectedConfig.video_count_template || '📺 在 {count} 个含广告视频里进行了跃迁'
+      };
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // 设置画布尺寸 - 更大气的尺寸
+      canvas.width = 800;
+      canvas.height = 1200;
+
+      // 使用更精致的渐变配色
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#ff7eb3'); // 更柔和的粉色
+      gradient.addColorStop(0.5, '#ff5c8d');
+      gradient.addColorStop(1, '#d83770'); // 更深的品红
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 添加现代感纹理
+      ctx.globalAlpha = 0.05;
+      for (let i = 0; i < 50; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+        const radius = Math.random() * 20 + 5;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // 重新规划布局 - 根据内容调整
+      const sections = {
+        header: { start: 80, height: 200 },      // 顶部标题区域 - 稍微增加高度
+        content: { start: 320, height: 380 },    // 内容卡片区域
+        qr: { start: 780, height: 280 },         // 二维码区域
+        footer: { start: 1060, height: 120 }     // 底部区域
+      };
+
+      // 主标题区域 - 居中但不过分靠上
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+
+      // 主标题
+      ctx.font = 'bold 48px PingFang SC, Microsoft YaHei, sans-serif';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 4;
+      ctx.fillText(config.main_title, canvas.width/2, sections.header.start + 45);
+
+      // 副标题（如果有的话）
+      if (config.sub_title) {
+        ctx.font = '500 36px PingFang SC, Microsoft YaHei, sans-serif';
+        ctx.shadowBlur = 6;
+        ctx.fillText(config.sub_title, canvas.width/2, sections.header.start + config.sub_title_offset);
+      }
+
+      // 功能描述（如果有的话）
+      if (config.description) {
+        ctx.font = '300 30px PingFang SC, Microsoft YaHei, sans-serif';
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText(config.description, canvas.width/2, sections.header.start + config.description_offset);
+      }
+
+      // 用户信息卡片 - 居中放置
+      const cardY = sections.content.start;
+      const cardHeight = sections.content.height;
+
+      // 卡片背景
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      roundRect(ctx, 80, cardY, canvas.width - 160, cardHeight, 25);
+      ctx.fill();
+
+      // 卡片标题
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 38px PingFang SC, Microsoft YaHei, sans-serif';
+      ctx.fillText(`🏆  ${userStats.userName} 的使用成就`, canvas.width/2, cardY + 90);
+
+      // 生成视频数量文案
+      const videoCountText = config.video_count_template.replace('{count}', userStats.videoCount);
+
+      // 计算换算文案
+      const conversionText = calculateConversionText(totalSeconds, config.conversion_unit_minutes, config.conversion_template);
+      console.log('test-', conversionText);
+      // 统计数据 - 根据是否有换算文案决定布局
+      ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
+      const stats = [
+        { icon: '', text: videoCountText },
+        { icon: '', text: `⏰ 累计节省时间 ${userStats.timeSaved}` }
+      ];
+
+      // 如果有换算文案，添加到统计数据中
+      if (conversionText) {
+        stats.push({ icon: '', text: conversionText });
+      }
+
+      // 计算统计数据的垂直居中位置
+      const statsStartY = cardY + 180;
+      const statsSpacing = Math.min(90, Math.floor((cardHeight - 200) / stats.length)); // 根据数据量动态调整间距
+
+      stats.forEach((stat, i) => {
+        const y = statsStartY + i * statsSpacing;
+
+        // 图标
+        ctx.font = '36px sans-serif';
+        ctx.fillText(stat.icon, canvas.width/2 - 180, y);
+
+        // 文字
+        ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
+        ctx.fillText(stat.text, canvas.width/2 + 20, y);
       });
-    } catch (error) {
-      console.log('countapi统计失败:', error);
-    }
 
-    if (qrCodeDataUrl) {
-      const qrImg = new Image();
-      return new Promise((resolve) => {
-        qrImg.onload = () => {
-          // QR码区域 - 居中且有充足空间
-          const qrContainerY = sections.qr.start;
-          const qrSize = 160;
+      // 生成并绘制QR码 - 给予充足空间
+      const personalPageUrl = 'https://otokonoizumi.github.io/?source=adskip-post#projects';
+      const qrCodeDataUrl = await generateQRCode(personalPageUrl);
 
-          // 装饰性背景
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-          roundRect(ctx, (canvas.width - qrSize - 90) / 2, qrContainerY - 30, qrSize + 90, qrSize + 120, 30);
-          ctx.fill();
+      // 统计分享图片生成次数
+      try {
+        const workspace = 'adskip';
+        const baseUrl = 'https://api.counterapi.dev/v2';
 
-          // QR码
-          ctx.shadowBlur = 0;
-          ctx.drawImage(qrImg, (canvas.width - qrSize) / 2, qrContainerY, qrSize, qrSize);
+        // 递增总访问量（按官方文档格式）
+        await fetch(`${baseUrl}/${workspace}/share-post/up`, {
+          method: 'GET'
+        });
+      } catch (error) {
+        console.log('countapi统计失败:', error);
+      }
 
-          // QR码说明
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
-          ctx.fillText('扫码上车 告别广告', canvas.width/2, qrContainerY + qrSize + 60);
+      if (qrCodeDataUrl) {
+        const qrImg = new Image();
+        return new Promise((resolve) => {
+          qrImg.onload = () => {
+            // QR码区域 - 居中且有充足空间
+            const qrContainerY = sections.qr.start;
+            const qrSize = 160;
 
-          // 底部区域 - 简洁不拥挤
-          const footerY = sections.footer.start;
+            // 装饰性背景
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            roundRect(ctx, (canvas.width - qrSize - 90) / 2, qrContainerY - 30, qrSize + 90, qrSize + 120, 30);
+            ctx.fill();
 
-          // 底部装饰线
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(200, footerY);
-          ctx.lineTo(canvas.width - 200, footerY);
-          ctx.stroke();
+            // QR码
+            ctx.shadowBlur = 0;
+            ctx.drawImage(qrImg, (canvas.width - qrSize) / 2, qrContainerY, qrSize, qrSize);
 
-          // 装饰点
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.beginPath();
-          ctx.arc(canvas.width/2, footerY, 3, 0, Math.PI * 2);
-          ctx.fill();
+            // QR码说明
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('扫码上车 告别广告', canvas.width/2, qrContainerY + qrSize + 60);
 
-          // 底部文案 - 给予充足间距
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
-          ctx.fillText('♪(´▽｀) 守护您的观影情绪 (´∀｀)♡', canvas.width/2, footerY + 50);
+            // 底部区域 - 简洁不拥挤
+            const footerY = sections.footer.start;
 
-          // 项目名称
-          ctx.font = 'bold 36px PingFang SC, Microsoft YaHei, sans-serif';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.fillText('B站切片广告之友', canvas.width/2, footerY + 100);
+            // 底部装饰线
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(200, footerY);
+            ctx.lineTo(canvas.width - 200, footerY);
+            ctx.stroke();
 
-          // // 小装饰
-          // ctx.font = '20px sans-serif';
-          // ctx.fillText('♪(´▽｀)', canvas.width/2 - 120, footerY + 125);
-          // ctx.fillText('(´∀｀)♡', canvas.width/2 + 120, footerY + 125);
+            // 装饰点
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, footerY, 3, 0, Math.PI * 2);
+            ctx.fill();
 
+            // 底部文案 - 给予充足间距
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('♪(´▽｀) 守护您的观影情绪 (´∀｀)♡', canvas.width/2, footerY + 50);
+
+            // 项目名称
+            ctx.font = 'bold 36px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText('B站切片广告之友', canvas.width/2, footerY + 100);
+
+            canvas.toBlob(resolve, 'image/png', 0.9);
+          };
+          qrImg.src = qrCodeDataUrl;
+        });
+      } else {
+        // 如果QR码生成失败，直接返回不含QR码的图片
+        return new Promise(resolve => {
           canvas.toBlob(resolve, 'image/png', 0.9);
-        };
-        qrImg.src = qrCodeDataUrl;
-      });
-    } else {
-      // 如果QR码生成失败，直接返回不含QR码的图片
+        });
+      }
+    } catch (error) {
+      console.error('生成分享图片时出错:', error);
+
+      // 出错时生成一个简单的错误图片
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 800;
+      canvas.height = 1200;
+
+      ctx.fillStyle = '#ff7eb3';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'white';
+      ctx.font = '48px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('生成海报时出错', canvas.width/2, canvas.height/2);
+
       return new Promise(resolve => {
         canvas.toBlob(resolve, 'image/png', 0.9);
       });

@@ -429,8 +429,22 @@ function createLinkGenerator() {
             // 生成链接按钮
             document.getElementById('adskip-generate').addEventListener('click', function() {
                 const input = document.getElementById('adskip-input').value.trim();
+
+                const currentUrl = new URL(window.location.href);
+
                 if (!input) {
-                    updateStatusDisplay('请输入有效的时间段', 'error');
+                    // 当输入为空时，生成 adskip=none 的特殊标记链接
+                    currentUrl.searchParams.set('adskip', 'none');
+
+                    adskipUtils.logDebug(`生成无广告标记链接`);
+
+                    const resultDiv = document.getElementById('adskip-result');
+                    resultDiv.innerHTML = `
+                        <p>无广告标记链接:</p>
+                        <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
+                    `;
+
+                    updateStatusDisplay('无广告标记链接已生成', 'success');
                     return;
                 }
 
@@ -452,7 +466,6 @@ function createLinkGenerator() {
                         return `${Math.round(start)}-${Math.round(end)}`;
                     }).join(',');
 
-                    const currentUrl = new URL(window.location.href);
                     currentUrl.searchParams.set('adskip', integerTimestamps);
 
                     adskipUtils.logDebug(`生成广告跳过链接`);
