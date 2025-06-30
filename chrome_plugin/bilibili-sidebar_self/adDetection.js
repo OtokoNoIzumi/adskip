@@ -317,12 +317,36 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             }
         }
 
-        // 5. 检查"不检测自己视频"设置 (优先级 2) - 暂时占位
+        // 5. 检查"不检测自己视频"设置 (优先级 2)
         const skipOwnVideosEnabled = await adskipStorage.getSkipOwnVideos();
         if (skipOwnVideosEnabled) {
-            adskipUtils.logDebug('[AdSkip广告检测] "不检测自己视频"功能已启用，但暂时跳过检查（待架构优化）');
-            // TODO: 在获取到足够的视频数据后，实现自己视频的检测逻辑
-            // 需要比较 subtitleData.owner.mid 和当前用户的 uid
+            adskipUtils.logDebug('[AdSkip广告检测] "不检测自己视频"功能已启用');
+
+            try {
+                // 获取视频基础信息（总是使用缓存，避免重复加载）
+                const basicVideoInfo = await adskipSubtitleService.getVideoData(false);
+                // 获取用户信息（已有1分钟缓存）
+                const userInfo = await adskipCredentialService.getBilibiliLoginStatus();
+
+                // 检查是否为自己的视频
+                if (basicVideoInfo.owner?.mid && userInfo?.uid &&
+                    basicVideoInfo.owner.mid === userInfo.uid) {
+
+                    adskipUtils.logDebug('[AdSkip广告检测] 检测到自己的视频，跳过检测');
+                    statusResult.status = VIDEO_STATUS.NO_ADS;
+                    statusResult.source = 'own_video_skip';
+                    statusResult.currentAdTimestamps = [];
+                    statusResult.statusData = {};
+                    updateVideoStatus(statusResult.status, statusResult.statusData, "跳过自己的视频");
+
+                    return statusResult;
+                } else {
+                    adskipUtils.logDebug('[AdSkip广告检测] 视频检查完成，继续检测流程');
+                }
+            } catch (error) {
+                adskipUtils.logDebug('[AdSkip广告检测] 检查自己视频时出错，继续检测流程:', error);
+                // 出错时不影响后续检测流程
+            }
         }
 
         // 6. 检查本地存储的广告时间戳 (优先级 3)
