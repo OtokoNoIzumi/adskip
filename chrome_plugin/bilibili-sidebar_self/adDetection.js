@@ -317,14 +317,20 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             }
         }
 
-        // 5. 检查"不检测自己视频"设置 (优先级 2)
+        // 5. 获取视频基础数据（提前到主干，避免重复获取）
+        let basicVideoInfo = null;
+        try {
+            basicVideoInfo = await adskipSubtitleService.getVideoData(false);
+        } catch (error) {
+            adskipUtils.logDebug('[AdSkip广告检测] 获取基础视频数据失败:', error);
+        }
+
+        // 6. 检查"不检测自己视频"设置 (优先级 2)
         const skipOwnVideosEnabled = await adskipStorage.getSkipOwnVideos();
-        if (skipOwnVideosEnabled) {
+        if (skipOwnVideosEnabled && basicVideoInfo) {
             adskipUtils.logDebug('[AdSkip广告检测] "不检测自己视频"功能已启用');
 
             try {
-                // 获取视频基础信息（总是使用缓存，避免重复加载）
-                const basicVideoInfo = await adskipSubtitleService.getVideoData(false);
                 // 获取用户信息（已有1分钟缓存）
                 const userInfo = await adskipCredentialService.getBilibiliLoginStatus();
 
@@ -349,7 +355,7 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             }
         }
 
-        // 6. 检查本地存储的广告时间戳 (优先级 3)
+        // 7. 检查本地存储的广告时间戳 (优先级 3)
         let storedTimestamps = [];
         try {
             storedTimestamps = await adskipStorage.loadAdTimestampsForVideo(videoId);
@@ -367,7 +373,7 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult;
         }
 
-        // 7. 检查本地储存的无广告白名单 (优先级 4)
+        // 8. 检查本地储存的无广告白名单 (优先级 4)
         const isInWhitelist = await adskipStorage.checkVideoInNoAdsWhitelist(videoId);
         if (isInWhitelist) {
             adskipUtils.logDebug('[AdSkip广告检测] 视频在无广告白名单中.');
@@ -378,7 +384,7 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult;
         }
 
-        // 8. 检查是否为次数耗尽状态下请求失败的视频 (优先级 5)
+        // 9. 检查是否为次数耗尽状态下请求失败的视频 (优先级 5)
         const isQuotaFailedVideo = await adskipStorage.checkVideoInQuotaFailedCache(videoId);
         if (isQuotaFailedVideo) {
             adskipUtils.logDebug(`[AdSkip广告检测] 视频 ${videoId} 在次数耗尽失败缓存中，直接显示耗尽状态`);
@@ -389,7 +395,17 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult;
         }
 
-        // 9. 获取关键数据：视频和字幕信息
+        // 10. 检查基于视频时长的快速过滤条件
+        if (basicVideoInfo?.duration && basicVideoInfo.duration < 30) {
+            adskipUtils.logDebug(`[AdSkip广告检测] 视频时长过短 (${basicVideoInfo.duration}s < 30s)，跳过检测`);
+            statusResult.status = VIDEO_STATUS.UNDETECTED;
+            statusResult.source = 'short_duration';
+            statusResult.duration = basicVideoInfo.duration;
+            updateVideoStatus(statusResult.status, {}, "视频时长过短，请手动检测");
+            return statusResult;
+        }
+
+        // 11. 获取完整字幕数据：包含字幕信息
         const subtitleData = await getVideoSubtitleData(!isInitialLoad);
 
         // 判断bvid和videoId是否一致，或者videoId和epid是否一致（允许epid作为videoId的情况，不加'ep'前缀）
@@ -418,12 +434,11 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult; // 返回默认错误结果
         }
 
-        // 更新结果对象中的基本信息——验证一下没这个信息有没有问题
+        // 更新结果对象中的字幕信息
         statusResult.hasSubtitle = subtitleData.hasSubtitle;
-        statusResult.duration = subtitleData.duration;
+        statusResult.duration = subtitleData.duration || basicVideoInfo?.duration || 0;
 
-
-        // 10. 处理无字幕情况 (最高优先级的基础条件)——顺序要低于URL参数，如果URL有值
+        // 12. 处理无字幕情况
         if (!statusResult.hasSubtitle) {
             adskipUtils.logDebug('[AdSkip广告检测] 视频无字幕信息.');
             statusResult.status = VIDEO_STATUS.NO_SUBTITLE;
@@ -433,8 +448,8 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult;
         }
 
-        // --- 到达此处: 视频有字幕，但无URL参数、无存储记录、不在白名单中 ---
-        // 11. 进入准备/自动检测阶段 (优先级 6)
+        // --- 到达此处: 视频有字幕，满足时长要求，但无URL参数、无存储记录、不在白名单中 ---
+        // 13. 进入准备/自动检测阶段 (优先级 6)
         adskipUtils.logDebug('[AdSkip广告检测] 进入准备状态 (PREPARE).');
         updateVideoStatus(VIDEO_STATUS.PREPARE, {}, "进入准备状态");
         statusResult.status = VIDEO_STATUS.PREPARE;
@@ -454,96 +469,79 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             return statusResult;
         }
 
-        // 检查是否满足自动检测条件
-        const meetsDurationCriteria = subtitleData.duration && subtitleData.duration >= 30;
-
-        // 条件满足：保持 PREPARE 状态，并计划自动检测
-        adskipUtils.logDebug(`[AdSkip广告检测] 视频时长 (${subtitleData.duration}s) 满足条件，准备自动检测.`);
+        // 时长检查已经在前面完成，这里直接准备自动检测
+        adskipUtils.logDebug(`[AdSkip广告检测] 视频时长检查已通过，准备自动检测.`);
         statusResult.source = 'prepare_scheduled'; // 更新来源
 
         autoDetectTimerId = setTimeout(async () => {
-            if (meetsDurationCriteria) {
-                adskipUtils.logDebug('[AdSkip广告检测] 自动检测计时器触发，开始执行检测...');
-                autoDetectTimerId = null; // 清除 ID
-                try {
-                    const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
-                    // 再次确认视频未切换，支持bvid、epid和多P格式
-                    let isVideoIdStillMatch = false;
-                    if (currentVideoCheck === videoId) {
+            adskipUtils.logDebug('[AdSkip广告检测] 自动检测计时器触发，开始执行检测...');
+            autoDetectTimerId = null; // 清除 ID
+            try {
+                const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
+                // 再次确认视频未切换，支持bvid、epid和多P格式
+                let isVideoIdStillMatch = false;
+                if (currentVideoCheck === videoId) {
+                    isVideoIdStillMatch = true;
+                } else {
+                    // videoId 可能是epid（不带ep前缀），currentVideoCheck可能是ep+数字
+                    // 允许epid和ep+epid互相匹配
+                    if (
+                        videoId &&
+                        currentVideoCheck &&
+                        (
+                            (videoId.startsWith('ep') && currentVideoCheck === videoId.slice(2)) ||
+                            (currentVideoCheck.startsWith('ep') && videoId === currentVideoCheck.slice(2))
+                        )
+                    ) {
                         isVideoIdStillMatch = true;
-                    } else {
-                        // videoId 可能是epid（不带ep前缀），currentVideoCheck可能是ep+数字
-                        // 允许epid和ep+epid互相匹配
-                        if (
-                            videoId &&
-                            currentVideoCheck &&
-                            (
-                                (videoId.startsWith('ep') && currentVideoCheck === videoId.slice(2)) ||
-                                (currentVideoCheck.startsWith('ep') && videoId === currentVideoCheck.slice(2))
-                            )
-                        ) {
-                            isVideoIdStillMatch = true;
-                        }
-                        // 支持多P视频检查：比较基础BV ID
-                        else if (videoId.includes('_p') && currentVideoCheck.includes('_p')) {
-                            const videoBaseBV = videoId.split('_p')[0];
-                            const currentBaseBV = currentVideoCheck.split('_p')[0];
-                            if (videoBaseBV === currentBaseBV) {
-                                // 基础BV相同但分P不同，说明切换了分P，不匹配
-                                adskipUtils.logDebug(`[AdSkip广告检测] 检测到分P切换: ${videoId} -> ${currentVideoCheck}`);
-                            } else {
-                                // 不同的视频
-                                adskipUtils.logDebug(`[AdSkip广告检测] 检测到视频切换: ${videoId} -> ${currentVideoCheck}`);
-                            }
-                        }
                     }
-
-                    if (isVideoIdStillMatch) {
-                        // 获取最新数据
-                        const latestSubtitleData = await getVideoSubtitleData();
-                        if (
-                            latestSubtitleData.hasSubtitle &&
-                            (
-                                latestSubtitleData.bvid === videoId ||
-                                (latestSubtitleData.epid && (
-                                    videoId === latestSubtitleData.epid ||
-                                    (videoId.startsWith('ep') && latestSubtitleData.epid === videoId.slice(2)) ||
-                                    (latestSubtitleData.epid.startsWith('ep') && videoId === latestSubtitleData.epid.slice(2))
-                                ))
-                            )
-                        ) {
-                            // 发送检测请求（内部会处理状态更新：DETECTING -> HAS_ADS/NO_ADS/UNDETECTED）
-                            await sendDetectionRequest(latestSubtitleData);
-                            adskipUtils.logDebug('[AdSkip广告检测] 自动检测请求已发送 (或尝试发送).');
+                    // 支持多P视频检查：比较基础BV ID
+                    else if (videoId.includes('_p') && currentVideoCheck.includes('_p')) {
+                        const videoBaseBV = videoId.split('_p')[0];
+                        const currentBaseBV = currentVideoCheck.split('_p')[0];
+                        if (videoBaseBV === currentBaseBV) {
+                            // 基础BV相同但分P不同，说明切换了分P，不匹配
+                            adskipUtils.logDebug(`[AdSkip广告检测] 检测到分P切换: ${videoId} -> ${currentVideoCheck}`);
                         } else {
-                            adskipUtils.logDebug('[AdSkip广告检测] 自动检测取消：执行前字幕信息丢失.');
-                            if (isVideoIdStillMatch) { // 避免干扰新视频
-                                updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE, {}, "Subtitle lost before auto-detect");
-                            }
+                            // 不同的视频
+                            adskipUtils.logDebug(`[AdSkip广告检测] 检测到视频切换: ${videoId} -> ${currentVideoCheck}`);
                         }
-                    } else {
-                        adskipUtils.logDebug('[AdSkip广告检测] 自动检测取消：执行前视频已切换.');
-                    }
-                } catch (error) {
-                    adskipUtils.logDebug('[AdSkip广告检测] 自动检测执行失败:', error);
-                    const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
-                        // 如果视频没变，恢复为可手动检测状态
-                    if (currentVideoCheck === videoId) {
-                        updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "自动检测失败");
                     }
                 }
 
-            } else {
-                // 时长不满足：立即从 PREPARE 切换到 UNDETECTED
-                adskipUtils.logDebug(`[AdSkip广告检测] 视频时长 (${subtitleData.duration}s) 不满足自动检测条件 (< 30s). 切换到手动检测模式.`);
-
-                // 立即更新按钮状态为 UNDETECTED
-                updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, `时长不足，请手动检测`);
-
-                // 更新结果对象
-                statusResult.status = VIDEO_STATUS.UNDETECTED;
-                statusResult.source = 'prepare_short_duration';
-                statusResult.skipDataProcessing = true; // 不再需要自动处理
+                if (isVideoIdStillMatch) {
+                    // 获取最新数据
+                    const latestSubtitleData = await getVideoSubtitleData();
+                    if (
+                        latestSubtitleData.hasSubtitle &&
+                        (
+                            latestSubtitleData.bvid === videoId ||
+                            (latestSubtitleData.epid && (
+                                videoId === latestSubtitleData.epid ||
+                                (videoId.startsWith('ep') && latestSubtitleData.epid === videoId.slice(2)) ||
+                                (latestSubtitleData.epid.startsWith('ep') && videoId === latestSubtitleData.epid.slice(2))
+                            ))
+                        )
+                    ) {
+                        // 发送检测请求（内部会处理状态更新：DETECTING -> HAS_ADS/NO_ADS/UNDETECTED）
+                        await sendDetectionRequest(latestSubtitleData);
+                        adskipUtils.logDebug('[AdSkip广告检测] 自动检测请求已发送 (或尝试发送).');
+                    } else {
+                        adskipUtils.logDebug('[AdSkip广告检测] 自动检测取消：执行前字幕信息丢失.');
+                        if (isVideoIdStillMatch) { // 避免干扰新视频
+                            updateVideoStatus(VIDEO_STATUS.NO_SUBTITLE, {}, "Subtitle lost before auto-detect");
+                        }
+                    }
+                } else {
+                    adskipUtils.logDebug('[AdSkip广告检测] 自动检测取消：执行前视频已切换.');
+                }
+            } catch (error) {
+                adskipUtils.logDebug('[AdSkip广告检测] 自动检测执行失败:', error);
+                const currentVideoCheck = adskipUtils.getCurrentVideoId().id;
+                // 如果视频没变，恢复为可手动检测状态
+                if (currentVideoCheck === videoId) {
+                    updateVideoStatus(VIDEO_STATUS.UNDETECTED, {}, "自动检测失败");
+                }
             }
         }, 10000); // 10秒延迟
 
