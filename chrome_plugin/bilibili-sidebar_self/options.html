@@ -476,7 +476,7 @@
           <input type="checkbox" id="skip-own-videos" checked>
           <span class="slider"></span>
         </label>
-        <p>启用后，当您观看自己上传的视频时，如果URL参数没有说明广告时间，将直接显示为无广告状态，不进行AI识别。</p>
+        <p>启用后，当您观看自己上传的视频时，如果网址中没有提供广告时间，将直接显示为无广告状态，不进行AI识别。</p>
       </div>
     </div>
 
@@ -561,6 +561,44 @@
         <button id="admin-login-btn" class="admin-btn">🔑 管理员登录</button>
         <div id="admin-status" class="status"></div>
         <p>登录后可以在视频页面使用管理员设置功能</p>
+      </div>
+
+      <div class="form-group" id="custom-server-section">
+        <h3>⚠️ 高级功能：自定义服务器</h3>
+        <div class="warning-box" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+          <h4 style="margin-top: 0; color: #856404;">⚠️ 重要声明</h4>
+          <ul style="margin: 8px 0; padding-left: 20px; color: #856404;">
+            <li><strong>仅供开发者和高级用户使用</strong>，错误配置可能导致功能异常</li>
+            <li><strong>不提供额外技术支持</strong>，使用风险自负</li>
+            <li><strong>不对其他服务器的安全性、功能或数据使用提供任何保证</strong></li>
+            <li><strong>服务器开设者需根据客户端开源内容自行准备对应服务端业务</strong></li>
+            <li>项目仓库：<a href="https://github.com/OtokoNoIzumi/adskip" target="_blank">https://github.com/OtokoNoIzumi/adskip</a></li>
+          </ul>
+        </div>
+
+        <div class="custom-server-controls">
+          <div class="form-group">
+            <label for="enable-custom-server">启用自定义服务器</label>
+            <label class="switch">
+              <input type="checkbox" id="enable-custom-server">
+              <span class="slider"></span>
+            </label>
+            <p>启用后将使用下方指定的服务器地址，关闭后使用默认官方服务器</p>
+          </div>
+
+          <div class="form-group">
+            <label for="custom-server-url">服务器地址：</label>
+            <input type="text" id="custom-server-url" placeholder="https://localhost:3000">
+            <p>支持 https:// 协议或 http://localhost:3000（仅限开发环境）</p>
+          </div>
+
+          <div class="form-group">
+            <button id="reset-custom-server" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重置为默认</button>
+            <p>清除所有自定义服务器设置并恢复默认配置</p>
+          </div>
+
+          <div id="custom-server-status" class="status"></div>
+        </div>
       </div>
     </div>
   </div>

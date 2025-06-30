@@ -434,18 +434,39 @@ function createLinkGenerator() {
                     return;
                 }
 
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('adskip', input);
-                // 待修改成纯粹的参数，而不是用现有URL
-                adskipUtils.logDebug(`生成广告跳过链接: ${currentVideoId}`);
+                try {
+                    // 解析时间戳，确保所有时间都转换为整数秒
+                    const integerTimestamps = input.split(',').map(segment => {
+                        const [startStr, endStr] = segment.split('-').map(s => s.trim());
+                        if (!startStr || !endStr) {
+                            throw new Error('时间段格式无效');
+                        }
 
-                const resultDiv = document.getElementById('adskip-result');
-                resultDiv.innerHTML = `
-                    <p>广告跳过链接:</p>
-                    <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
-                `;
+                        const start = adskipUtils.parseTimeString(startStr);
+                        const end = adskipUtils.parseTimeString(endStr);
 
-                updateStatusDisplay('分享链接已生成', 'success');
+                        if (isNaN(start) || isNaN(end) || start >= end || start < 0 || end < 0) {
+                            throw new Error('时间格式无效');
+                        }
+                        // 返回整数格式的字符串
+                        return `${Math.round(start)}-${Math.round(end)}`;
+                    }).join(',');
+
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.set('adskip', integerTimestamps);
+
+                    adskipUtils.logDebug(`生成广告跳过链接`);
+
+                    const resultDiv = document.getElementById('adskip-result');
+                    resultDiv.innerHTML = `
+                        <p>广告跳过链接:</p>
+                        <a href="${currentUrl.toString()}" target="_blank">${currentUrl.toString()}</a>
+                    `;
+
+                    updateStatusDisplay('分享链接已生成', 'success');
+                } catch (e) {
+                    updateStatusDisplay('格式错误，请使用正确的格式：开始-结束,开始-结束 (支持秒数或时:分:秒格式)', 'error');
+                }
             });
 
             // 立即应用按钮

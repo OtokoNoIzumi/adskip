@@ -232,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+
   // 功能开关监听
   const adskipToggle = document.getElementById('enable-adskip');
   adskipToggle.addEventListener('change', function() {
@@ -452,6 +453,31 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.location.hash === '#whitelist') {
     loadWhitelistData();
   }
+
+  // 自定义服务器相关按钮
+  loadCustomServerSettings();
+
+  document.getElementById('enable-custom-server').addEventListener('change', function() {
+    toggleCustomServer();
+  });
+
+  document.getElementById('reset-custom-server').addEventListener('click', function() {
+    resetCustomServer();
+  });
+
+  document.getElementById('custom-server-url').addEventListener('input', function() {
+    // 当用户输入时，如果当前是启用状态，则自动保存
+    const enableCheckbox = document.getElementById('enable-custom-server');
+    if (enableCheckbox.checked) {
+      const url = document.getElementById('custom-server-url').value.trim();
+      if (isValidServerUrl(url)) {
+        chrome.storage.sync.set({customServerUrl: url});
+      }
+    }
+  });
+
+  // URL hash 检查
+  checkUrlHash();
 });
 
 // 加载保存的设置，使用adskipStorage接口
@@ -563,3 +589,133 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     }
   }
 });
+
+// 自定义服务器URL验证函数
+function isValidServerUrl(url) {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+
+    // 只允许 https，但 localhost:3000 可以用 http
+    if (parsed.protocol === 'https:') {
+      return true;
+    } else if (parsed.protocol === 'http:' &&
+               parsed.hostname === 'localhost' &&
+               parsed.port === '3000') {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// 加载自定义服务器设置
+function loadCustomServerSettings() {
+  chrome.storage.sync.get(['customServerUrl', 'customServerEnabled'], function(result) {
+    const urlInput = document.getElementById('custom-server-url');
+    const enableCheckbox = document.getElementById('enable-custom-server');
+    const statusDiv = document.getElementById('custom-server-status');
+
+    // 设置URL输入框
+    if (result.customServerUrl) {
+      urlInput.value = result.customServerUrl;
+    }
+
+    // 设置开关状态
+    const isEnabled = result.customServerEnabled || false;
+    enableCheckbox.checked = isEnabled;
+
+    // 显示当前状态
+    updateCustomServerStatus(isEnabled, result.customServerUrl);
+  });
+}
+
+// 切换自定义服务器启用状态
+function toggleCustomServer() {
+  const enableCheckbox = document.getElementById('enable-custom-server');
+  const newEnabled = enableCheckbox.checked;
+  const urlInput = document.getElementById('custom-server-url');
+
+  if (newEnabled) {
+    let url = urlInput.value.trim();
+
+    // 如果输入为空，则自动使用placeholder的值
+    if (!url) {
+      url = urlInput.placeholder;
+      urlInput.value = url;
+    }
+
+    if (!isValidServerUrl(url)) {
+      enableCheckbox.checked = false; // 验证失败，取消勾选
+      showCustomServerStatus('无效的服务器地址。支持 https:// 或 http://localhost:3000', 'error');
+      return;
+    }
+
+    // 保存设置
+    chrome.storage.sync.set({
+      customServerEnabled: true,
+      customServerUrl: url
+    }, function() {
+      updateCustomServerStatus(true, url);
+      showCustomServerStatus(`已启用自定义服务器: ${url}`, 'success');
+    });
+  } else {
+    // 禁用自定义服务器
+    chrome.storage.sync.set({
+      customServerEnabled: false
+    }, function() {
+      updateCustomServerStatus(false);
+      showCustomServerStatus('已关闭自定义服务器，使用默认官方服务器', 'info');
+    });
+  }
+}
+
+// 重置自定义服务器设置
+function resetCustomServer() {
+  if (confirm('确定要重置自定义服务器设置吗？这将清除保存的服务器地址并关闭自定义服务器功能。')) {
+    chrome.storage.sync.remove(['customServerUrl', 'customServerEnabled'], function() {
+      document.getElementById('custom-server-url').value = '';
+      document.getElementById('enable-custom-server').checked = false;
+      updateCustomServerStatus(false);
+      showCustomServerStatus('已重置为默认设置', 'info');
+    });
+  }
+}
+
+// 更新自定义服务器状态显示
+function updateCustomServerStatus(isEnabled, serverUrl = '') {
+  const statusDiv = document.getElementById('custom-server-status');
+  statusDiv.style.display = 'block'; // 确保状态区域可见
+
+  if (isEnabled && serverUrl) {
+    statusDiv.innerHTML = `<span style="color: #28a745;">✅ 当前使用: ${serverUrl}</span>`;
+  } else {
+    statusDiv.innerHTML = `<span style="color: #6c757d;">📡 使用默认官方服务器</span>`;
+  }
+}
+
+// 显示自定义服务器状态消息
+function showCustomServerStatus(message, type = 'info') {
+  const statusDiv = document.getElementById('custom-server-status');
+  statusDiv.style.display = 'block'; // 确保状态区域可见
+
+  let color, icon;
+  switch (type) {
+    case 'success': color = '#28a745'; icon = '✅'; break;
+    case 'error': color = '#dc3545'; icon = '❌'; break;
+    case 'warning': color = '#ffc107'; icon = '⚠️'; break;
+    default: color = '#6c757d'; icon = 'ℹ️';
+  }
+
+  statusDiv.innerHTML = `<span style="color: ${color};">${icon} ${message}</span>`;
+
+  // 3秒后恢复到默认状态显示
+  setTimeout(() => {
+    chrome.storage.sync.get(['customServerEnabled', 'customServerUrl'], function(result) {
+      updateCustomServerStatus(result.customServerEnabled, result.customServerUrl);
+    });
+  }, 3000);
+}

@@ -52,6 +52,14 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
   }
 
+  // 添加版本提示区域（放在user-stats-area前面）
+  const versionHintArea = document.createElement('div');
+  versionHintArea.id = 'version-hint-area';
+  versionHintArea.style.display = 'none';
+  // 初始为空，等待加载后再填充内容
+  versionHintArea.innerHTML = '';
+  document.getElementById('user-stats-area').insertAdjacentElement('beforebegin', versionHintArea);
+
   // 添加支持区域（初始完全隐藏，加载成功后再显示）
   const appreciateArea = document.createElement('div');
   appreciateArea.id = 'appreciate-area';
@@ -179,8 +187,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 注意：外部配置和API URL管理函数已移至 storage.js 中统一管理
 
-  // 加载支持信息
-  async function loadSupportInfo() {
+  // 加载版本提示信息
+  async function loadVersionHint() {
     try {
       // 使用统一的外部配置加载函数
       const externalConfig = await adskipStorage.loadExternalConfig();
@@ -211,6 +219,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
 
+      // 显示版本提示
+      if (versionHintHTML) {
+        versionHintArea.innerHTML = versionHintHTML;
+        versionHintArea.style.display = 'block';
+      } else {
+        versionHintArea.style.display = 'none';
+      }
+    } catch (error) {
+      console.log('加载版本提示失败:', error);
+      versionHintArea.style.display = 'none';
+    }
+  }
+
+  // 加载支持信息
+  async function loadSupportInfo() {
+    try {
       // 使用统一的API URL获取函数
       const apiUrls = await adskipStorage.getApiUrls();
 
@@ -242,10 +266,8 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('支持信息API返回数据:', data);
 
       if (data.enabled) {
-        // 构建完整内容 - 版本提示放在最前面
-        let contentHTML = versionHintHTML; // 版本提示在最前面
-
-        contentHTML += `<div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>`;
+        // 构建支持信息内容
+        let contentHTML = `<div style="margin: 8px 0 6px 0; font-size: 14px; color: #ffd700;">✨ ❤️ ✨</div>`;
 
         if (data.supportPicUrl) {
           console.log('显示图片模式, type:', data.supportType);
@@ -268,14 +290,8 @@ document.addEventListener('DOMContentLoaded', function() {
         appreciateArea.innerHTML = contentHTML;
         appreciateArea.style.display = 'block';
       } else {
-        // 如果禁用但有版本提示，只显示版本提示
-        if (versionHintHTML) {
-          appreciateArea.innerHTML = versionHintHTML;
-          appreciateArea.style.display = 'block';
-        } else {
-          // 如果都禁用，保持隐藏
-          appreciateArea.style.display = 'none';
-        }
+        // 如果禁用，保持隐藏
+        appreciateArea.style.display = 'none';
       }
     } catch (error) {
       console.log('加载支持信息失败:', error);
@@ -453,6 +469,10 @@ document.addEventListener('DOMContentLoaded', function() {
       console.warn("User stats area not found in popup.html");
       return;
     }
+
+    // 0. 首先加载版本提示（始终显示）
+    await loadVersionHint();
+
     // 1. 检查本地视频数量，决定是否显示使用说明和特性列表
     const showInstructions = await shouldShowInstructions();
     if (!showInstructions) {
@@ -602,10 +622,6 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateStatsUI(data) {
     if (!userStatsArea) return;
 
-    // 获取缓存时间显示
-    const updateTimeDisplay = data.updateTimeDisplay || (data._updateTimeDisplay || "尚未更新");
-    console.log('数据更新时间', updateTimeDisplay);
-
     // Hide usage instructions when stats are successfully displayed
     if (usageInstructions) {
       usageInstructions.style.display = 'none';
@@ -615,46 +631,111 @@ document.addEventListener('DOMContentLoaded', function() {
       featureList.style.display = 'none';
     }
 
+    // 4. 生成展开视图（完整明细）
+    const updateTimeDisplay = data.updateTimeDisplay || (data._updateTimeDisplay || "尚未更新");
+    // 1. 渲染主计数器和控制箭头
+    const remaining = data.daily_gemini_limit - data.daily_gemini_requests_used;
+    //需要一些占位内容让最常见的情况都有一点点滚动条，避免占位问题。
     let statsHTML = `<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px;">
       <div style="margin-top: 10px;"><strong>使用统计</strong></div>
       <span style="font-size: 0.75em; color: #999;">更新时间: ${updateTimeDisplay}</span>
-    </div>`;
+    </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0;">
+            <strong>今日可用AI识别次数:</strong>
+            <div>
+                <span style="color: ${remaining > 0 ? '#28a745' : '#dc3545'}; font-weight: bold;">${remaining}/${data.daily_gemini_limit}</span>
+                <span id="breakdown-toggle" style="cursor: pointer; font-weight: bold; font-family: monospace; margin-left: 8px; display: inline-block; width: 12px;">▼</span>
+            </div>
+        </div>
+    `;
 
-    // 1. 账号类型（包含试用期信息）
+    // --- 【后端开发参考】约定的数据结构 ---
+    // 后端应返回一个类似下面结构的数组，用于前端动态渲染。
+    const breakdownItems = [
+    ];
+    let final_usage_info = (data.usage_info && data.usage_info.length > 0) ? data.usage_info : breakdownItems;
+    // --- 测试数据注入结束 ---
+
+    // 2. 解析和分组数据（优化符号与排版，提升可读性）
+    const summaryItem = final_usage_info.find(item => item.show_in_summary);
+    const groupedDetails = final_usage_info.reduce((acc, item) => {
+        if (!acc[item.container_id]) {
+            acc[item.container_id] = {
+                description: item.container_description,
+                items: []
+            };
+        }
+        // 使用更直观的符号：• 作为条目前缀，获得值用「×」，进度用「/」
+        if (item.max_value) {
+            acc[item.container_id].items.push(
+                `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span> <span style="color:#999;">/ ${item.max_value}</span>`
+            );
+        } else {
+            acc[item.container_id].items.push(
+                `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span>`
+            );
+        }
+        return acc;
+    }, {});
+
+    // 3. 生成收起视图（推荐任务）
+    let recommendationHTML = '';
+    if (summaryItem) {
+        let progressText = `+${summaryItem.current_value}`;
+        if (summaryItem.max_value) {
+            progressText += ` / ${summaryItem.max_value}`;
+        }
+        recommendationHTML = `<div style="font-size: 0.85em; color: #007bff; margin: 2px 0 5px 0;">💡 ${summaryItem.description} (可获得 ${progressText} 次)</div>`;
+    }
+
     let accountTypeDisplay = data.account_type_display || '未知';
     if (data.is_in_trial_period && data.trial_end_date) {
-      accountTypeDisplay += `<span style="color: #28a745;"> (推广体验期至${data.trial_end_date})</span>`;
-    }
-    statsHTML += `<p style="margin: 5px 0;"><strong>账号类型：</strong> ${accountTypeDisplay}</p>`;
-
-    // 2. 今日AI识别次数（分两行显示，避免过长）
-    const remaining = data.daily_gemini_limit - data.daily_gemini_requests_used;
-    statsHTML += `<p style="margin: 5px 0;"><strong>今日可用AI识别次数:</strong> <span style="color: ${remaining > 0 ? '#28a745' : '#dc3545'};">${remaining}/${data.daily_gemini_limit}</span></p>`;
-
-    // 分解信息单独一行，更小字体
-    let limitBreakdown = [];
-    if (data.accountType<2) {
-    if (data.base_limit_from_level) {
-      limitBreakdown.push(`B站等级${data.base_limit_from_level}`);
-    }
-    if (data.trial_bonus && data.is_in_trial_period) {
-      limitBreakdown.push(`推广期${data.trial_bonus}`);
-    }
-    if (data.vip_bonus && data.is_vip_active) {
-      limitBreakdown.push(`年度大会员${data.vip_bonus}`);
-    }
+        accountTypeDisplay += `<span style="color: #28a745;"> (推广体验期至${data.trial_end_date})</span>`;
     }
 
-    if (limitBreakdown.length > 0) {
-      statsHTML += `<p style="margin: 2px 0 5px 0; font-size: 0.85em; color: #666;">　　(${limitBreakdown.join(' + ')})</p>`;
+    let detailsHTML = `
+        <div style="font-size: 0.9em; color: #666; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+            <div><strong>账号类型:</strong> ${accountTypeDisplay}</div>
+        </div>
+    `;
+
+    for (const groupId in groupedDetails) {
+        const group = groupedDetails[groupId];
+        detailsHTML += `
+            <div style="margin-bottom: 5px;">
+                <strong>${group.description}</strong>
+                <div style="padding-left: 10px; font-size: 0.95em;">${group.items.join('<br>')}</div>
+            </div>
+        `;
     }
 
-    // 3. 累计统计（紧凑显示）
+    // 5. 组合最终的HTML
+    statsHTML += `
+        <div id="recommendation-view">${recommendationHTML}</div>
+        <div id="details-view" style="display: none; margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px;">
+            ${detailsHTML}
+        </div>
+    `;
+
+    // 6. 渲染累计统计
     statsHTML += `<p style="margin: 5px 0;"><strong>节省广告时间:</strong> ${data.total_ads_duration_display || 'N/A'}</p>`;
     statsHTML += `<p style="margin: 5px 0;"><strong>处理含广告视频:</strong> ${data.total_videos_with_ads !== undefined ? data.total_videos_with_ads : 'N/A'}个</p>`;
 
-
     userStatsArea.innerHTML = statsHTML;
+
+    // 7. 绑定事件
+    const toggle = document.getElementById('breakdown-toggle');
+    const recommendationView = document.getElementById('recommendation-view');
+    const detailsView = document.getElementById('details-view');
+
+    if (toggle && recommendationView && detailsView) {
+        toggle.addEventListener('click', () => {
+            const isHidden = detailsView.style.display === 'none';
+            detailsView.style.display = isHidden ? 'block' : 'none';
+            recommendationView.style.display = isHidden ? 'none' : 'block';
+            toggle.innerHTML = isHidden ? '▲' : '▼';
+        });
+    }
 
     // 保存时间显示以防后续更新失败时使用
     data._updateTimeDisplay = updateTimeDisplay;
@@ -818,19 +899,6 @@ document.addEventListener('DOMContentLoaded', function() {
    * @returns {Promise<Blob>} 生成的图片Blob
    */
   async function generateShareImage(userStats) {
-    // 统计分享图片生成次数
-    try {
-      const workspace = 'adskip';
-      const baseUrl = 'https://api.counterapi.dev/v2';
-
-      // 递增总访问量（按官方文档格式）
-      await fetch(`${baseUrl}/${workspace}/share-post/up`, {
-        method: 'GET'
-      });
-    } catch (error) {
-      console.log('countapi统计失败:', error);
-    }
-
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
@@ -933,6 +1001,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // 生成并绘制QR码 - 给予充足空间
     const personalPageUrl = 'https://otokonoizumi.github.io/?source=adskip-post#projects';
     const qrCodeDataUrl = await generateQRCode(personalPageUrl);
+
+    // 统计分享图片生成次数
+    try {
+      const workspace = 'adskip';
+      const baseUrl = 'https://api.counterapi.dev/v2';
+
+      // 递增总访问量（按官方文档格式）
+      await fetch(`${baseUrl}/${workspace}/share-post/up`, {
+        method: 'GET'
+      });
+    } catch (error) {
+      console.log('countapi统计失败:', error);
+    }
 
     if (qrCodeDataUrl) {
       const qrImg = new Image();

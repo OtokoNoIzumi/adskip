@@ -6,8 +6,8 @@
 'use strict';
 
 // 开发环境优先配置 - 设置后会覆盖外部配置的baseURL
-// const PRIME_BASE_URL = null; // 开发时设置为 "https://localhost:3000" 等
-const PRIME_BASE_URL = "https://localhost:3000"; // 开发环境
+const PRIME_BASE_URL = null; // 开发时设置为 "https://localhost:3000" 等
+// const PRIME_BASE_URL = "https://localhost:3000"; // 开发环境
 // const PRIME_BASE_URL = "https://izumilife.xyz:3000"; // 测试环境
 // const PRIME_BASE_URL = "https://izumihostpab.life:3000"; // 生产环境
 
@@ -2158,10 +2158,10 @@ function buildApiUrls(config) {
  */
 async function getApiUrls() {
     try {
-        const config = await loadExternalConfig();
-        return buildApiUrls(config);
+        const baseURL = await getEffectiveBaseUrl();
+        return buildApiUrls({ api: { adSkipServerBaseURL: baseURL } });
     } catch (error) {
-        console.log('[AdSkip存储] 获取API URLs失败，使用默认配置:', error);
+        adskipUtils.logDebug('获取API URLs失败，使用默认配置:', error);
         return buildApiUrls(DEFAULT_CONFIG);
     }
 }
@@ -2336,5 +2336,52 @@ window.adskipStorage = {
     buildApiUrls,
 
     // 新增: 服务端数据同步
-    syncServerDataToLocal  // 新增: 服务端数据同步方法
+    syncServerDataToLocal,         // 新增: 服务端数据同步方法
+
+    // 新增: 自定义服务器支持
+    getEffectiveBaseUrl           // 新增: 获取有效的Base URL
 };
+
+/**
+ * 获取有效的Base URL
+ * 优先级: 用户自定义服务器 > 开发环境硬编码 > 外部配置 > 默认配置
+ * @returns {Promise<string>} 有效的Base URL
+ */
+async function getEffectiveBaseUrl() {
+    try {
+        // 1. 检查用户自定义服务器配置
+        const customConfig = await new Promise(resolve => {
+            chrome.storage.sync.get(['customServerEnabled', 'customServerUrl'], resolve);
+        });
+
+        if (customConfig.customServerEnabled && customConfig.customServerUrl) {
+            adskipUtils.logDebug('使用用户自定义服务器:', customConfig.customServerUrl);
+            return customConfig.customServerUrl;
+        }
+
+        // 2. 检查开发环境硬编码
+        if (PRIME_BASE_URL) {
+            adskipUtils.logDebug('使用开发环境硬编码服务器:', PRIME_BASE_URL);
+            return PRIME_BASE_URL;
+        }
+
+        // 3. 尝试加载外部配置
+        const externalConfig = await loadExternalConfig();
+        if (externalConfig && externalConfig.api && externalConfig.api.adSkipServerBaseURL) {
+            adskipUtils.logDebug('使用外部配置服务器:', externalConfig.api.adSkipServerBaseURL);
+            return externalConfig.api.adSkipServerBaseURL;
+        }
+
+        // 4. 使用默认配置
+        adskipUtils.logDebug('使用默认服务器:', DEFAULT_CONFIG.api.adSkipServerBaseURL);
+        return DEFAULT_CONFIG.api.adSkipServerBaseURL;
+
+    } catch (error) {
+        adskipUtils.logDebug('获取Base URL失败，使用默认配置:', error);
+        return DEFAULT_CONFIG.api.adSkipServerBaseURL;
+    }
+}
+
+/**
+ * 从外部配置源加载配置，缓存策略
+ */
