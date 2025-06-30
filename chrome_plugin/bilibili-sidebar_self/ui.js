@@ -449,23 +449,27 @@ function createLinkGenerator() {
             });
 
             // 立即应用按钮
-            document.getElementById('adskip-apply').addEventListener('click', function() {
+            document.getElementById('adskip-apply').addEventListener('click', async function() {
                 const input = document.getElementById('adskip-input').value.trim();
-                if (!input) {
-                    // 如果输入为空，则清空时间段
+
+                                if (!input) {
+                    // 如果输入为空，则清空时间段并加入白名单
                     adskipVideoMonitor.setupAdSkipMonitor([]);
 
-                    // 清空时间戳后同时清理视频状态
+                    // 删除时间戳记录
                     const currentVideoId = adskipUtils.getCurrentVideoId().id;
                     if (currentVideoId) {
-                        adskipStorage.saveVideoStatus(currentVideoId, 3).then(() => { // 3 = VIDEO_STATUS.UNDETECTED
-                            adskipUtils.logDebug('[AdSkip UI] 清空设置后已将视频状态设为UNDETECTED');
-                        }).catch(e => {
-                            adskipUtils.logDebug('[AdSkip UI] 清理视频状态时出错:', e);
-                        });
+                        // 使用现有的removeKeys方法删除时间戳
+                        await adskipStorage.removeKeys([`${adskipStorage.KEYS.VIDEO_PREFIX}${currentVideoId}`]);
+                        // 加入白名单
+                        await adskipStorage.addVideoToNoAdsWhitelist(currentVideoId);
+                        // 更新按钮状态为NO_ADS
+                        if (typeof adskipAdDetection !== 'undefined') {
+                            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.NO_ADS, {}, 'Apply: 清空时间段');
+                        }
                     }
 
-                    updateStatusDisplay('设置已应用: 已清空所有时间段', 'info');
+                    updateStatusDisplay('设置已应用: 已清空所有时间段并加入无广告白名单', 'info');
                     return;
                 }
 
@@ -491,14 +495,20 @@ function createLinkGenerator() {
 
                     adskipVideoMonitor.setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
 
-                    // 手动设置时间戳后同时保存视频状态
+                    // 保存时间戳并处理白名单
                     const currentVideoId = adskipUtils.getCurrentVideoId().id;
-                    if (currentVideoId && adTimestamps.length > 0) {
-                        adskipStorage.saveVideoStatus(currentVideoId, 2).then(() => { // 2 = VIDEO_STATUS.HAS_ADS
-                            adskipUtils.logDebug('[AdSkip UI] 手动设置后已保存视频状态为HAS_ADS');
-                        }).catch(e => {
-                            adskipUtils.logDebug('[AdSkip UI] 保存视频状态时出错:', e);
-                        });
+                    if (currentVideoId) {
+                        // 保存时间戳
+                        await adskipStorage.saveAdTimestampsForVideo(currentVideoId, adTimestamps);
+                        // 如果视频在白名单中，从白名单移除
+                        const isInWhitelist = await adskipStorage.checkVideoInNoAdsWhitelist(currentVideoId);
+                        if (isInWhitelist) {
+                            await adskipStorage.removeVideoFromWhitelist(currentVideoId);
+                        }
+                        // 更新按钮状态为HAS_ADS
+                        if (typeof adskipAdDetection !== 'undefined') {
+                            adskipAdDetection.updateVideoStatus(adskipAdDetection.VIDEO_STATUS.HAS_ADS, { adTimestamps }, 'Apply: 设置时间段');
+                        }
                     }
 
                     updateStatusDisplay('设置已应用: ' + input, 'success');
@@ -530,8 +540,8 @@ function createLinkGenerator() {
             }
             // 重置按钮 - 清空已保存的视频广告数据
             document.getElementById('adskip-reset').addEventListener('click', function() {
-                // 使用storage模块的集中式方法，获取视频数据和状态记录键
-                adskipStorage.getVideoDataAndStatusKeys().then(function(videoKeys) {
+                // 使用storage模块的集中式方法，获取视频数据键
+                adskipStorage.getVideoDataKeys().then(function(videoKeys) {
                     if (videoKeys.length > 0) {
                         if (confirm('确定要清空【所有】已保存的视频广告数据吗？\n注意：此操作不会影响白名单和其他设置。')) {
                             adskipStorage.removeKeys(videoKeys).then(() => {

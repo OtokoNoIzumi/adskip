@@ -297,8 +297,6 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
                 statusResult.statusData = {};
                 updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
 
-                const newStatus = urlAdSkipResult.type === "NO_ADS_CONFIRMED" ? VIDEO_STATUS.NO_ADS : VIDEO_STATUS.HAS_ADS;
-                await adskipStorage.saveVideoStatus(videoId, newStatus);
                 await adskipStorage.addVideoToNoAdsWhitelist(videoId);
 
                 return statusResult;
@@ -310,8 +308,6 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
                 statusResult.statusData.adTimestamps = urlAdSkipResult.timestamps;
                 updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
 
-                const newStatus = VIDEO_STATUS.HAS_ADS;
-                await adskipStorage.saveVideoStatus(videoId, newStatus);
                 await adskipStorage.saveAdTimestampsForVideo(videoId, urlAdSkipResult.timestamps);
 
                 return statusResult;
@@ -329,51 +325,20 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             // 需要比较 subtitleData.owner.mid 和当前用户的 uid
         }
 
-        // 6. 检查本地存储的广告标记状态 (优先级 3)
-        const storedStatus = await adskipStorage.getVideoStatus(videoId);
-
-        // 同时检查是否有时间戳数据
-        let hasStoredTimestamps = false;
+        // 6. 检查本地存储的广告时间戳 (优先级 3)
         let storedTimestamps = [];
         try {
             storedTimestamps = await adskipStorage.loadAdTimestampsForVideo(videoId);
-            hasStoredTimestamps = storedTimestamps && storedTimestamps.length > 0;
         } catch (e) {
             adskipUtils.logDebug('[AdSkip广告检测] 检查时间戳数据时出错:', e);
         }
 
-        if (storedStatus !== null && storedStatus !== undefined) {
-            const statusKey = Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === storedStatus) || 'Unknown';
-            adskipUtils.logDebug(`[AdSkip广告检测] 使用本地存储的状态: ${statusKey}(${storedStatus})`);
-            statusResult.status = storedStatus;
-            statusResult.source = 'storage';
-            // skipDataProcessing 保持 true
-            if (storedStatus === VIDEO_STATUS.HAS_ADS) {
-                if (hasStoredTimestamps) {
-                    statusResult.currentAdTimestamps = storedTimestamps;
-                    statusResult.statusData.adTimestamps = storedTimestamps;
-                    adskipUtils.logDebug('[AdSkip广告检测] 从本地存储加载了广告时间戳.');
-                } else {
-                    adskipUtils.logDebug('[AdSkip广告检测] 本地存储状态为HAS_ADS，但未找到时间戳数据.');
-                }
-            }
-            updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
-            return statusResult;
-        } else if (hasStoredTimestamps) {
-            // 有时间戳但没有状态记录，修复状态
+        if (storedTimestamps && storedTimestamps.length > 0) {
+            adskipUtils.logDebug('[AdSkip广告检测] 从本地存储加载了广告时间戳.');
             statusResult.status = VIDEO_STATUS.HAS_ADS;
-            statusResult.source = 'storage_fixed_manual';
+            statusResult.source = 'storage';
             statusResult.currentAdTimestamps = storedTimestamps;
             statusResult.statusData.adTimestamps = storedTimestamps;
-
-            // 修复存储状态
-            try {
-                await adskipStorage.saveVideoStatus(videoId, VIDEO_STATUS.HAS_ADS);
-                adskipUtils.logDebug('[AdSkip广告检测] 已修复并保存视频状态为HAS_ADS');
-            } catch (e) {
-                adskipUtils.logDebug('[AdSkip广告检测] 修复保存状态时出错:', e);
-            }
-
             updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
             return statusResult;
         }
@@ -777,21 +742,21 @@ async function sendDetectionRequest(subtitleData) {
         }
 
         // --- 检测成功 ---
-        const newStatus = result.hasAds ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
         const adTimestamps = result.adTimestamps || [];
+        // 基于实际时间戳数量判断是否有广告，而不是依赖后端的hasAds字段
+        const newStatus = (adTimestamps.length > 0) ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
 
         // 更新按钮状态和数据
         updateVideoStatus(newStatus, { adTimestamps: adTimestamps }, "检测成功");
 
-        // 保存状态和时间戳到本地存储（使用包含分P信息的完整videoId）
-        await adskipStorage.saveVideoStatus(videoId, newStatus);
+        // 保存时间戳或白名单到本地存储（使用包含分P信息的完整videoId）
         if (newStatus === VIDEO_STATUS.HAS_ADS) {
             await adskipStorage.saveAdTimestampsForVideo(videoId, adTimestamps);
-            adskipUtils.logDebug('[AdSkip广告检测] - 已保存 HAS_ADS 状态和时间戳');
+            adskipUtils.logDebug('[AdSkip广告检测] - 已保存广告时间戳');
         } else {
             // 如果检测结果是无广告，加入白名单
             await adskipStorage.addVideoToNoAdsWhitelist(videoId);
-            adskipUtils.logDebug('[AdSkip广告检测] - 已保存 NO_ADS 状态并加入白名单');
+            adskipUtils.logDebug('[AdSkip广告检测] - 已加入无广告白名单');
         }
 
         // 无论检测到广告与否，都增加处理视频计数

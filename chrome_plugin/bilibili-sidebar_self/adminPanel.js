@@ -410,7 +410,7 @@ function loadVideoData() {
 
             for (const key of adskipKeys) {
                 try {
-                    const videoId = key.replace(adskipStorage.KEYS.PREFIX, '');
+                    const videoId = key.replace(adskipStorage.KEYS.VIDEO_PREFIX, '');
                     const data = items[key];
                     const parsedData = JSON.parse(data);
 
@@ -516,7 +516,7 @@ function loadVideoData() {
 
                     if (confirm(`确定要删除 ${videoId} 的广告跳过设置吗？`)) {
                         // 使用adskipStorage接口
-                        adskipStorage.removeKeys([`${adskipStorage.KEYS.PREFIX}${videoId}`]).then(() => {
+                        adskipStorage.removeKeys([`${adskipStorage.KEYS.VIDEO_PREFIX}${videoId}`]).then(() => {
                             adskipUtils.logDebug(`已删除视频 ${videoId} 的广告跳过设置`);
 
                             if (videoId === currentVideoId) {

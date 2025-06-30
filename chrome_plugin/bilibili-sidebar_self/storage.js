@@ -133,7 +133,6 @@ async function getVideoDataKeys() {
                 const videoPrefix = STORAGE_KEYS.VIDEO_PREFIX;
                 const videoKeys = allKeys.filter(key =>
                     key.startsWith(videoPrefix) &&
-                    !key.startsWith(`${videoPrefix}status_`) && // 排除状态记录键
                     !STORAGE_KEYS.RESERVED_KEYS().includes(key)
                 );
 
@@ -1318,85 +1317,7 @@ async function addVideoToNoAdsWhitelist(videoId) {
     return saveVideoWhitelist(whitelist);
 }
 
-/**
- * 保存视频状态
- * 存储视频的处理状态，用于后续跟踪和优化
- * @param {string} videoId 视频ID
- * @param {number} status 视频状态，使用VIDEO_STATUS枚举值
- * @returns {Promise<boolean>} 保存是否成功
- */
-async function saveVideoStatus(videoId, status) {
-    if (!videoId) {
-        adskipUtils.logDebug('[AdSkip存储] 视频ID为空，无法保存状态');
-        return false;
-    }
 
-    try {
-        // 使用视频ID作为键，避免与广告时间戳存储冲突
-        const key = `${STORAGE_KEYS.VIDEO_PREFIX}status_${videoId}`;
-
-        const data = {
-            status: status,
-            updatedAt: Date.now()
-        };
-
-        return new Promise(resolve => {
-            chrome.storage.local.set({ [key]: JSON.stringify(data) }, () => {
-                const success = !chrome.runtime.lastError;
-                if (success) {
-                    adskipUtils.logDebug(`[AdSkip存储] 成功保存视频 ${videoId} 的状态: ${status}`);
-                } else {
-                    adskipUtils.logDebug(`[AdSkip存储] 保存视频状态失败: ${chrome.runtime.lastError?.message || '未知错误'}`);
-                }
-                resolve(success);
-            });
-        });
-    } catch (e) {
-        adskipUtils.logDebug(`[AdSkip存储] 保存视频状态时发生异常: ${e.message}`);
-        console.error('[AdSkip存储] 保存视频状态时发生异常:', e);
-        return false;
-    }
-}
-
-/**
- * 获取视频状态
- * 获取之前存储的视频处理状态
- * @param {string} videoId 视频ID
- * @returns {Promise<number|null>} 视频状态或null（如果未找到）
- */
-async function getVideoStatus(videoId) {
-    if (!videoId) {
-        adskipUtils.logDebug('[AdSkip存储] 视频ID为空，无法获取状态');
-        return null;
-    }
-
-    try {
-        const key = `${STORAGE_KEYS.VIDEO_PREFIX}status_${videoId}`;
-
-        return new Promise(resolve => {
-            chrome.storage.local.get(key, result => {
-                if (chrome.runtime.lastError || !result[key]) {
-                    adskipUtils.logDebug(`[AdSkip存储] 未找到视频 ${videoId} 的状态记录`);
-                    resolve(null);
-                    return;
-                }
-
-                try {
-                    const data = JSON.parse(result[key]);
-                    adskipUtils.logDebug(`[AdSkip存储] 成功获取视频 ${videoId} 的状态: ${data.status}，数据：`, data);
-                    resolve(data.status);
-                } catch (e) {
-                    adskipUtils.logDebug(`[AdSkip存储] 解析视频状态时发生异常: ${e.message}`);
-                    resolve(null);
-                }
-            });
-        });
-    } catch (e) {
-        adskipUtils.logDebug(`[AdSkip存储] 获取视频状态时发生异常: ${e.message}`);
-        console.error('[AdSkip存储] 获取视频状态时发生异常:', e);
-        return null;
-    }
-}
 
 /**
  * 从白名单移除视频ID
@@ -2077,46 +1998,7 @@ async function getUsageStats() {
     });
 }
 
-/**
- * 获取所有视频数据相关的键（包括状态记录键）
- * 用于彻底清除视频相关数据，包括广告时间戳和处理状态记录
- * @returns {Promise<Array>} 过滤后的键名数组
- */
-async function getVideoDataAndStatusKeys() {
-    adskipUtils.logDebug('开始获取所有视频数据键（包括状态记录）');
 
-    try {
-        return new Promise(resolve => {
-            chrome.storage.local.get(null, allData => {
-                if (chrome.runtime.lastError) {
-                    adskipUtils.logDebug(`获取所有存储键失败: ${chrome.runtime.lastError.message}`);
-                    resolve([]);
-                    return;
-                }
-
-                // 过滤出视频数据键（以STORAGE_KEYS.VIDEO_PREFIX开头，包括状态记录）
-                const allKeys = Object.keys(allData || {});
-                const videoPrefix = STORAGE_KEYS.VIDEO_PREFIX;
-                const videoKeys = allKeys.filter(key =>
-                    key.startsWith(videoPrefix) &&
-                    !STORAGE_KEYS.RESERVED_KEYS().includes(key)
-                );
-
-                adskipUtils.logDebug(`找到 ${allKeys.length} 个存储键，其中 ${videoKeys.length} 个是视频数据键（包括状态记录）`);
-
-                if (videoKeys.length > 0) {
-                    adskipUtils.logDebug(`视频数据键示例: ${videoKeys.slice(0, 3).join(', ')}${videoKeys.length > 3 ? '...' : ''}`);
-                }
-
-                resolve(videoKeys);
-            });
-        });
-    } catch (e) {
-        adskipUtils.logDebug(`获取视频数据键时发生异常: ${e.message}`);
-        console.error('获取视频数据键时发生异常:', e);
-        return [];
-    }
-}
 
 // ==================== 统一配置管理 ====================
 
@@ -2395,7 +2277,7 @@ window.adskipStorage = {
 
     // 新添加的函数
     getVideoDataKeys,
-    getVideoDataAndStatusKeys,
+
     getConfigKeys,
     getWhitelistKeys,
     getReservedKeys,
@@ -2409,11 +2291,9 @@ window.adskipStorage = {
     addVideoToWhitelist,
     removeVideoFromWhitelist,
 
-    // 新增的视频无广告白名单和状态管理
+    // 新增的视频无广告白名单管理
     checkVideoInNoAdsWhitelist,
     addVideoToNoAdsWhitelist,
-    saveVideoStatus,
-    getVideoStatus,
 
     // 新添加的函数
     clearUploaderCache,
