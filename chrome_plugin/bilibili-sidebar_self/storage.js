@@ -38,6 +38,7 @@ const STORAGE_KEYS = {
     DEBUG_MODE: 'adskip_debug_mode',
     ENABLED: 'adskip_enabled',
     PERCENTAGE: 'adskip_percentage',
+    SKIP_OWN_VIDEOS: 'adskip_skip_own_videos',
     ADMIN_AUTH: 'adskip_admin_authorized',
     UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
     VIDEO_PREFIX: 'adskip_',
@@ -62,6 +63,7 @@ const STORAGE_KEYS = {
         'adskip_debug_mode',
         'adskip_enabled',
         'adskip_percentage',
+        'adskip_skip_own_videos',
         'adskip_admin_authorized'
     ],
     WHITELIST_KEYS: [
@@ -1081,6 +1083,38 @@ function setEnabled(enabled) {
                 return;
             }
             adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}广告跳过功能`);
+            resolve(enabled);
+        });
+    });
+}
+
+/**
+ * 获取"跳过自己视频"功能状态
+ * @returns {Promise<boolean>} 是否启用
+ */
+function getSkipOwnVideos() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_OWN_VIDEOS, function(result) {
+            // 默认为 true (启用状态)
+            const skipOwnVideos = result[STORAGE_KEYS.SKIP_OWN_VIDEOS] !== false;
+            resolve(skipOwnVideos);
+        });
+    });
+}
+
+/**
+ * 设置"跳过自己视频"功能状态
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<boolean>} 设置后的状态
+ */
+function setSkipOwnVideos(enabled) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({[STORAGE_KEYS.SKIP_OWN_VIDEOS]: enabled}, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}"不检测自己视频"功能`);
             resolve(enabled);
         });
     });
@@ -2352,6 +2386,8 @@ window.adskipStorage = {
     // 功能开关状态
     getEnabled,
     setEnabled,
+    getSkipOwnVideos,
+    setSkipOwnVideos,
 
     // 存储管理
     getAllKeys,

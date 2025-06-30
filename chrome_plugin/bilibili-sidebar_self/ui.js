@@ -454,6 +454,17 @@ function createLinkGenerator() {
                 if (!input) {
                     // 如果输入为空，则清空时间段
                     adskipVideoMonitor.setupAdSkipMonitor([]);
+
+                    // 清空时间戳后同时清理视频状态
+                    const currentVideoId = adskipUtils.getCurrentVideoId().id;
+                    if (currentVideoId) {
+                        adskipStorage.saveVideoStatus(currentVideoId, 3).then(() => { // 3 = VIDEO_STATUS.UNDETECTED
+                            adskipUtils.logDebug('[AdSkip UI] 清空设置后已将视频状态设为UNDETECTED');
+                        }).catch(e => {
+                            adskipUtils.logDebug('[AdSkip UI] 清理视频状态时出错:', e);
+                        });
+                    }
+
                     updateStatusDisplay('设置已应用: 已清空所有时间段', 'info');
                     return;
                 }
@@ -479,6 +490,17 @@ function createLinkGenerator() {
                     });
 
                     adskipVideoMonitor.setupAdSkipMonitor(adTimestamps); // 覆盖而不是添加
+
+                    // 手动设置时间戳后同时保存视频状态
+                    const currentVideoId = adskipUtils.getCurrentVideoId().id;
+                    if (currentVideoId && adTimestamps.length > 0) {
+                        adskipStorage.saveVideoStatus(currentVideoId, 2).then(() => { // 2 = VIDEO_STATUS.HAS_ADS
+                            adskipUtils.logDebug('[AdSkip UI] 手动设置后已保存视频状态为HAS_ADS');
+                        }).catch(e => {
+                            adskipUtils.logDebug('[AdSkip UI] 保存视频状态时出错:', e);
+                        });
+                    }
+
                     updateStatusDisplay('设置已应用: ' + input, 'success');
                 } catch (e) {
                     updateStatusDisplay('格式错误，请使用正确的格式：开始-结束,开始-结束 (支持秒数或时:分:秒格式)', 'error');

@@ -261,6 +261,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // "不检测自己视频"开关监听
+  const skipOwnVideosToggle = document.getElementById('skip-own-videos');
+  skipOwnVideosToggle.addEventListener('change', function() {
+    const newSkipOwnVideos = this.checked;
+    // 获取当前状态并比较
+    adskipStorage.getSkipOwnVideos().then(function(currentSkipOwnVideos) {
+      // 只有当状态确实变化时才设置
+      if (currentSkipOwnVideos !== newSkipOwnVideos) {
+        adskipStorage.setSkipOwnVideos(newSkipOwnVideos).then(function() {
+          showStatus(newSkipOwnVideos ? '已启用"不检测自己视频"功能' : '已禁用"不检测自己视频"功能');
+        });
+      }
+    });
+  });
+
   // 广告跳过百分比滑块监听
   const percentageSlider = document.getElementById('skip-percentage');
   const percentageValue = document.getElementById('percentage-value');
@@ -451,8 +466,9 @@ function loadSettings() {
   // 获取其他需要异步处理的设置
   Promise.all([
     adskipStorage.getEnabled(),
-    adskipStorage.loadAdSkipPercentage()
-  ]).then(function([enabled, percentage]) {
+    adskipStorage.loadAdSkipPercentage(),
+    adskipStorage.getSkipOwnVideos()
+  ]).then(function([enabled, percentage, skipOwnVideos]) {
     // 加载功能启用状态
     const adskipToggle = document.getElementById('enable-adskip');
     if (adskipToggle) {
@@ -468,6 +484,12 @@ function loadSettings() {
         percentageSlider.value = percentage;
         percentageValue.textContent = percentage;
       }
+    }
+
+    // 加载"不检测自己视频"状态
+    const skipOwnVideosToggle = document.getElementById('skip-own-videos');
+    if (skipOwnVideosToggle) {
+      skipOwnVideosToggle.checked = skipOwnVideos;
     }
   });
 }
@@ -511,6 +533,14 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     const debugModeToggle = document.getElementById('debug-mode');
     if (debugModeToggle) {
       debugModeToggle.checked = changes[adskipStorage.KEYS.DEBUG_MODE].newValue || false;
+    }
+  }
+
+  // 监听"不检测自己视频"变化，使用adskipStorage.KEYS常量
+  if (changes[adskipStorage.KEYS.SKIP_OWN_VIDEOS] !== undefined) {
+    const skipOwnVideosToggle = document.getElementById('skip-own-videos');
+    if (skipOwnVideosToggle) {
+      skipOwnVideosToggle.checked = changes[adskipStorage.KEYS.SKIP_OWN_VIDEOS].newValue !== false;
     }
   }
 
