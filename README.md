@@ -12,7 +12,7 @@
 
 **一个智能的Chrome扩展，用于自动检测和跳过哔哩哔哩(Bilibili)视频中的广告内容**
 
-[🏪 Chrome商店安装](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip) · [📋 使用说明](#使用说明) · [🛠️ 本地安装](#本地安装) · [❓ 问题反馈](https://github.com/OtokoNoIzumi/adskip/issues)
+[🏪 Chrome商店安装](https://chromewebstore.google.com/detail/dicbndgaokkkafcehlfmkllbipeekfhi?utm_source=github-adskip) · [📋 使用说明](#使用说明) · [🛠️ 本地安装](#本地安装) · [❓ 问题反馈](https://github.com/OtokoNoIzumi/adskip/issues) · [💡 广告数据洞察](https://otokonoizumi.github.io/adskip_analyze)
 
 </div>
 
@@ -114,7 +114,7 @@
 ## 🗺️ 开发计划
 
 ### 前端优化 🎨
-- [ ] **代码清理**: 清理测试期遗留的废弃代码
+- [x] **代码清理**: 清理测试期遗留的废弃代码
 - [ ] **白名单管理**: 设置数据量上限和自动清除机制
 - [ ] **初始化优化**: 优化BV ID提取逻辑，减少重复调用
 - [x] **检测时机**: 提前视频时长检测，优化字幕检查流程
@@ -127,6 +127,8 @@
 - [ ] **更直接的社交联系**: 一定情况的自动信件，邀请反馈和分享；关注可以增加次数——信件的问题这是只有一次回复，要不要用掉再说，但欢迎我觉得还是可以。
 - [x] **排查为什么没日志**: 我自己的点开菜单没日志——本地次数差异，这是一个缺陷，可以不写数据但信息都来了还是打印一个日志。
 - [ ] 报错的这个按钮和清理过期提示词一起做，包括主动提交——无字幕才接受主动提交，且做一次长度校验；报错只有有字幕的情况
+- [ ] 在前端提交关注与否的数据用做触发，优化分享海报的日志，改为即时有效
+- [ ] 分享海报改为可以在本地批量生成多渠道内容，post*.svg内仅保存核心设计差异，不保留图片base64和二维码path
 
 ### 后端优化 ⚙️
 - [ ] **数据库重构**: 迁移到ORM方法
