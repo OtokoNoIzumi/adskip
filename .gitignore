@@ -7,3 +7,5 @@ Log
 debug_info.log
 localhost+1*.pem
 local_settings/
+.kiro/
+.vscode/

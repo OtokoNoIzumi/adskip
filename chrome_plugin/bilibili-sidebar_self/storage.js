@@ -21,7 +21,7 @@ const EXTERNAL_CONFIG_TIMEOUT = 5000; // 5秒超时
 const DEFAULT_CONFIG = {
     version: "1.3.0",
     api: {
-        adSkipServerBaseURL: "https://izumihostpab.life:3000"
+        adSkipServerBaseURL: "https://izumiai.site:3000"
     },
     version_hint: {
         "default": [

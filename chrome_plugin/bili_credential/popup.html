@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .header {
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+      color: #333;
+    }
+
+    .section {
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #555;
+    }
+
+    .data-item {
+      margin-bottom: 6px;
+      padding: 8px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      border-left: 3px solid #007bff;
+    }
+
+    .data-label {
+      font-weight: 500;
+      color: #666;
+      margin-bottom: 2px;
+    }
+
+    .data-value {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #333;
+      word-break: break-all;
+      background: white;
+      padding: 4px 6px;
+      border-radius: 2px;
+      border: 1px solid #ddd;
+      max-height: 60px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .no-data {
+      color: #999;
+      font-style: italic;
+    }
+
+    .api-section {
+      border-top: 1px solid #e0e0e0;
+      padding-top: 16px;
+    }
+
+    .api-input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .api-input:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
+    .button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 8px;
+    }
+
+    .button:hover {
+      background: #0056b3;
+    }
+
+    .button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+
+    .log-container {
+      max-height: 150px;
+      overflow-y: auto;
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      padding: 8px;
+    }
+
+    .log-item {
+      margin-bottom: 6px;
+      padding: 4px 6px;
+      background: white;
+      border-radius: 2px;
+      border-left: 3px solid #007bff;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .log-item.success {
+      border-left-color: #28a745;
+    }
+
+    .log-item.error {
+      border-left-color: #dc3545;
+    }
+
+    .log-item.info {
+      border-left-color: #17a2b8;
+    }
+
+    .log-timestamp {
+      color: #666;
+      font-weight: 500;
+    }
+
+    .log-message {
+      color: #333;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="title">B站认证数据</h1>
+  </div>
+
+  <div class="section">
+    <div class="section-title">当前数据</div>
+    <div id="dataContainer">
+      <div class="data-item">
+        <div class="data-label">SESSDATA</div>
+        <div class="data-value no-data" id="sessdata">加载中...</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">bili_jct</div>
+        <div class="data-value no-data" id="bili_jct">加载中...</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">ac_time_value</div>
+        <div class="data-value no-data" id="ac_time_value">加载中...</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">DedeUserID</div>
+        <div class="data-value no-data" id="dedeuserid">加载中...</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">获取时间</div>
+        <div class="data-value no-data" id="timestamp">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section api-section">
+    <div class="section-title">API 设置</div>
+    <input type="text" id="apiEndpoint" class="api-input" placeholder="输入API端点地址 (例如: http://localhost:3000/api/sync)">
+    <input type="text" id="adminSecretKey" class="api-input" placeholder="输入管理员密钥 (admin_secret_key)">
+    <div>
+      <button id="saveApi" class="button">保存</button>
+      <button id="syncNow" class="button">立即同步</button>
+    </div>
+    <div id="status"></div>
+
+    <div class="section">
+      <div class="section-title">同步日志</div>
+      <div id="syncLog" class="log-container">
+        <div class="log-item">暂无同步记录</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
