@@ -176,6 +176,7 @@ const STORAGE_KEYS = {
     ENABLED: 'adskip_enabled',
     PERCENTAGE: 'adskip_percentage',
     SKIP_OWN_VIDEOS: 'adskip_skip_own_videos',
+    SEARCH_PRECHECK: 'adskip_search_precheck',
     ADMIN_AUTH: 'adskip_admin_authorized',
     UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
     VIDEO_PREFIX: 'adskip_',
@@ -1251,6 +1252,38 @@ function setSkipOwnVideos(enabled) {
                 return;
             }
             adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}"不检测自己视频"功能`);
+            resolve(enabled);
+        });
+    });
+}
+
+/**
+ * 获取搜索页预检功能状态
+ * @returns {Promise<boolean>} 搜索页预检是否启用
+ */
+function getSearchPrecheck() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(STORAGE_KEYS.SEARCH_PRECHECK, function(result) {
+            // 默认为 false (禁用状态)
+            const searchPrecheck = result[STORAGE_KEYS.SEARCH_PRECHECK] === true;
+            resolve(searchPrecheck);
+        });
+    });
+}
+
+/**
+ * 设置搜索页预检功能状态
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<boolean>} 设置后的状态
+ */
+function setSearchPrecheck(enabled) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({[STORAGE_KEYS.SEARCH_PRECHECK]: enabled}, function() {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}搜索页预检功能`);
             resolve(enabled);
         });
     });
@@ -2407,6 +2440,10 @@ window.adskipStorage = {
     setEnabled,
     getSkipOwnVideos,
     setSkipOwnVideos,
+
+    // 搜索页预检功能
+    getSearchPrecheck,
+    setSearchPrecheck,
 
     // 存储管理
     getAllKeys,

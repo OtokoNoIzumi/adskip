@@ -3,6 +3,27 @@
  * 定义广告跳过按钮的样式和动画效果
  */
 
+/* ========== 搜索页无字幕徽标 ========== */
+.adskip-no-subtitle-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background-color: #ff5555;
+  color: #ffffff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 1000;
+  pointer-events: none;
+  font-weight: bold;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.bili-video-card__image--wrap {
+  position: relative;
+}
+
 /* 无字幕状态 - 灰色 */
 .adskip-button.no-subtitle {
   background-color: #aaaaaa !important;

@@ -578,14 +578,37 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                 return result;
             }
 
-            // 获取默认字幕或第一个字幕的内容
-            const defaultSubtitle = subtitleInfo.subtitles.find(sub => sub.isDefault) || subtitleInfo.subtitles[0];
-            if (defaultSubtitle && defaultSubtitle.url) {
-                adskipUtils.logDebug('[AdSkip服务] 尝试获取字幕内容:', defaultSubtitle.languageName, defaultSubtitle.url);
+            // 优先选择中文字幕，如果没有则使用第一个
+            let selectedSubtitle = null;
+            let firstSubtitle = subtitleInfo.subtitles[0];
+
+            // 优先查找中文字幕（language中包含zh或cn）
+            for (let sub of subtitleInfo.subtitles) {
+                if (sub.language && (sub.language.includes('zh') || sub.language.includes('cn'))) {
+                    selectedSubtitle = sub;
+                    break;
+                }
+            }
+
+            // 如果没有中文字幕，使用第一个字幕
+            if (!selectedSubtitle) {
+                selectedSubtitle = firstSubtitle;
+
+                // 记录非中文字幕的情况（用于调试）
+                if (selectedSubtitle && subtitleInfo.rawData) {
+                    const videoIdInfo = adskipUtils.getCurrentVideoId();
+                    const bvid = videoIdInfo.bvid || '未知';
+                    const title = subtitleInfo.rawData.rawVideoData?.title || subtitleInfo.rawData.title || '未知';
+                    adskipUtils.logDebug('[AdSkip服务] 非中文字幕：bvid=' + bvid + ', title=【' + title + '】, language=' + selectedSubtitle.language + ', languageName=' + selectedSubtitle.languageName);
+                }
+            }
+
+            if (selectedSubtitle && selectedSubtitle.url) {
+                adskipUtils.logDebug('[AdSkip服务] 尝试获取字幕内容:', selectedSubtitle.languageName, selectedSubtitle.url);
 
                 try {
                     // 下载字幕文件 - 已处理格式
-                    const processedSubtitle = await downloadSubtitleFile(defaultSubtitle.url);
+                    const processedSubtitle = await downloadSubtitleFile(selectedSubtitle.url);
 
                     if (!processedSubtitle || processedSubtitle.subtitles.length === 0) {
                         adskipUtils.logDebug('[AdSkip服务] 字幕内容为空');
@@ -597,7 +620,7 @@ window.adskipSubtitleService = window.adskipSubtitleService || {};
                     result.subtitleContent = processedSubtitle.preview; // 使用已经处理好的预览
                     result.rawSubtitleOriginal = processedSubtitle.subtitles; // 使用标准化的字幕内容
                     result.rawFullSubtitle = processedSubtitle; // 保存完整的处理结果
-                    result.message = `成功获取"${defaultSubtitle.languageName}"字幕预览`;
+                    result.message = `成功获取"${selectedSubtitle.languageName}"字幕预览`;
                     adskipUtils.logDebug('[AdSkip服务] 提取到', result.subtitleContent.length, '条字幕预览，共', processedSubtitle.subtitles.length, '条完整字幕');
                 } catch (downloadError) {
                     adskipUtils.logDebug('[AdSkip服务] 下载字幕失败:', downloadError);

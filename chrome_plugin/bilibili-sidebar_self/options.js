@@ -277,6 +277,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+  // 搜索页预检开关监听
+  const searchPrecheckToggle = document.getElementById('search-precheck');
+  searchPrecheckToggle.addEventListener('change', function() {
+    const newSearchPrecheck = this.checked;
+    // 获取当前状态并比较
+    adskipStorage.getSearchPrecheck().then(function(currentSearchPrecheck) {
+      // 只有当状态确实变化时才设置
+      if (currentSearchPrecheck !== newSearchPrecheck) {
+        adskipStorage.setSearchPrecheck(newSearchPrecheck).then(function() {
+          showStatus(newSearchPrecheck ? '已启用搜索页预检功能' : '已禁用搜索页预检功能');
+        });
+      }
+    });
+  });
+
   // 广告跳过百分比滑块监听
   const percentageSlider = document.getElementById('skip-percentage');
   const percentageValue = document.getElementById('percentage-value');
@@ -493,8 +508,9 @@ function loadSettings() {
   Promise.all([
     adskipStorage.getEnabled(),
     adskipStorage.loadAdSkipPercentage(),
-    adskipStorage.getSkipOwnVideos()
-  ]).then(function([enabled, percentage, skipOwnVideos]) {
+    adskipStorage.getSkipOwnVideos(),
+    adskipStorage.getSearchPrecheck()
+  ]).then(function([enabled, percentage, skipOwnVideos, searchPrecheck]) {
     // 加载功能启用状态
     const adskipToggle = document.getElementById('enable-adskip');
     if (adskipToggle) {
@@ -516,6 +532,12 @@ function loadSettings() {
     const skipOwnVideosToggle = document.getElementById('skip-own-videos');
     if (skipOwnVideosToggle) {
       skipOwnVideosToggle.checked = skipOwnVideos;
+    }
+
+    // 加载搜索页预检状态
+    const searchPrecheckToggle = document.getElementById('search-precheck');
+    if (searchPrecheckToggle) {
+      searchPrecheckToggle.checked = searchPrecheck;
     }
   });
 }
@@ -567,6 +589,14 @@ chrome.storage.onChanged.addListener(function(changes, namespace) {
     const skipOwnVideosToggle = document.getElementById('skip-own-videos');
     if (skipOwnVideosToggle) {
       skipOwnVideosToggle.checked = changes[adskipStorage.KEYS.SKIP_OWN_VIDEOS].newValue !== false;
+    }
+  }
+
+  // 监听搜索页预检变化，使用adskipStorage.KEYS常量
+  if (changes[adskipStorage.KEYS.SEARCH_PRECHECK] !== undefined) {
+    const searchPrecheckToggle = document.getElementById('search-precheck');
+    if (searchPrecheckToggle) {
+      searchPrecheckToggle.checked = changes[adskipStorage.KEYS.SEARCH_PRECHECK].newValue === true;
     }
   }
 
