@@ -24,6 +24,36 @@
   position: relative;
 }
 
+/* ========== 搜索页广告卡片淡化 ========== */
+/* 只对 wrap 内容区域添加透明度 */
+.bili-video-card__wrap.adskip-identified-ad {
+  opacity: 0.1;
+  transition: opacity 0.3s ease;
+}
+
+/* 独立的广告标签（不受wrap的opacity影响） */
+.adskip-ad-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: linear-gradient(135deg, #ff5555, #ff0000);
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(255, 85, 85, 0.4);
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  opacity: 0.5 !important;
+}
+
+/* 鼠标悬停时稍微明显一点 */
+.bili-video-card__wrap.adskip-identified-ad:hover {
+  opacity: 0.3;
+}
+
 /* 无字幕状态 - 灰色 */
 .adskip-button.no-subtitle {
   background-color: #aaaaaa !important;

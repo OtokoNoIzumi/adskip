@@ -19,7 +19,7 @@ const EXTERNAL_CONFIG_TIMEOUT = 5000; // 5秒超时
 
 // 默认配置（超时时使用）
 const DEFAULT_CONFIG = {
-    version: "1.3.0",
+    version: "1.3.1",
     api: {
         adSkipServerBaseURL: "https://izumiai.site:3000"
     },

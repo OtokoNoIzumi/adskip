@@ -8,9 +8,9 @@
 // 缓存：已处理的BV号
 const processedBVs = new Set();
 
-// 缓存的字幕检测结果 (BV -> {hasSubtitle, timestamp})
-const subtitleCache = new Map();
-const CACHE_TTL = 60 * 1000; // 24小时
+// 缓存使用 Chrome storage 持久化存储，不再使用内存 Map
+const CACHE_TTL = 60 * 60 * 1000; // 1小时缓存（修正：之前写的是60分钟实际是60秒）
+const CACHE_KEY = 'adskip_search_subtitle_cache';
 
 // 并发控制（全局调度器）
 const MAX_CONCURRENT = 4;
@@ -34,78 +34,68 @@ function extractBV(href) {
 /**
  * 检查缓存是否有效
  * @param {string} bv BV号
- * @returns {Object|null} 缓存结果或null
+ * @returns {Promise<Object|null>} 缓存结果或null
  */
-function getCachedResult(bv) {
-    const cached = subtitleCache.get(bv);
-    if (!cached) return null;
-
-    const age = Date.now() - cached.timestamp;
-    if (age > CACHE_TTL) {
-        subtitleCache.delete(bv);
-        return null;
-    }
-
-    return cached;
-}
-
-/**
- * 从Chrome storage加载缓存
- */
-async function loadCacheFromStorage() {
+async function getCachedResult(bv) {
     try {
         const result = await new Promise(resolve => {
-            chrome.storage.local.get(['adskip_search_subtitle_cache'], resolve);
+            chrome.storage.local.get([CACHE_KEY], resolve);
         });
 
-        if (result.adskip_search_subtitle_cache) {
-            const data = JSON.parse(result.adskip_search_subtitle_cache);
-            const now = Date.now();
+        if (!result[CACHE_KEY]) return null;
 
-            // 清理过期项
-            for (const [bv, entry] of Object.entries(data)) {
-                if (now - entry.timestamp < CACHE_TTL) {
-                    subtitleCache.set(bv, entry);
-                }
-            }
+        const cache = JSON.parse(result[CACHE_KEY]);
+        const cached = cache[bv];
 
-            console.log(`[SearchPrecheck] 从存储加载缓存，有效项数: ${subtitleCache.size}`);
+        if (!cached) return null;
+
+        const age = Date.now() - cached.timestamp;
+        if (age > CACHE_TTL) {
+            // 删除过期项并保存
+            delete cache[bv];
+            await new Promise(resolve => {
+                chrome.storage.local.set({ [CACHE_KEY]: JSON.stringify(cache) }, resolve);
+            });
+            return null;
         }
+
+        return cached;
     } catch (error) {
-        console.log(`[SearchPrecheck] 加载缓存失败: ${error.message}`);
+        console.log(`[SearchPrecheck] 获取缓存失败: ${error.message}`);
+        return null;
     }
 }
 
 /**
- * 保存缓存到Chrome storage
+ * 设置缓存项
+ * @param {string} bv BV号
+ * @param {boolean} hasSubtitle 是否有字幕
  */
-async function saveCacheToStorage() {
+async function setCacheResult(bv, hasSubtitle) {
     try {
-        const data = {};
-        for (const [bv, entry] of subtitleCache) {
-            data[bv] = entry;
-        }
-
-        await new Promise(resolve => {
-            chrome.storage.local.set({
-                adskip_search_subtitle_cache: JSON.stringify(data)
-            }, resolve);
+        const result = await new Promise(resolve => {
+            chrome.storage.local.get([CACHE_KEY], resolve);
         });
 
-        console.log(`[SearchPrecheck] 缓存已保存，项数: ${subtitleCache.size}`);
+        const cache = result[CACHE_KEY] ? JSON.parse(result[CACHE_KEY]) : {};
+        cache[bv] = { hasSubtitle, timestamp: Date.now() };
+
+        await new Promise(resolve => {
+            chrome.storage.local.set({ [CACHE_KEY]: JSON.stringify(cache) }, resolve);
+        });
     } catch (error) {
-        console.log(`[SearchPrecheck] 保存缓存失败: ${error.message}`);
+        console.log(`[SearchPrecheck] 设置缓存失败: ${error.message}`);
     }
 }
 
 /**
  * 检测视频是否有字幕
  * @param {string} bv BV号
- * @returns {Promise<boolean>} 是否有字幕
+ * @returns {Promise<boolean|null>} 是否有字幕，null表示需要重新检测
  */
 async function checkSubtitle(bv) {
     // 仅保留缓存直返逻辑（不再承担调度）
-    const cached = getCachedResult(bv);
+    const cached = await getCachedResult(bv);
     if (cached !== null) {
         console.log(`[SearchPrecheck] 使用缓存结果: ${bv} -> ${cached.hasSubtitle}`);
         return cached.hasSubtitle;
@@ -139,8 +129,8 @@ async function runTask(bv, taskId) {
         const hasSubtitle = subtitles.length > 0;
         console.log(`[SearchPrecheck] ${bv}: ${hasSubtitle ? '有字幕' : '无字幕'} (${title.substring(0, 20)}...)`);
 
-        subtitleCache.set(bv, { hasSubtitle, timestamp: Date.now() });
-        if (subtitleCache.size % 10 === 0) saveCacheToStorage();
+        // 保存到持久化存储
+        await setCacheResult(bv, hasSubtitle);
 
         return hasSubtitle;
     } catch (e) {
@@ -152,7 +142,7 @@ async function runTask(bv, taskId) {
 /**
  * 将 BV 调度到全局队列
  */
-function scheduleBV(bv, card) {
+async function scheduleBV(bv, card) {
     // 绑定卡片
     if (card) {
         if (!bvToCards.has(bv)) bvToCards.set(bv, new Set());
@@ -161,7 +151,7 @@ function scheduleBV(bv, card) {
 
     // 已处理或执行中/已在队列：直接返回
     if (processedBVs.has(bv) || runningBVs.has(bv) || enqueuedBVs.has(bv)) {
-        const cached = getCachedResult(bv);
+        const cached = await getCachedResult(bv);
         if (cached && cached.hasSubtitle === false) {
             // 立即标记
             const cards = bvToCards.get(bv) || [];
@@ -171,7 +161,7 @@ function scheduleBV(bv, card) {
     }
 
     // 缓存命中：直接使用
-    const cached = getCachedResult(bv);
+    const cached = await getCachedResult(bv);
     if (cached !== null) {
         processedBVs.add(bv);
         if (cached.hasSubtitle === false) {
@@ -247,10 +237,57 @@ function addNoSubtitleBadge(card) {
 }
 
 /**
+ * 检测并标记广告卡片
+ * @param {HTMLElement} card 视频卡片元素
+ * @returns {boolean} 是否为广告卡片
+ */
+function markAdCard(card) {
+    // 检查广告标识：小火箭图标
+    const adMarker = card.querySelector('.bili-video-card__info--ad-creative');
+    // 检查广告链接：包含 cm.bilibili.com 的链接
+    const link = card.querySelector('a[href*="cm.bilibili.com"]');
+
+    if (adMarker || link) {
+        // 在 wrap 上添加透明度（只影响内容区域）
+        const wrap = card.querySelector('.bili-video-card__wrap');
+        if (wrap) {
+            // 已经标记过，跳过
+            if (wrap.classList.contains('adskip-identified-ad')) {
+                return true;
+            }
+
+            wrap.classList.add('adskip-identified-ad');
+
+            // 确保外层card是相对定位
+            if (!card.style.position) {
+                card.style.position = 'relative';
+            }
+
+            // 创建独立的广告标签
+            const adLabel = document.createElement('div');
+            adLabel.className = 'adskip-ad-label';
+            adLabel.textContent = '广告';
+
+            // 添加到外层card（不受wrap的opacity影响）
+            card.appendChild(adLabel);
+
+            console.log('[SearchPrecheck] 广告卡片已标记');
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * 处理视频卡片
  * @param {HTMLElement} card 视频卡片元素
  */
 async function processVideoCard(card) {
+    // 先检查并标记广告（如果是广告，直接返回，不进行字幕检测）
+    if (markAdCard(card)) {
+        return;
+    }
+
     // 提取BV号
     const link = card.querySelector('a[href*="/video/BV"]');
     if (!link) return;
@@ -281,17 +318,28 @@ function observePageChanges() {
             }
         }
 
-        if (newAnchors.size > 0) {
-            const uniqueBV = new Set();
-            newAnchors.forEach(a => {
-                const bv = extractBV(a.href);
-                if (!bv) return;
-                uniqueBV.add(bv);
-                const card = a.closest('.bili-video-card') || a;
-                scheduleBV(bv, card);
-            });
+    if (newAnchors.size > 0) {
+        const uniqueBV = new Set();
+        let adCount = 0;
+        newAnchors.forEach(a => {
+            const card = a.closest('.bili-video-card') || a;
+            // 检测并标记广告
+            if (markAdCard(card)) {
+                adCount++;
+                return;
+            }
+
+            const bv = extractBV(a.href);
+            if (!bv) return;
+            uniqueBV.add(bv);
+            scheduleBV(bv, card);
+        });
+        if (adCount > 0) {
+            console.log(`[SearchPrecheck] 监听到新增锚点，广告卡片: ${adCount}，有效视频: ${uniqueBV.size}`);
+        } else {
             console.log(`[SearchPrecheck] 监听到新增锚点，共 ${newAnchors.size}，唯一BV ${uniqueBV.size}`);
         }
+    }
     });
 
     // 开始监听
@@ -307,12 +355,27 @@ function observePageChanges() {
 async function processExistingCards() {
     const anchors = document.querySelectorAll('a[href*="/video/BV"]');
     const uniqueBV = new Set();
+    let adCount = 0;
+
     anchors.forEach(a => {
+        const card = a.closest('.bili-video-card') || a;
+        // 检测并标记广告
+        if (markAdCard(card)) {
+            adCount++;
+            return;
+        }
+
         const bv = extractBV(a.href);
         if (bv) uniqueBV.add(bv);
     });
-    console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，唯一BV ${uniqueBV.size}`);
 
+    if (adCount > 0) {
+        console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，广告卡片: ${adCount}，有效视频: ${uniqueBV.size}`);
+    } else {
+        console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，唯一BV ${uniqueBV.size}`);
+    }
+
+    // 为每个BV找到对应的卡片并调度
     uniqueBV.forEach(bv => {
         const a = Array.from(anchors).find(x => extractBV(x.href) === bv);
         const card = a ? (a.closest('.bili-video-card') || a) : document.body;
@@ -321,45 +384,147 @@ async function processExistingCards() {
 }
 
 /**
- * 初始化搜索页预检功能
+ * 悬停检测处理单个卡片（关闭全局开关时的备用方案）
+ */
+function setupHoverPrecheck() {
+    // 不再输出日志，静默启动
+
+    document.body.addEventListener('mouseover', async (e) => {
+        const card = e.target.closest('.bili-video-card');
+        if (!card) return;
+
+        // 检查是否已经处理过
+        const link = card.querySelector('a[href*="/video/BV"]');
+        if (!link) return;
+
+        const bv = extractBV(link.href);
+        if (!bv || processedBVs.has(bv)) return;
+
+        // 检查缓存
+        const cached = await getCachedResult(bv);
+        if (cached !== null) {
+            processedBVs.add(bv);
+            if (cached.hasSubtitle === false) {
+                addNoSubtitleBadge(card);
+            }
+            return;
+        }
+
+        // 延迟检测（0.7秒）
+        const timer = setTimeout(() => {
+            scheduleBV(bv, card);
+        }, 700);
+
+        // 鼠标离开时取消检测
+        const cancelOnLeave = () => {
+            clearTimeout(timer);
+            card.removeEventListener('mouseleave', cancelOnLeave);
+        };
+        card.addEventListener('mouseleave', cancelOnLeave);
+    }, { passive: true });
+}
+
+/**
+ * 初始化搜索页预检功能（全局自动模式）
  */
 async function initSearchPrecheck() {
-    console.log('[SearchPrecheck] 初始化搜索页预检功能');
-
-    // 加载缓存
-    await loadCacheFromStorage();
+    console.log('[SearchPrecheck] 初始化搜索页预检功能（全局自动模式）');
 
     // 处理已有卡片
     processExistingCards();
 
     // 监听页面变化
     observePageChanges();
-
-    // 定期保存缓存
-    setInterval(() => {
-        if (subtitleCache.size > 0) {
-            saveCacheToStorage();
-        }
-    }, 60000); // 每分钟保存一次
 }
 
-// 检查是否是搜索页，且功能已启用
+/**
+ * 初始化广告标记功能（独立于字幕预检）
+ */
+function initAdMarking() {
+    console.log('[AdSkip] 初始化搜索页广告标记功能');
+
+    // 处理已有卡片
+    const cards = document.querySelectorAll('.bili-video-card');
+    let adCount = 0;
+    cards.forEach(card => {
+        if (markAdCard(card)) {
+            adCount++;
+        }
+    });
+    if (adCount > 0) {
+        console.log(`[AdSkip] 标记了 ${adCount} 个广告卡片`);
+    }
+
+    // 监听页面变化
+    const observer = new MutationObserver(mutations => {
+        let newAdCount = 0;
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        const card = node.classList?.contains('bili-video-card')
+                            ? node
+                            : node.querySelector?.('.bili-video-card');
+                        if (card) {
+                            if (markAdCard(card)) {
+                                newAdCount++;
+                            }
+                        } else {
+                            // 检查新增节点内的所有卡片
+                            const cardsInNode = node.querySelectorAll?.('.bili-video-card');
+                            cardsInNode?.forEach(c => {
+                                if (markAdCard(c)) {
+                                    newAdCount++;
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if (newAdCount > 0) {
+            console.log(`[AdSkip] 新标记了 ${newAdCount} 个广告卡片`);
+        }
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    console.log('[AdSkip] 广告标记功能已启动');
+}
+
+// 检查是否是搜索页
 if (window.location.hostname === 'search.bilibili.com') {
+    // 立即初始化广告标记功能（独立运行）
+    initAdMarking();
+
+    // 字幕预检功能的独立初始化
     let isInitialized = false;
 
-    // 检查功能是否启用
     async function checkAndInit() {
         const enabled = await window.adskipStorage.getSearchPrecheck();
+
         if (enabled && !isInitialized) {
-            console.log('[SearchPrecheck] 功能已启用，开始初始化');
-            initSearchPrecheck();
+            console.log('[SearchPrecheck] 全局自动模式已启用');
+            // 处理已有卡片
+            processExistingCards();
+            // 监听页面变化
+            observePageChanges();
+            isInitialized = true;
+        } else if (!enabled && !isInitialized) {
+            console.log('[SearchPrecheck] 全局模式已禁用，使用悬停预检测模式');
+            // 悬停模式
+            setupHoverPrecheck();
             isInitialized = true;
         } else if (!enabled && isInitialized) {
-            console.log('[SearchPrecheck] 功能已禁用');
-            // 可以在这里添加清理逻辑
-            isInitialized = false;
-        } else if (!enabled) {
-            console.log('[SearchPrecheck] 功能已禁用');
+            console.log('[SearchPrecheck] 从全局模式切换到悬停模式');
+            // 切换到悬停模式
+            location.reload(); // 简单粗暴地重载页面
+        } else if (enabled && isInitialized) {
+            console.log('[SearchPrecheck] 从悬停模式切换到全局模式');
+            location.reload();
         }
     }
 
