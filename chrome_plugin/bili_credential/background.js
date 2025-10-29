@@ -9,17 +9,20 @@
 let currentData = null;
 let apiEndpoint = null;
 let adminSecretKey = null;
+let accountId = null;
 
 // 从存储加载数据
 async function loadStoredData() {
   try {
-    const result = await chrome.storage.local.get(['apiEndpoint', 'adminSecretKey', 'credentialData']);
+    const result = await chrome.storage.local.get(['apiEndpoint', 'adminSecretKey', 'accountId', 'credentialData']);
     apiEndpoint = result.apiEndpoint || null;
     adminSecretKey = result.adminSecretKey || null;
+    accountId = result.accountId || null;
     currentData = result.credentialData || null;
     console.log('[BiliCredential] 从存储加载数据完成', {
       hasApiEndpoint: !!apiEndpoint,
       hasAdminSecretKey: !!adminSecretKey,
+      hasAccountId: !!accountId,
       hasData: !!currentData,
       dataTimestamp: currentData?.timestamp
     });
@@ -54,9 +57,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 设置API配置
     apiEndpoint = message.endpoint;
     adminSecretKey = message.adminSecretKey;
+    accountId = message.accountId;
     chrome.storage.local.set({
       apiEndpoint: apiEndpoint,
-      adminSecretKey: adminSecretKey
+      adminSecretKey: adminSecretKey,
+      accountId: accountId
     });
     sendResponse({ success: true });
   } else if (message.action === 'getApiSettings') {
@@ -64,7 +69,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({
       success: true,
       endpoint: apiEndpoint,
-      adminSecretKey: adminSecretKey
+      adminSecretKey: adminSecretKey,
+      accountId: accountId
     });
   } else if (message.action === 'manualSync') {
     // 手动同步

@@ -11,8 +11,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const timestampEl = document.getElementById('timestamp');
   const apiEndpointEl = document.getElementById('apiEndpoint');
   const adminSecretKeyEl = document.getElementById('adminSecretKey');
+  const accountIdEl = document.getElementById('accountId');
   const saveApiBtn = document.getElementById('saveApi');
   const syncNowBtn = document.getElementById('syncNow');
+  const exportDataBtn = document.getElementById('exportData');
   const statusEl = document.getElementById('status');
   const syncLogEl = document.getElementById('syncLog');
 
@@ -122,6 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (response.success) {
         apiEndpointEl.value = response.endpoint || '';
         adminSecretKeyEl.value = response.adminSecretKey || '';
+        accountIdEl.value = response.accountId || '';
       }
     } catch (error) {
       console.error('加载API设置失败:', error);
@@ -132,6 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function saveApiSettings() {
     const endpoint = apiEndpointEl.value.trim();
     const adminSecretKey = adminSecretKeyEl.value.trim();
+    const accountId = accountIdEl.value.trim();
 
     if (!endpoint) {
       showStatus('请输入API端点地址', 'error');
@@ -147,7 +151,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const response = await chrome.runtime.sendMessage({
         action: 'setApiSettings',
         endpoint: endpoint,
-        adminSecretKey: adminSecretKey
+        adminSecretKey: adminSecretKey,
+        accountId: accountId
       });
 
       if (response.success) {
@@ -158,6 +163,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
       console.error('保存API设置失败:', error);
       showStatus('保存失败: ' + error.message, 'error');
+    }
+  }
+
+  // 导出数据
+  async function exportData() {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getData' });
+      if (!response.success || !response.data) {
+        showStatus('没有可导出的数据', 'error');
+        return;
+      }
+
+      const data = response.data;
+
+      // 检查必要字段
+      if (!data.sessdata || !data.bili_jct || !data.ac_time_value || !data.dedeuserid) {
+        showStatus('数据不完整，无法导出', 'error');
+        return;
+      }
+
+      // 获取存储的 account_id，如果没有则使用默认值
+      const accountId = accountIdEl.value.trim() || 'ou_acid_default';
+
+      // 构建导出数据
+      const exportConfig = {
+        accounts: {
+          [accountId]: {
+            sessdata: data.sessdata,
+            bili_jct: data.bili_jct,
+            ac_time_value: data.ac_time_value,
+            dedeuserid: data.dedeuserid
+          }
+        }
+      };
+
+      // 转换为JSON字符串
+      const jsonContent = JSON.stringify(exportConfig, null, 2);
+
+      // 创建Blob并下载
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'auth_config.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showStatus('数据导出成功', 'success');
+    } catch (error) {
+      console.error('导出数据失败:', error);
+      showStatus('导出失败: ' + error.message, 'error');
     }
   }
 
@@ -233,6 +291,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 绑定事件
   saveApiBtn.addEventListener('click', saveApiSettings);
   syncNowBtn.addEventListener('click', syncNow);
+  exportDataBtn.addEventListener('click', exportData);
 
   // 回车保存API设置
   apiEndpointEl.addEventListener('keypress', (e) => {
@@ -242,6 +301,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   adminSecretKeyEl.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      saveApiSettings();
+    }
+  });
+
+  accountIdEl.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       saveApiSettings();
     }
