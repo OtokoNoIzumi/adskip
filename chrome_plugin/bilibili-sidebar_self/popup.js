@@ -1,20 +1,20 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   // 简单统计：增加popup打开计数
   incrementPopupOpenCount();
 
   // 为选项按钮添加点击事件
-  document.getElementById('go-to-options').addEventListener('click', function() {
+  document.getElementById('go-to-options').addEventListener('click', function () {
     // 打开选项页面
     if (chrome.runtime.openOptionsPage) {
       chrome.runtime.openOptionsPage();
     } else {
       // 如果不支持openOptionsPage方法，则直接创建新标签页
-      chrome.tabs.create({url: 'options.html'});
+      chrome.tabs.create({ url: 'options.html' });
     }
   });
 
   // 显示管理员状态
-  adskipStorage.checkAdminStatus().then(function(isAdmin) {
+  adskipStorage.checkAdminStatus().then(function (isAdmin) {
     if (isAdmin) {
       const adminInfo = document.createElement('div');
       adminInfo.className = 'instructions';
@@ -70,6 +70,9 @@ document.addEventListener('DOMContentLoaded', function() {
   appreciateArea.innerHTML = '';
   document.getElementById('footer-version').insertAdjacentElement('beforebegin', appreciateArea);
 
+  // ==================== 跳过开头/结尾设置初始化 ====================
+  initSkipIntroOutroSettings();
+
   // API相关常量
   const SUPPORT_INFO_CACHE_KEY = 'bilibili_adskip_support_cache';
   const SUPPORT_INFO_CACHE_DURATION = 48 * 60 * 60 * 1000; // 48小时
@@ -112,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         data: data
       };
       await new Promise(resolve => {
-        chrome.storage.local.set({[SUPPORT_INFO_CACHE_KEY]: cacheData}, resolve);
+        chrome.storage.local.set({ [SUPPORT_INFO_CACHE_KEY]: cacheData }, resolve);
       });
       console.log('支持信息已缓存');
     } catch (error) {
@@ -322,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
       // 检查当前是否在B站页面上
       const tabs = await new Promise(resolve => {
-        chrome.tabs.query({active: true, currentWindow: true}, resolve);
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve);
       });
 
       const currentTab = tabs[0];
@@ -540,7 +543,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return; // 不需要更新，直接返回
     }
 
-        // 5. 需要更新，获取用户信息并请求API
+    // 5. 需要更新，获取用户信息并请求API
     try {
       console.log('开始更新用户统计数据');
 
@@ -659,38 +662,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // 2. 解析和分组数据（优化符号与排版，提升可读性）
     const summaryItem = final_usage_info.find(item => item.show_in_summary);
     const groupedDetails = final_usage_info.reduce((acc, item) => {
-        if (!acc[item.container_id]) {
-            acc[item.container_id] = {
-                description: item.container_description,
-                items: []
-            };
-        }
-        // 使用更直观的符号：• 作为条目前缀，获得值用「×」，进度用「/」
-        if (item.max_value) {
-            acc[item.container_id].items.push(
-                `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span> <span style="color:#999;">/ ${item.max_value}</span>`
-            );
-        } else {
-            acc[item.container_id].items.push(
-                `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span>`
-            );
-        }
-        return acc;
+      if (!acc[item.container_id]) {
+        acc[item.container_id] = {
+          description: item.container_description,
+          items: []
+        };
+      }
+      // 使用更直观的符号：• 作为条目前缀，获得值用「×」，进度用「/」
+      if (item.max_value) {
+        acc[item.container_id].items.push(
+          `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span> <span style="color:#999;">/ ${item.max_value}</span>`
+        );
+      } else {
+        acc[item.container_id].items.push(
+          `• <span style="color:#333;">${item.description}</span>：<span style="color:#28a745;font-weight:bold;">×${item.current_value}</span>`
+        );
+      }
+      return acc;
     }, {});
 
     // 3. 生成收起视图（推荐任务）
     let recommendationHTML = '';
     if (summaryItem) {
-        let progressText = `+${summaryItem.current_value}`;
-        if (summaryItem.max_value) {
-            progressText += ` / ${summaryItem.max_value}`;
-        }
-        recommendationHTML = `<div style="font-size: 0.85em; color: #007bff; margin: 2px 0 5px 0;">💡 ${summaryItem.description} (可获得 ${progressText} 次)</div>`;
+      let progressText = `+${summaryItem.current_value}`;
+      if (summaryItem.max_value) {
+        progressText += ` / ${summaryItem.max_value}`;
+      }
+      recommendationHTML = `<div style="font-size: 0.85em; color: #007bff; margin: 2px 0 5px 0;">💡 ${summaryItem.description} (可获得 ${progressText} 次)</div>`;
     }
 
     let accountTypeDisplay = data.account_type_display || '未知';
     if (data.is_in_trial_period && data.trial_end_date) {
-        accountTypeDisplay += `<span style="color: #28a745;"> (推广体验期至${data.trial_end_date})</span>`;
+      accountTypeDisplay += `<span style="color: #28a745;"> (推广体验期至${data.trial_end_date})</span>`;
     }
 
     let detailsHTML = `
@@ -700,8 +703,8 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
 
     for (const groupId in groupedDetails) {
-        const group = groupedDetails[groupId];
-        detailsHTML += `
+      const group = groupedDetails[groupId];
+      detailsHTML += `
             <div style="margin-bottom: 5px;">
                 <strong>${group.description}</strong>
                 <div style="padding-left: 10px; font-size: 0.95em;">${group.items.join('<br>')}</div>
@@ -729,12 +732,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const detailsView = document.getElementById('details-view');
 
     if (toggle && recommendationView && detailsView) {
-        toggle.addEventListener('click', () => {
-            const isHidden = detailsView.style.display === 'none';
-            detailsView.style.display = isHidden ? 'block' : 'none';
-            recommendationView.style.display = isHidden ? 'none' : 'block';
-            toggle.innerHTML = isHidden ? '▲' : '▼';
-        });
+      toggle.addEventListener('click', () => {
+        const isHidden = detailsView.style.display === 'none';
+        detailsView.style.display = isHidden ? 'block' : 'none';
+        recommendationView.style.display = isHidden ? 'none' : 'block';
+        toggle.innerHTML = isHidden ? '▲' : '▼';
+      });
     }
 
     // 保存时间显示以防后续更新失败时使用
@@ -830,7 +833,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return {
         userName: userPayload.username || '匿名用户',
         videoCount: cachedStats && cachedStats.total_videos_with_ads !== undefined ?
-                   cachedStats.total_videos_with_ads : localVideoCount,
+          cachedStats.total_videos_with_ads : localVideoCount,
         timeSaved: timeSavedDisplay,
         apiRequests: cachedStats ? (cachedStats.total_gemini_requests || 0) : 0,
         accountType: cachedStats ? (cachedStats.account_type_display || '免费用户') : '免费用户'
@@ -958,7 +961,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 检查是否在范围内
         const inRange = totalSeconds >= minSeconds &&
-                       (maxSeconds === undefined || totalSeconds <= maxSeconds);
+          (maxSeconds === undefined || totalSeconds <= maxSeconds);
 
         if (inRange && range.options && Array.isArray(range.options) && range.options.length > 0) {
           // 从匹配的选项中随机选择一个
@@ -1083,13 +1086,13 @@ document.addEventListener('DOMContentLoaded', function() {
       ctx.shadowBlur = 8;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 4;
-      ctx.fillText(config.main_title, canvas.width/2, sections.header.start + 45);
+      ctx.fillText(config.main_title, canvas.width / 2, sections.header.start + 45);
 
       // 副标题（如果有的话）
       if (config.sub_title) {
         ctx.font = '500 36px PingFang SC, Microsoft YaHei, sans-serif';
         ctx.shadowBlur = 6;
-        ctx.fillText(config.sub_title, canvas.width/2, sections.header.start + config.sub_title_offset);
+        ctx.fillText(config.sub_title, canvas.width / 2, sections.header.start + config.sub_title_offset);
       }
 
       // 功能描述（如果有的话）
@@ -1097,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.font = '300 30px PingFang SC, Microsoft YaHei, sans-serif';
         ctx.shadowBlur = 4;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillText(config.description, canvas.width/2, sections.header.start + config.description_offset);
+        ctx.fillText(config.description, canvas.width / 2, sections.header.start + config.description_offset);
       }
 
       // 用户信息卡片 - 居中放置
@@ -1115,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', function() {
       ctx.shadowBlur = 0;
       ctx.fillStyle = 'white';
       ctx.font = 'bold 38px PingFang SC, Microsoft YaHei, sans-serif';
-      ctx.fillText(`🏆  ${userStats.userName} 的使用成就`, canvas.width/2, cardY + 90);
+      ctx.fillText(`🏆  ${userStats.userName} 的使用成就`, canvas.width / 2, cardY + 90);
 
       // 生成视频数量文案
       const videoCountText = config.video_count_template.replace('{count}', userStats.videoCount);
@@ -1144,11 +1147,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 图标
         ctx.font = '36px sans-serif';
-        ctx.fillText(stat.icon, canvas.width/2 - 180, y);
+        ctx.fillText(stat.icon, canvas.width / 2 - 180, y);
 
         // 文字
         ctx.font = '32px PingFang SC, Microsoft YaHei, sans-serif';
-        ctx.fillText(stat.text, canvas.width/2 + 20, y);
+        ctx.fillText(stat.text, canvas.width / 2 + 20, y);
       });
 
       // 生成并绘制QR码 - 给予充足空间
@@ -1190,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // QR码说明
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
             ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
-            ctx.fillText('扫码上车 告别广告', canvas.width/2, qrContainerY + qrSize + 60);
+            ctx.fillText('扫码上车 告别广告', canvas.width / 2, qrContainerY + qrSize + 60);
 
             // 底部区域 - 简洁不拥挤
             const footerY = sections.footer.start;
@@ -1206,18 +1209,18 @@ document.addEventListener('DOMContentLoaded', function() {
             // 装饰点
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.beginPath();
-            ctx.arc(canvas.width/2, footerY, 3, 0, Math.PI * 2);
+            ctx.arc(canvas.width / 2, footerY, 3, 0, Math.PI * 2);
             ctx.fill();
 
             // 底部文案 - 给予充足间距
             ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
             ctx.font = '28px PingFang SC, Microsoft YaHei, sans-serif';
-            ctx.fillText('♪(´▽｀) 守护您的观影情绪 (´∀｀)♡', canvas.width/2, footerY + 50);
+            ctx.fillText('♪(´▽｀) 守护您的观影情绪 (´∀｀)♡', canvas.width / 2, footerY + 50);
 
             // 项目名称
             ctx.font = 'bold 36px PingFang SC, Microsoft YaHei, sans-serif';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.fillText('B站切片广告之友', canvas.width/2, footerY + 100);
+            ctx.fillText('B站切片广告之友', canvas.width / 2, footerY + 100);
 
             canvas.toBlob(resolve, 'image/png', 0.9);
           };
@@ -1243,7 +1246,7 @@ document.addEventListener('DOMContentLoaded', function() {
       ctx.fillStyle = 'white';
       ctx.font = '48px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText('生成海报时出错', canvas.width/2, canvas.height/2);
+      ctx.fillText('生成海报时出错', canvas.width / 2, canvas.height / 2);
 
       return new Promise(resolve => {
         canvas.toBlob(resolve, 'image/png', 0.9);
@@ -1339,9 +1342,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-    /**
-   * 简单统计：增加popup打开计数
-   */
+  /**
+ * 简单统计：增加popup打开计数
+ */
   async function incrementPopupOpenCount() {
     try {
       await adskipStorage.incrementPopupOpenCount();
@@ -1388,4 +1391,137 @@ document.addEventListener('DOMContentLoaded', function() {
       shareButton.textContent = '📤 分享给朋友';
     }
   });
+
+  /**
+   * 初始化跳过开头/结尾设置
+   */
+  async function initSkipIntroOutroSettings() {
+    const skipSection = document.getElementById('skip-intro-outro-section');
+    const skipIntroToggle = document.getElementById('skip-intro-toggle');
+    const skipIntroDuration = document.getElementById('skip-intro-duration');
+    const skipOutroToggle = document.getElementById('skip-outro-toggle');
+    const skipOutroDuration = document.getElementById('skip-outro-duration');
+    const currentUploaderSection = document.getElementById('current-uploader-skip-section');
+    const currentUploaderName = document.getElementById('current-uploader-name-skip');
+    const currentUploaderToggle = document.getElementById('current-uploader-skip-toggle');
+
+    if (!skipSection) return;
+
+    // 总是显示跳过设置区域
+    skipSection.style.display = 'block';
+
+    // 当前上下文变量
+    let currentUploader = null;
+    let hasUploaderConfig = false;
+
+    // 加载全局默认设置
+    const [globalIntroEnabled, globalIntroDuration, globalOutroEnabled, globalOutroDuration] = await Promise.all([
+      adskipStorage.getSkipIntroEnabled(),
+      adskipStorage.getSkipIntroDuration(),
+      adskipStorage.getSkipOutroEnabled(),
+      adskipStorage.getSkipOutroDuration()
+    ]);
+
+    // 辅助函数：更新UI值
+    function updateUI(introEnabled, introDuration, outroEnabled, outroDuration) {
+      skipIntroToggle.checked = introEnabled;
+      skipIntroDuration.value = introDuration;
+      skipOutroToggle.checked = outroEnabled;
+      skipOutroDuration.value = outroDuration;
+    }
+
+    // 初始显示全局默认
+    updateUI(globalIntroEnabled, globalIntroDuration, globalOutroEnabled, globalOutroDuration);
+
+    // 检查是否在B站视频页面并获取UP主信息
+    try {
+      const tabs = await new Promise(resolve => {
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+      });
+      const currentTab = tabs[0];
+      const isBilibiliVideo = currentTab && currentTab.url &&
+        (currentTab.url.includes('bilibili.com/video/') ||
+          currentTab.url.includes('bilibili.com/bangumi/'));
+
+      if (isBilibiliVideo) {
+        try {
+          const response = await chrome.tabs.sendMessage(currentTab.id, { action: 'getCurrentUploader', target: 'content' });
+          if (response && response.uploader && response.uploader !== '未知UP主') {
+            currentUploader = response.uploader;
+
+            // 显示UP主控制区
+            currentUploaderSection.style.display = 'block';
+            currentUploaderName.textContent = currentUploader;
+
+            // 获取该UP主的特定配置
+            const uploaderSettings = await adskipStorage.getUploaderSkipSettings(currentUploader);
+
+            if (uploaderSettings) {
+              hasUploaderConfig = true;
+              currentUploaderToggle.checked = uploaderSettings.enabled !== false;
+
+              // 使用UP主的特定设置覆盖UI（兼容旧数据：如果没有特定字段，回退到全局/默认）
+              const uIntroEn = uploaderSettings.skipIntro !== undefined ? uploaderSettings.skipIntro : true;
+              const uIntroDur = uploaderSettings.introDuration !== undefined ? uploaderSettings.introDuration : globalIntroDuration;
+              const uOutroEn = uploaderSettings.skipOutro !== undefined ? uploaderSettings.skipOutro : true;
+              const uOutroDur = uploaderSettings.outroDuration !== undefined ? uploaderSettings.outroDuration : globalOutroDuration;
+
+              updateUI(uIntroEn, uIntroDur, uOutroEn, uOutroDur);
+            } else {
+              hasUploaderConfig = false;
+              currentUploaderToggle.checked = false;
+              // 保持显示全局默认值
+            }
+          }
+        } catch (e) { console.log('获取UP主失败', e); }
+      }
+    } catch (e) { console.log('Tab check failed', e); }
+
+    // 事件处理：数值/开关变更
+    async function handleSettingChange() {
+      // 只有当UP主已有配置（无论是否启用）时，才自动保存修改
+      if (currentUploader && hasUploaderConfig) {
+        const newSettings = {
+          skipIntro: skipIntroToggle.checked,
+          introDuration: parseInt(skipIntroDuration.value, 10) || 0,
+          skipOutro: skipOutroToggle.checked,
+          outroDuration: parseInt(skipOutroDuration.value, 10) || 0
+        };
+        await adskipStorage.updateUploaderSkipSettings(currentUploader, newSettings);
+      }
+      // 如果没有配置，这里什么都不做，在这个状态下的修改只是临时的UI变化
+      // 等用户点击"开启"时，会读取当前的UI值进行保存
+    }
+
+    skipIntroToggle.addEventListener('change', handleSettingChange);
+    skipIntroDuration.addEventListener('change', handleSettingChange);
+    skipOutroToggle.addEventListener('change', handleSettingChange);
+    skipOutroDuration.addEventListener('change', handleSettingChange);
+
+    // 事件处理：UP主开关变更
+    if (currentUploaderToggle) {
+      currentUploaderToggle.addEventListener('change', async function () {
+        if (this.checked) {
+          // 开启：保存当前UI上的值（无论是默认的还是刚才改的）作为该UP主的设置
+          const currentSettings = {
+            skipIntro: skipIntroToggle.checked,
+            introDuration: parseInt(skipIntroDuration.value, 10) || 0,
+            skipOutro: skipOutroToggle.checked,
+            outroDuration: parseInt(skipOutroDuration.value, 10) || 0,
+            enabled: true
+          };
+
+          await adskipStorage.addUploaderToSkipIntroOutroList(currentUploader, currentSettings);
+          hasUploaderConfig = true;
+        } else {
+          // 关闭：禁用该UP主（不删除数据）
+          if (hasUploaderConfig) {
+            await adskipStorage.disableUploaderInSkipIntroOutroList(currentUploader);
+            // hasUploaderConfig 保持为 true，因为数据并未删除，只是disabled
+            // 此时修改数值依然会生效（保存到该UP主的配置中）
+          }
+        }
+      });
+    }
+  }
 });

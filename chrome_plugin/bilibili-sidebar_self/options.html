@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <title>Bilibili 切片广告之友 - 选项</title>
@@ -37,7 +38,7 @@
       border-radius: 8px;
       padding: 20px;
       margin-bottom: 20px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
     }
 
     h2 {
@@ -94,11 +95,11 @@
       border-radius: 50%;
     }
 
-    input:checked + .slider {
+    input:checked+.slider {
       background-color: #FB7299;
     }
 
-    input:checked + .slider:before {
+    input:checked+.slider:before {
       transform: translateX(26px);
     }
 
@@ -279,8 +280,33 @@
     .whitelist-empty {
       text-align: center;
       padding: 20px;
-      color: #999;
+      color: #7f8c8d;
       font-style: italic;
+    }
+
+    .whitelist-item-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .whitelist-item-details {
+      font-size: 12px;
+      color: #95a5a6;
+      margin-top: 4px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .whitelist-config-tag {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #34495e;
+    }
+
+    .whitelist-item-date {
+      margin-left: auto;
     }
 
     .whitelist-import-export {
@@ -375,12 +401,15 @@
       transition: background-color 0.2s;
       margin-right: 10px;
     }
+
     .admin-btn:hover {
       background-color: #e45c84;
     }
+
     .admin-btn.admin-logout {
       background-color: #666;
     }
+
     .admin-btn.admin-logout:hover {
       background-color: #555;
     }
@@ -391,7 +420,7 @@
       border-radius: 8px;
       padding: 20px;
       margin-top: 20px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
       border-left: 4px solid #FB7299;
     }
 
@@ -411,6 +440,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="header">
     <img src="icons/icon48.png" alt="Logo" class="logo">
@@ -419,7 +449,8 @@
 
   <div class="tab-buttons">
     <button class="tab-button active" data-tab="general">基本设置</button>
-    <button class="tab-button" data-tab="whitelist">UP主白名单</button>
+    <button class="tab-button" data-tab="whitelist">广告跳过白名单</button>
+    <button class="tab-button" data-tab="skipintro">跳过开头/结尾</button>
     <button class="tab-button" data-tab="data">数据管理</button>
   </div>
 
@@ -485,7 +516,17 @@
           <input type="checkbox" id="search-precheck">
           <span class="slider"></span>
         </label>
-        <p>搜索页自动检测视频字幕：<strong>开启</strong>时全量自动检测；<strong>关闭</strong>时仅在鼠标悬停≥0.7秒后检测该卡片。<br>⚠️ 推荐使用关闭模式（悬停检测），避免触发B站风控，一段时间内无法正常加载字幕信息。</p>
+        <p>搜索页自动检测视频字幕：<strong>开启</strong>时全量自动检测；<strong>关闭</strong>时仅在鼠标悬停≥0.7秒后检测该卡片。<br>⚠️
+          推荐使用关闭模式（悬停检测），避免触发B站风控，一段时间内无法正常加载字幕信息。</p>
+      </div>
+
+      <div class="form-group">
+        <label for="read-mark">搜索页已读标记</label>
+        <label class="switch">
+          <input type="checkbox" id="read-mark" checked>
+          <span class="slider"></span>
+        </label>
+        <p>在搜索页显示已读标记：对已在白名单或有本地广告数据的视频显示蓝色"已读"标记并轻度淡化，帮助快速查看未读视频。</p>
       </div>
     </div>
 
@@ -502,7 +543,8 @@
         </div>
         <p>设置在广告时段的哪个阶段会触发自动跳过：
           <br>• 播放进度进入<strong>前[X]%</strong> 时间段时，将自动跳至广告结尾
-          <br>• 如果想回看广告，就要把值设置低一些</p>
+          <br>• 如果想回看广告，就要把值设置低一些
+        </p>
       </div>
     </div>
     <!-- 使用说明区域（条件显示） -->
@@ -557,6 +599,80 @@
     </div>
   </div>
 
+  <div id="skipintro-tab" class="tab-content">
+    <div class="section">
+      <h2>跳过开头/结尾设置</h2>
+      <p>针对特定UP主的视频，自动跳过固定的开头或结尾时长</p>
+
+      <div class="form-group">
+        <label for="skip-intro-enabled">启用跳过开头</label>
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <label class="switch">
+            <input type="checkbox" id="skip-intro-enabled">
+            <span class="slider"></span>
+          </label>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>跳过前</span>
+            <input type="number" id="skip-intro-duration-option" min="0" max="3600" value="0"
+              style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <span>秒</span>
+          </div>
+        </div>
+        <p>启用后，列表中UP主的视频将自动跳过开头指定时长</p>
+      </div>
+
+      <div class="form-group">
+        <label for="skip-outro-enabled">启用跳过结尾</label>
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <label class="switch">
+            <input type="checkbox" id="skip-outro-enabled">
+            <span class="slider"></span>
+          </label>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>跳过后</span>
+            <input type="number" id="skip-outro-duration-option" min="0" max="3600" value="0"
+              style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <span>秒</span>
+          </div>
+        </div>
+        <p>启用后，列表中UP主的视频将自动跳过结尾指定时长（从视频结束时间向前计算）</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>UP主列表管理</h2>
+      <p>只有在此列表中的UP主，其视频才会应用跳过开头/结尾设置</p>
+
+      <div class="whitelist-summary">
+        当前共有 <span id="skipintro-uploader-count" class="whitelist-count">0</span> 个UP主在列表中
+      </div>
+
+      <div id="skipintro-uploader-list" class="whitelist-container">
+        <div class="whitelist-empty">列表为空，您可以在视频页面的插件弹窗中将UP主添加到此列表</div>
+      </div>
+
+      <div class="whitelist-import-export">
+        <h3>批量导入/导出</h3>
+        <p>您可以批量导入或导出UP主列表，每行一个UP主名称</p>
+
+        <textarea id="skipintro-uploader-textarea" class="whitelist-textarea" placeholder="每行输入一个UP主名称，例如：
+某UP主1
+某UP主2
+某UP主3"></textarea>
+
+        <div>
+          <button id="skipintro-import" class="whitelist-btn">导入列表</button>
+          <button id="skipintro-export" class="whitelist-btn">导出到文本框</button>
+          <button id="skipintro-copy" class="whitelist-btn">复制到剪贴板</button>
+        </div>
+
+        <div class="whitelist-help">
+          提示：导入将与现有列表合并，已存在的UP主会被保留
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="data-tab" class="tab-content">
     <div class="section">
       <h2>数据管理</h2>
@@ -574,14 +690,16 @@
 
       <div class="form-group" id="custom-server-section">
         <h3>⚠️ 高级功能：自定义服务器</h3>
-        <div class="warning-box" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+        <div class="warning-box"
+          style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
           <h4 style="margin-top: 0; color: #856404;">⚠️ 重要声明</h4>
           <ul style="margin: 8px 0; padding-left: 20px; color: #856404;">
             <li><strong>仅供开发者和高级用户使用</strong>，错误配置可能导致功能异常</li>
             <li><strong>不提供额外技术支持</strong>，使用风险自负</li>
             <li><strong>不对其他服务器的安全性、功能或数据使用提供任何保证</strong></li>
             <li><strong>服务器开设者需根据客户端开源内容自行准备对应服务端业务</strong></li>
-            <li>项目仓库：<a href="https://github.com/OtokoNoIzumi/adskip" target="_blank">https://github.com/OtokoNoIzumi/adskip</a></li>
+            <li>项目仓库：<a href="https://github.com/OtokoNoIzumi/adskip"
+                target="_blank">https://github.com/OtokoNoIzumi/adskip</a></li>
           </ul>
         </div>
 
@@ -602,7 +720,8 @@
           </div>
 
           <div class="form-group">
-            <button id="reset-custom-server" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重置为默认</button>
+            <button id="reset-custom-server"
+              style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重置为默认</button>
             <p>清除所有自定义服务器设置并恢复默认配置</p>
           </div>
 
@@ -619,4 +738,5 @@
   <script src="storage.js"></script>
   <script src="options.js"></script>
 </body>
+
 </html>

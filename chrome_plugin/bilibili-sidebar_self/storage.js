@@ -177,6 +177,7 @@ const STORAGE_KEYS = {
     PERCENTAGE: 'adskip_percentage',
     SKIP_OWN_VIDEOS: 'adskip_skip_own_videos',
     SEARCH_PRECHECK: 'adskip_search_precheck',
+    READ_MARK: 'adskip_read_mark',
     ADMIN_AUTH: 'adskip_admin_authorized',
     UPLOADER_WHITELIST: 'adskip_uploader_whitelist',
     VIDEO_PREFIX: 'adskip_',
@@ -196,19 +197,31 @@ const STORAGE_KEYS = {
     POPUP_OPEN_COUNT: 'adskip_popup_open_count',            // popup打开计数
     SHARE_CLICK_COUNT: 'adskip_share_click_count',          // 分享按钮点击计数
 
+    // 新增: 跳过开头/结尾时长设置
+    SKIP_INTRO_ENABLED: 'adskip_skip_intro_enabled',        // 跳过开头功能开关
+    SKIP_INTRO_DURATION: 'adskip_skip_intro_duration',      // 跳过开头时长（秒）
+    SKIP_OUTRO_ENABLED: 'adskip_skip_outro_enabled',        // 跳过结尾功能开关
+    SKIP_OUTRO_DURATION: 'adskip_skip_outro_duration',      // 跳过结尾时长（秒）
+    SKIP_INTRO_OUTRO_UPLOADER_LIST: 'adskip_skip_intro_outro_uploader_list', // UP主跳过设置清单
+
     // 分类集合，用于过滤操作
     CONFIG_KEYS: [
         'adskip_debug_mode',
         'adskip_enabled',
         'adskip_percentage',
         'adskip_skip_own_videos',
-        'adskip_admin_authorized'
+        'adskip_admin_authorized',
+        'adskip_skip_intro_enabled',
+        'adskip_skip_intro_duration',
+        'adskip_skip_outro_enabled',
+        'adskip_skip_outro_duration',
+        'adskip_skip_intro_outro_uploader_list'
     ],
     WHITELIST_KEYS: [
         'adskip_uploader_whitelist'
     ],
     // 所有保留的键（不会被数据清除操作删除的键）
-    RESERVED_KEYS: function() {
+    RESERVED_KEYS: function () {
         return [
             ...this.CONFIG_KEYS,
             ...this.WHITELIST_KEYS,
@@ -244,7 +257,7 @@ function getAdminResetKeys() {
     return getAllKeys().then(allKeys => {
         return allKeys.filter(
             key => key !== adskipStorage.KEYS.ADMIN_AUTH &&
-            key !== adskipStorage.KEYS.VIDEO_WHITELIST
+                key !== adskipStorage.KEYS.VIDEO_WHITELIST
         );
     });
 }
@@ -656,7 +669,7 @@ async function verifyAdminAccess(apiKey) {
     return new Promise((resolve) => {
         if (isValid) {
             // 将授权状态保存在chrome.storage.local中
-            chrome.storage.local.set({[STORAGE_KEYS.ADMIN_AUTH]: true}, function() {
+            chrome.storage.local.set({ [STORAGE_KEYS.ADMIN_AUTH]: true }, function () {
                 adskipUtils.logDebug('管理员授权已保存到存储中');
                 resolve(true);
             });
@@ -690,7 +703,7 @@ function simpleHash(str) {
 async function checkAdminStatus() {
     return new Promise((resolve) => {
         // 从chrome.storage.local中获取授权状态
-        chrome.storage.local.get(STORAGE_KEYS.ADMIN_AUTH, function(result) {
+        chrome.storage.local.get(STORAGE_KEYS.ADMIN_AUTH, function (result) {
             resolve(result[STORAGE_KEYS.ADMIN_AUTH] === true);
         });
     });
@@ -730,7 +743,7 @@ function getDebugMode() {
  */
 function setDebugMode(newValue) {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({[STORAGE_KEYS.DEBUG_MODE]: newValue}, function() {
+        chrome.storage.local.set({ [STORAGE_KEYS.DEBUG_MODE]: newValue }, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
@@ -870,7 +883,7 @@ async function addUploaderToWhitelist(uploader) {
 
         // 保存更新后的白名单
         await new Promise((resolve, reject) => {
-            chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
+            chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist) }, function () {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
@@ -912,7 +925,7 @@ async function disableUploaderInWhitelist(uploader) {
         if (modified) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
+                chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist) }, function () {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -954,7 +967,7 @@ async function enableUploaderInWhitelist(uploader) {
         if (modified) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
+                chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist) }, function () {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -989,7 +1002,7 @@ async function removeUploaderFromWhitelist(uploader) {
         if (newWhitelist.length < initialLength) {
             // 保存更新后的白名单并确保触发事件
             await new Promise((resolve, reject) => {
-                chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(newWhitelist)}, function() {
+                chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(newWhitelist) }, function () {
                     if (chrome.runtime.lastError) {
                         reject(new Error(chrome.runtime.lastError.message));
                     } else {
@@ -1180,7 +1193,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
 
         // 保存白名单
         return new Promise((resolve, reject) => {
-            chrome.storage.local.set({[STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist)}, function() {
+            chrome.storage.local.set({ [STORAGE_KEYS.UPLOADER_WHITELIST]: JSON.stringify(whitelist) }, function () {
                 if (chrome.runtime.lastError) {
                     reject(new Error(chrome.runtime.lastError.message));
                 } else {
@@ -1200,7 +1213,7 @@ async function toggleUploaderWhitelistStatus(uploaderName, enabled) {
  */
 function getEnabled() {
     return new Promise((resolve) => {
-        chrome.storage.local.get(STORAGE_KEYS.ENABLED, function(result) {
+        chrome.storage.local.get(STORAGE_KEYS.ENABLED, function (result) {
             // 默认为启用状态
             resolve(result[STORAGE_KEYS.ENABLED] !== false);
         });
@@ -1214,7 +1227,7 @@ function getEnabled() {
  */
 function setEnabled(enabled) {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({[STORAGE_KEYS.ENABLED]: enabled}, function() {
+        chrome.storage.local.set({ [STORAGE_KEYS.ENABLED]: enabled }, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
@@ -1231,7 +1244,7 @@ function setEnabled(enabled) {
  */
 function getSkipOwnVideos() {
     return new Promise((resolve) => {
-        chrome.storage.local.get(STORAGE_KEYS.SKIP_OWN_VIDEOS, function(result) {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_OWN_VIDEOS, function (result) {
             // 默认为 true (启用状态)
             const skipOwnVideos = result[STORAGE_KEYS.SKIP_OWN_VIDEOS] !== false;
             resolve(skipOwnVideos);
@@ -1246,7 +1259,7 @@ function getSkipOwnVideos() {
  */
 function setSkipOwnVideos(enabled) {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({[STORAGE_KEYS.SKIP_OWN_VIDEOS]: enabled}, function() {
+        chrome.storage.local.set({ [STORAGE_KEYS.SKIP_OWN_VIDEOS]: enabled }, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
@@ -1263,7 +1276,7 @@ function setSkipOwnVideos(enabled) {
  */
 function getSearchPrecheck() {
     return new Promise((resolve) => {
-        chrome.storage.local.get(STORAGE_KEYS.SEARCH_PRECHECK, function(result) {
+        chrome.storage.local.get(STORAGE_KEYS.SEARCH_PRECHECK, function (result) {
             // 默认为 false (禁用状态)
             const searchPrecheck = result[STORAGE_KEYS.SEARCH_PRECHECK] === true;
             resolve(searchPrecheck);
@@ -1278,7 +1291,7 @@ function getSearchPrecheck() {
  */
 function setSearchPrecheck(enabled) {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.set({[STORAGE_KEYS.SEARCH_PRECHECK]: enabled}, function() {
+        chrome.storage.local.set({ [STORAGE_KEYS.SEARCH_PRECHECK]: enabled }, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
@@ -1290,12 +1303,44 @@ function setSearchPrecheck(enabled) {
 }
 
 /**
+ * 获取已读标记开关状态
+ * @returns {Promise<boolean>} 是否启用已读标记（默认开启）
+ */
+function getReadMark() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(STORAGE_KEYS.READ_MARK, function (result) {
+            // 默认为 true (启用状态)
+            const readMark = result[STORAGE_KEYS.READ_MARK] !== false;
+            resolve(readMark);
+        });
+    });
+}
+
+/**
+ * 设置已读标记开关状态
+ * @param {boolean} enabled 是否启用已读标记
+ * @returns {Promise<boolean>} 设置后的状态
+ */
+function setReadMark(enabled) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({ [STORAGE_KEYS.READ_MARK]: enabled }, function () {
+            if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+                return;
+            }
+            adskipUtils.logDebug(`已${enabled ? '启用' : '禁用'}搜索页已读标记功能`);
+            resolve(enabled);
+        });
+    });
+}
+
+/**
  * 获取存储中的所有键名
  * @returns {Promise<Array>} 所有键名数组
  */
 function getAllKeys() {
     return new Promise((resolve) => {
-        chrome.storage.local.get(null, function(items) {
+        chrome.storage.local.get(null, function (items) {
             resolve(Object.keys(items));
         });
     });
@@ -1308,7 +1353,7 @@ function getAllKeys() {
  */
 function removeKeys(keys) {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.remove(keys, function() {
+        chrome.storage.local.remove(keys, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
                 return;
@@ -1519,6 +1564,290 @@ function clearUploaderCache() {
     cachedUploaderInfo = null;
     lastUploaderCheck = 0;
     adskipUtils.logDebug('已清除UP主信息缓存');
+}
+
+// ==================== 跳过开头/结尾设置相关函数 ====================
+
+/**
+ * 获取跳过开头功能开关状态
+ * @returns {Promise<boolean>} 是否启用
+ */
+async function getSkipIntroEnabled() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_INTRO_ENABLED, (result) => {
+            resolve(result[STORAGE_KEYS.SKIP_INTRO_ENABLED] === true);
+        });
+    });
+}
+
+/**
+ * 设置跳过开头功能开关状态
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<boolean>} 设置是否成功
+ */
+async function setSkipIntroEnabled(enabled) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SKIP_INTRO_ENABLED]: enabled }, () => {
+            adskipUtils.logDebug(`跳过开头功能已${enabled ? '启用' : '禁用'}`);
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+/**
+ * 获取跳过开头时长
+ * @returns {Promise<number>} 时长（秒），默认为0
+ */
+async function getSkipIntroDuration() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_INTRO_DURATION, (result) => {
+            const duration = parseInt(result[STORAGE_KEYS.SKIP_INTRO_DURATION], 10);
+            resolve(isNaN(duration) ? 0 : duration);
+        });
+    });
+}
+
+/**
+ * 设置跳过开头时长
+ * @param {number} duration 时长（秒）
+ * @returns {Promise<boolean>} 设置是否成功
+ */
+async function setSkipIntroDuration(duration) {
+    const value = Math.max(0, parseInt(duration, 10) || 0);
+    return new Promise(resolve => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SKIP_INTRO_DURATION]: value }, () => {
+            adskipUtils.logDebug(`跳过开头时长设置为 ${value} 秒`);
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+/**
+ * 获取跳过结尾功能开关状态
+ * @returns {Promise<boolean>} 是否启用
+ */
+async function getSkipOutroEnabled() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_OUTRO_ENABLED, (result) => {
+            resolve(result[STORAGE_KEYS.SKIP_OUTRO_ENABLED] === true);
+        });
+    });
+}
+
+/**
+ * 设置跳过结尾功能开关状态
+ * @param {boolean} enabled 是否启用
+ * @returns {Promise<boolean>} 设置是否成功
+ */
+async function setSkipOutroEnabled(enabled) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SKIP_OUTRO_ENABLED]: enabled }, () => {
+            adskipUtils.logDebug(`跳过结尾功能已${enabled ? '启用' : '禁用'}`);
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+/**
+ * 获取跳过结尾时长
+ * @returns {Promise<number>} 时长（秒），默认为0
+ */
+async function getSkipOutroDuration() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_OUTRO_DURATION, (result) => {
+            const duration = parseInt(result[STORAGE_KEYS.SKIP_OUTRO_DURATION], 10);
+            resolve(isNaN(duration) ? 0 : duration);
+        });
+    });
+}
+
+/**
+ * 设置跳过结尾时长
+ * @param {number} duration 时长（秒）
+ * @returns {Promise<boolean>} 设置是否成功
+ */
+async function setSkipOutroDuration(duration) {
+    const value = Math.max(0, parseInt(duration, 10) || 0);
+    return new Promise(resolve => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SKIP_OUTRO_DURATION]: value }, () => {
+            adskipUtils.logDebug(`跳过结尾时长设置为 ${value} 秒`);
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+/**
+ * 获取跳过开头/结尾UP主清单
+ * @returns {Promise<Array>} UP主清单数组
+ */
+async function getSkipIntroOutroUploaderList() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SKIP_INTRO_OUTRO_UPLOADER_LIST, (result) => {
+            if (result[STORAGE_KEYS.SKIP_INTRO_OUTRO_UPLOADER_LIST]) {
+                try {
+                    resolve(JSON.parse(result[STORAGE_KEYS.SKIP_INTRO_OUTRO_UPLOADER_LIST]));
+                } catch (e) {
+                    resolve([]);
+                }
+            } else {
+                resolve([]);
+            }
+        });
+    });
+}
+
+/**
+ * 保存跳过开头/结尾UP主清单
+ * @param {Array} uploaderList UP主清单数组
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+async function saveSkipIntroOutroUploaderList(uploaderList) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.SKIP_INTRO_OUTRO_UPLOADER_LIST]: JSON.stringify(uploaderList)
+        }, () => {
+            adskipUtils.logDebug(`跳过开头/结尾UP主清单已保存，共 ${uploaderList.length} 个UP主`);
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+/**
+ * 检查UP主是否在跳过开头/结尾清单中
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<boolean>} 是否在清单中且启用
+ */
+async function checkUploaderInSkipIntroOutroList(uploaderName) {
+    if (!uploaderName) return false;
+    const list = await getSkipIntroOutroUploaderList();
+    const item = list.find(item => item.name === uploaderName);
+    return !!(item && item.enabled !== false);
+}
+
+/**
+ * 获取特定UP主的跳过设置
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<Object|null>} UP主设置对象或null
+ */
+async function getUploaderSkipSettings(uploaderName) {
+    if (!uploaderName) return null;
+    const list = await getSkipIntroOutroUploaderList();
+    return list.find(item => item.name === uploaderName) || null;
+}
+
+/**
+ * 将UP主添加到跳过开头/结尾清单（或更新现有设置）
+ * @param {string} uploaderName UP主名称
+ * @param {Object} settings 自定义设置 {introDuration, outroDuration, skipIntro, skipOutro}
+ * @returns {Promise<Array>} 更新后的清单
+ */
+async function addUploaderToSkipIntroOutroList(uploaderName, settings = {}) {
+    if (!uploaderName) return Promise.reject(new Error('UP主名称不能为空'));
+
+    const list = await getSkipIntroOutroUploaderList();
+    const existingIndex = list.findIndex(item => item.name === uploaderName);
+
+    // 如果没有提供具体设置，使用默认值
+    const defaultSettings = {
+        name: uploaderName,
+        addedAt: Date.now(),
+        enabled: true
+        // 不硬编码时长和开关，如果没有传入 settings，就只存基本信息
+        // 读取时会自动回退到全局默认值
+    };
+
+    // 如果传入了设置，覆盖默认值
+    const newSettings = { ...defaultSettings, ...settings };
+
+    if (existingIndex >= 0) {
+        // 更新现有条目，保留原有设置，但允许新设置覆盖
+        list[existingIndex] = {
+            ...list[existingIndex],
+            enabled: true, // 重新启用
+            ...settings    // 仅更新传入的字段
+        };
+    } else {
+        // 添加新条目
+        list.push(newSettings);
+    }
+
+    await saveSkipIntroOutroUploaderList(list);
+    adskipUtils.logDebug(`已更新UP主 "${uploaderName}" 的跳过设置`);
+    return list;
+}
+
+/**
+ * 更新UP主的具体跳过设置
+ * @param {string} uploaderName UP主名称
+ * @param {Object} settings 要更新的设置
+ */
+async function updateUploaderSkipSettings(uploaderName, settings) {
+    if (!uploaderName) return;
+
+    const list = await getSkipIntroOutroUploaderList();
+    const index = list.findIndex(item => item.name === uploaderName);
+
+    if (index >= 0) {
+        list[index] = { ...list[index], ...settings };
+        await saveSkipIntroOutroUploaderList(list);
+        adskipUtils.logDebug(`已更新UP主 "${uploaderName}" 的详细设置`);
+    }
+}
+
+/**
+ * 从跳过开头/结尾清单移除UP主
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<Array>} 更新后的清单
+ */
+async function removeUploaderFromSkipIntroOutroList(uploaderName) {
+    if (!uploaderName) return Promise.reject(new Error('UP主名称不能为空'));
+
+    const list = await getSkipIntroOutroUploaderList();
+    const newList = list.filter(item => item.name !== uploaderName);
+
+    await saveSkipIntroOutroUploaderList(newList);
+    adskipUtils.logDebug(`已从跳过开头/结尾清单移除UP主 "${uploaderName}"`);
+    return newList;
+}
+
+/**
+ * 禁用跳过开头/结尾清单中的UP主
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<Array>} 更新后的清单
+ */
+async function disableUploaderInSkipIntroOutroList(uploaderName) {
+    if (!uploaderName) return Promise.reject(new Error('UP主名称不能为空'));
+
+    const list = await getSkipIntroOutroUploaderList();
+    const item = list.find(i => i.name === uploaderName);
+
+    if (item) {
+        item.enabled = false;
+        await saveSkipIntroOutroUploaderList(list);
+        adskipUtils.logDebug(`已禁用跳过开头/结尾清单中的UP主 "${uploaderName}"`);
+    }
+
+    return list;
+}
+
+/**
+ * 启用跳过开头/结尾清单中的UP主
+ * @param {string} uploaderName UP主名称
+ * @returns {Promise<Array>} 更新后的清单
+ */
+async function enableUploaderInSkipIntroOutroList(uploaderName) {
+    if (!uploaderName) return Promise.reject(new Error('UP主名称不能为空'));
+
+    const list = await getSkipIntroOutroUploaderList();
+    const item = list.find(i => i.name === uploaderName);
+
+    if (item) {
+        item.enabled = true;
+        await saveSkipIntroOutroUploaderList(list);
+        adskipUtils.logDebug(`已启用跳过开头/结尾清单中的UP主 "${uploaderName}"`);
+    }
+
+    return list;
 }
 
 /**
@@ -2235,7 +2564,7 @@ async function cacheExternalConfig(data) {
             data: data
         };
         await new Promise(resolve => {
-            chrome.storage.local.set({[EXTERNAL_CONFIG_CACHE_KEY]: cacheData}, resolve);
+            chrome.storage.local.set({ [EXTERNAL_CONFIG_CACHE_KEY]: cacheData }, resolve);
         });
         console.log('[AdSkip存储] 外部配置已缓存');
         return true;
@@ -2286,7 +2615,7 @@ async function loadExternalConfig() {
                     data: config
                 };
                 await new Promise(resolve => {
-                    chrome.storage.local.set({[EXTERNAL_CONFIG_CACHE_KEY]: shortCacheData}, resolve);
+                    chrome.storage.local.set({ [EXTERNAL_CONFIG_CACHE_KEY]: shortCacheData }, resolve);
                 });
             }
         }
@@ -2445,6 +2774,10 @@ window.adskipStorage = {
     getSearchPrecheck,
     setSearchPrecheck,
 
+    // 搜索页已读标记功能
+    getReadMark,
+    setReadMark,
+
     // 存储管理
     getAllKeys,
     removeKeys,
@@ -2513,7 +2846,26 @@ window.adskipStorage = {
     syncServerDataToLocal,         // 新增: 服务端数据同步方法
 
     // 新增: 自定义服务器支持
-    getEffectiveBaseUrl           // 新增: 获取有效的Base URL
+    getEffectiveBaseUrl,           // 新增: 获取有效的Base URL
+
+    // 新增: 跳过开头/结尾设置
+    getSkipIntroEnabled,
+    setSkipIntroEnabled,
+    getSkipIntroDuration,
+    setSkipIntroDuration,
+    getSkipOutroEnabled,
+    setSkipOutroEnabled,
+    getSkipOutroDuration,
+    setSkipOutroDuration,
+    getSkipIntroOutroUploaderList,
+    saveSkipIntroOutroUploaderList,
+    checkUploaderInSkipIntroOutroList,
+    addUploaderToSkipIntroOutroList,
+    removeUploaderFromSkipIntroOutroList,
+    disableUploaderInSkipIntroOutroList,
+    enableUploaderInSkipIntroOutroList,
+    getUploaderSkipSettings,     // 新增: 获取特定UP主设置
+    updateUploaderSkipSettings   // 新增: 更新特定UP主设置
 };
 
 /**

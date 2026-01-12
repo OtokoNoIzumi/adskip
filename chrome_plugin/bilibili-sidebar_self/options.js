@@ -45,10 +45,10 @@ function checkAdminStatus() {
 
 // 加载白名单数据，使用adskipStorage接口
 function loadWhitelistData() {
-  adskipStorage.loadUploaderWhitelist().then(function(whitelist) {
+  adskipStorage.loadUploaderWhitelist().then(function (whitelist) {
     whitelistData = whitelist;
     renderWhitelist();
-  }).catch(function(error) {
+  }).catch(function (error) {
     console.error('解析白名单数据失败', error);
     whitelistData = [];
     renderWhitelist();
@@ -78,7 +78,7 @@ function renderWhitelist() {
   }
 
   // 创建列表项
-  whitelistData.forEach(function(item, index) {
+  whitelistData.forEach(function (item, index) {
     const itemName = item.name;
     const isEnabled = item.enabled !== false;
     const addedAt = item.addedAt;
@@ -98,8 +98,8 @@ function renderWhitelist() {
       ${dateString ? `<div class="whitelist-item-date">添加于: ${dateString}</div>` : ''}
       <div class="whitelist-item-actions">
         ${isEnabled
-          ? `<button class="whitelist-btn whitelist-btn-disable" data-index="${index}">禁用</button>`
-          : `<button class="whitelist-btn whitelist-btn-enable" data-index="${index}">启用</button>`}
+        ? `<button class="whitelist-btn whitelist-btn-disable" data-index="${index}">禁用</button>`
+        : `<button class="whitelist-btn whitelist-btn-enable" data-index="${index}">启用</button>`}
         <button class="whitelist-btn whitelist-btn-delete" data-index="${index}">删除</button>
       </div>
     `;
@@ -109,21 +109,21 @@ function renderWhitelist() {
 
   // 添加事件监听
   container.querySelectorAll('.whitelist-btn-enable').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
       const index = parseInt(this.getAttribute('data-index'));
       toggleWhitelistItem(index, true);
     });
   });
 
   container.querySelectorAll('.whitelist-btn-disable').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
       const index = parseInt(this.getAttribute('data-index'));
       toggleWhitelistItem(index, false);
     });
   });
 
   container.querySelectorAll('.whitelist-btn-delete').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
       const index = parseInt(this.getAttribute('data-index'));
       deleteWhitelistItem(index);
     });
@@ -139,11 +139,11 @@ function toggleWhitelistItem(index, enabled) {
 
   // 使用adskipStorage接口
   if (enabled) {
-    adskipStorage.enableUploaderInWhitelist(itemName).then(function() {
+    adskipStorage.enableUploaderInWhitelist(itemName).then(function () {
       loadWhitelistData(); // 重新加载数据以更新UI
     });
   } else {
-    adskipStorage.disableUploaderInWhitelist(itemName).then(function() {
+    adskipStorage.disableUploaderInWhitelist(itemName).then(function () {
       loadWhitelistData(); // 重新加载数据以更新UI
     });
   }
@@ -157,7 +157,7 @@ function deleteWhitelistItem(index) {
   const itemName = item.name;
 
   if (confirm(`确定要从白名单中删除"${itemName}"吗？`)) {
-    adskipStorage.removeUploaderFromWhitelist(itemName).then(function() {
+    adskipStorage.removeUploaderFromWhitelist(itemName).then(function () {
       loadWhitelistData(); // 重新加载数据以更新UI
       showStatus('白名单已更新');
     });
@@ -165,7 +165,7 @@ function deleteWhitelistItem(index) {
 }
 
 // 初始化选项页面
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   // 加载存储的设置
   loadSettings();
 
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
   checkAndShowUsageInstructions();
 
   // 检查是否有标签切换请求
-  chrome.storage.local.get('adskip_open_tab', function(result) {
+  chrome.storage.local.get('adskip_open_tab', function (result) {
     if (result.adskip_open_tab) {
       // 切换到指定标签
       const tabName = result.adskip_open_tab;
@@ -205,12 +205,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 管理员登录/登出按钮
   const adminLoginBtn = document.getElementById('admin-login-btn');
-  adminLoginBtn.addEventListener('click', function() {
+  adminLoginBtn.addEventListener('click', function () {
     adskipStorage.checkAdminStatus().then(isAdmin => {
       if (isAdmin) {
         // 已登录，执行登出
         if (confirm('确定要退出管理员登录吗？')) {
-          chrome.storage.local.set({[adskipStorage.KEYS.ADMIN_AUTH]: false}, function() {
+          chrome.storage.local.set({ [adskipStorage.KEYS.ADMIN_AUTH]: false }, function () {
             showStatus('已退出管理员登录', 'info');
             checkAdminStatus();
           });
@@ -235,13 +235,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 功能开关监听
   const adskipToggle = document.getElementById('enable-adskip');
-  adskipToggle.addEventListener('change', function() {
+  adskipToggle.addEventListener('change', function () {
     const newEnabled = this.checked;
     // 使用adskipStorage.getEnabled替代直接的chrome.storage调用
-    adskipStorage.getEnabled().then(function(currentEnabled) {
+    adskipStorage.getEnabled().then(function (currentEnabled) {
       // 只有当状态确实变化时才设置
       if (currentEnabled !== newEnabled) {
-        adskipStorage.setEnabled(newEnabled).then(function() {
+        adskipStorage.setEnabled(newEnabled).then(function () {
           showStatus(newEnabled ? '已启用广告跳过功能' : '已禁用广告跳过功能');
         });
       }
@@ -250,13 +250,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 调试模式开关监听
   const debugModeToggle = document.getElementById('debug-mode');
-  debugModeToggle.addEventListener('change', function() {
+  debugModeToggle.addEventListener('change', function () {
     const newDebugMode = this.checked;
     // 使用adskipStorage的方法替代直接调用
     const currentDebugMode = adskipStorage.getDebugMode(); // 同步方法，直接获取当前状态
     // 只有当状态确实变化时才设置
     if (currentDebugMode !== newDebugMode) {
-      adskipStorage.setDebugMode(newDebugMode).then(function() {
+      adskipStorage.setDebugMode(newDebugMode).then(function () {
         showStatus(newDebugMode ? '已启用调试模式' : '已禁用调试模式');
       });
     }
@@ -264,13 +264,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // "不检测自己视频"开关监听
   const skipOwnVideosToggle = document.getElementById('skip-own-videos');
-  skipOwnVideosToggle.addEventListener('change', function() {
+  skipOwnVideosToggle.addEventListener('change', function () {
     const newSkipOwnVideos = this.checked;
     // 获取当前状态并比较
-    adskipStorage.getSkipOwnVideos().then(function(currentSkipOwnVideos) {
+    adskipStorage.getSkipOwnVideos().then(function (currentSkipOwnVideos) {
       // 只有当状态确实变化时才设置
       if (currentSkipOwnVideos !== newSkipOwnVideos) {
-        adskipStorage.setSkipOwnVideos(newSkipOwnVideos).then(function() {
+        adskipStorage.setSkipOwnVideos(newSkipOwnVideos).then(function () {
           showStatus(newSkipOwnVideos ? '已启用"不检测自己视频"功能' : '已禁用"不检测自己视频"功能');
         });
       }
@@ -279,14 +279,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 搜索页预检开关监听
   const searchPrecheckToggle = document.getElementById('search-precheck');
-  searchPrecheckToggle.addEventListener('change', function() {
+  searchPrecheckToggle.addEventListener('change', function () {
     const newSearchPrecheck = this.checked;
     // 获取当前状态并比较
-    adskipStorage.getSearchPrecheck().then(function(currentSearchPrecheck) {
+    adskipStorage.getSearchPrecheck().then(function (currentSearchPrecheck) {
       // 只有当状态确实变化时才设置
       if (currentSearchPrecheck !== newSearchPrecheck) {
-        adskipStorage.setSearchPrecheck(newSearchPrecheck).then(function() {
+        adskipStorage.setSearchPrecheck(newSearchPrecheck).then(function () {
           showStatus(newSearchPrecheck ? '已启用搜索页预检功能' : '已禁用搜索页预检功能');
+        });
+      }
+    });
+  });
+
+  // 已读标记开关监听
+  const readMarkToggle = document.getElementById('read-mark');
+  readMarkToggle.addEventListener('change', function () {
+    const newReadMark = this.checked;
+    // 获取当前状态并比较
+    adskipStorage.getReadMark().then(function (currentReadMark) {
+      // 只有当状态确实变化时才设置
+      if (currentReadMark !== newReadMark) {
+        adskipStorage.setReadMark(newReadMark).then(function () {
+          showStatus(newReadMark ? '已启用搜索页已读标记功能' : '已禁用搜索页已读标记功能');
         });
       }
     });
@@ -296,17 +311,17 @@ document.addEventListener('DOMContentLoaded', function() {
   const percentageSlider = document.getElementById('skip-percentage');
   const percentageValue = document.getElementById('percentage-value');
 
-  percentageSlider.addEventListener('input', function() {
+  percentageSlider.addEventListener('input', function () {
     percentageValue.textContent = this.value;
   });
 
-  percentageSlider.addEventListener('change', function() {
+  percentageSlider.addEventListener('change', function () {
     const newPercentage = parseInt(this.value, 10);
 
     // 检查值是否实际变化，使用adskipStorage接口
-    adskipStorage.loadAdSkipPercentage().then(function(currentPercentage) {
+    adskipStorage.loadAdSkipPercentage().then(function (currentPercentage) {
       if (currentPercentage !== newPercentage) {
-        adskipStorage.saveAdSkipPercentage(newPercentage).then(function() {
+        adskipStorage.saveAdSkipPercentage(newPercentage).then(function () {
           showStatus(`已设置广告跳过百分比为 ${newPercentage}%`);
         });
       }
@@ -316,11 +331,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // 百分比预设按钮
   const presetButtons = document.querySelectorAll('.preset-button');
   presetButtons.forEach(button => {
-    button.addEventListener('click', function() {
+    button.addEventListener('click', function () {
       const newValue = parseInt(this.getAttribute('data-value'), 10);
 
       // 检查值是否变化，使用adskipStorage接口
-      adskipStorage.loadAdSkipPercentage().then(function(currentPercentage) {
+      adskipStorage.loadAdSkipPercentage().then(function (currentPercentage) {
         // 更新滑块和文本显示
         if (percentageSlider.value != newValue) {
           percentageSlider.value = newValue;
@@ -332,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 只有在值变化时才保存
         if (currentPercentage !== newValue) {
-          adskipStorage.saveAdSkipPercentage(newValue).then(function() {
+          adskipStorage.saveAdSkipPercentage(newValue).then(function () {
             showStatus(`已设置广告跳过百分比为 ${newValue}%`);
           });
         }
@@ -342,16 +357,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 重置数据按钮
   const resetButton = document.getElementById('reset-data');
-  resetButton.addEventListener('click', function() {
+  resetButton.addEventListener('click', function () {
     if (confirm('确定要重置所有数据吗？此操作无法撤销。\n\n此操作将清除：\n- 所有已保存的广告跳过时间段\n- UP主白名单数据\n- 其他插件数据')) {
       // 使用adskipStorage模块的集中式方法
-      adskipStorage.getVideoDataKeys().then(function(adskipDataKeys) {
+      adskipStorage.getVideoDataKeys().then(function (adskipDataKeys) {
         // 添加白名单键，一起清除
-        adskipStorage.getWhitelistKeys().then(function(whitelistKeys) {
+        adskipStorage.getWhitelistKeys().then(function (whitelistKeys) {
           const allKeysToRemove = [...adskipDataKeys, ...whitelistKeys];
 
           // 移除所有广告跳过数据和白名单
-          adskipStorage.removeKeys(allKeysToRemove).then(function() {
+          adskipStorage.removeKeys(allKeysToRemove).then(function () {
             showStatus('已重置所有广告跳过数据，包括UP主白名单');
 
             // 如果当前在白名单选项卡，刷新白名单列表
@@ -379,6 +394,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         targetTab.classList.add('active');
         document.getElementById(`${hash}-tab`).classList.add('active');
+
+        // 如果是白名单选项卡，加载白名单数据
+        if (hash === 'whitelist') {
+          loadWhitelistData();
+        }
+
+        // 如果是跳过开头/结尾选项卡，加载UP主列表
+        if (hash === 'skipintro') {
+          loadSkipIntroOutroUploaderList();
+        }
       }
     }
   }
@@ -389,8 +414,8 @@ document.addEventListener('DOMContentLoaded', function() {
   // 监听hash变化
   window.addEventListener('hashchange', checkUrlHash);
 
-  tabButtons.forEach(function(button) {
-    button.addEventListener('click', function() {
+  tabButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
       const tabName = this.getAttribute('data-tab');
 
       // 更新URL hash但不刷新页面
@@ -407,11 +432,16 @@ document.addEventListener('DOMContentLoaded', function() {
       if (tabName === 'whitelist') {
         loadWhitelistData();
       }
+
+      // 如果是跳过开头/结尾选项卡，加载UP主列表数据
+      if (tabName === 'skipintro') {
+        loadSkipIntroOutroUploaderList();
+      }
     });
   });
 
   // 导入白名单按钮
-  document.getElementById('whitelist-import').addEventListener('click', function() {
+  document.getElementById('whitelist-import').addEventListener('click', function () {
     const textarea = document.getElementById('whitelist-textarea');
     const text = textarea.value.trim();
 
@@ -421,31 +451,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 使用adskipStorage的importUploaderWhitelist方法
-    adskipStorage.importUploaderWhitelist(text).then(function(newWhitelist) {
+    adskipStorage.importUploaderWhitelist(text).then(function (newWhitelist) {
       whitelistData = newWhitelist;
       renderWhitelist();
       showStatus(`已导入UP主到白名单`);
       textarea.value = '';
-    }).catch(function(error) {
+    }).catch(function (error) {
       showStatus(`导入失败: ${error.message}`, 'error');
     });
   });
 
   // 导出白名单按钮
-  document.getElementById('whitelist-export').addEventListener('click', function() {
+  document.getElementById('whitelist-export').addEventListener('click', function () {
     const textarea = document.getElementById('whitelist-textarea');
 
     // 使用adskipStorage的exportUploaderWhitelist方法
-    adskipStorage.exportUploaderWhitelist().then(function(whitelistText) {
+    adskipStorage.exportUploaderWhitelist().then(function (whitelistText) {
       textarea.value = whitelistText;
       showStatus(`已导出UP主到文本框`);
-    }).catch(function(error) {
+    }).catch(function (error) {
       showStatus(`导出失败: ${error.message}`, 'error');
     });
   });
 
   // 复制到剪贴板按钮
-  document.getElementById('whitelist-copy').addEventListener('click', function() {
+  document.getElementById('whitelist-copy').addEventListener('click', function () {
     const textarea = document.getElementById('whitelist-textarea');
     const text = textarea.value.trim();
 
@@ -472,27 +502,35 @@ document.addEventListener('DOMContentLoaded', function() {
   // 自定义服务器相关按钮
   loadCustomServerSettings();
 
-  document.getElementById('enable-custom-server').addEventListener('change', function() {
+  document.getElementById('enable-custom-server').addEventListener('change', function () {
     toggleCustomServer();
   });
 
-  document.getElementById('reset-custom-server').addEventListener('click', function() {
+  document.getElementById('reset-custom-server').addEventListener('click', function () {
     resetCustomServer();
   });
 
-  document.getElementById('custom-server-url').addEventListener('input', function() {
+  document.getElementById('custom-server-url').addEventListener('input', function () {
     // 当用户输入时，如果当前是启用状态，则自动保存
     const enableCheckbox = document.getElementById('enable-custom-server');
     if (enableCheckbox.checked) {
       const url = document.getElementById('custom-server-url').value.trim();
       if (isValidServerUrl(url)) {
-        chrome.storage.sync.set({customServerUrl: url});
+        chrome.storage.sync.set({ customServerUrl: url });
       }
     }
   });
 
   // URL hash 检查
   checkUrlHash();
+
+  // 跳过开头/结尾设置初始化
+  initSkipIntroOutroSettings();
+
+  // 如果页面加载时就在skipintro选项卡，立即加载UP主列表
+  if (window.location.hash === '#skipintro') {
+    loadSkipIntroOutroUploaderList();
+  }
 });
 
 // 加载保存的设置，使用adskipStorage接口
@@ -509,8 +547,9 @@ function loadSettings() {
     adskipStorage.getEnabled(),
     adskipStorage.loadAdSkipPercentage(),
     adskipStorage.getSkipOwnVideos(),
-    adskipStorage.getSearchPrecheck()
-  ]).then(function([enabled, percentage, skipOwnVideos, searchPrecheck]) {
+    adskipStorage.getSearchPrecheck(),
+    adskipStorage.getReadMark()
+  ]).then(function ([enabled, percentage, skipOwnVideos, searchPrecheck, readMark]) {
     // 加载功能启用状态
     const adskipToggle = document.getElementById('enable-adskip');
     if (adskipToggle) {
@@ -539,6 +578,12 @@ function loadSettings() {
     if (searchPrecheckToggle) {
       searchPrecheckToggle.checked = searchPrecheck;
     }
+
+    // 加载已读标记状态
+    const readMarkToggle = document.getElementById('read-mark');
+    if (readMarkToggle) {
+      readMarkToggle.checked = readMark;
+    }
   });
 }
 
@@ -549,13 +594,13 @@ function showStatus(message, type = 'success') {
   statusElement.className = `status ${type}`;
 
   // 自动隐藏状态信息
-  setTimeout(function() {
+  setTimeout(function () {
     statusElement.className = 'status';
   }, 3000);
 }
 
 // 添加存储变更监听器，保持UI与其他页面同步
-chrome.storage.onChanged.addListener(function(changes, namespace) {
+chrome.storage.onChanged.addListener(function (changes, namespace) {
   if (namespace !== 'local') return;
 
   console.log('changes', changes);
@@ -631,8 +676,8 @@ function isValidServerUrl(url) {
     if (parsed.protocol === 'https:') {
       return true;
     } else if (parsed.protocol === 'http:' &&
-               parsed.hostname === 'localhost' &&
-               parsed.port === '3000') {
+      parsed.hostname === 'localhost' &&
+      parsed.port === '3000') {
       return true;
     }
 
@@ -644,7 +689,7 @@ function isValidServerUrl(url) {
 
 // 加载自定义服务器设置
 function loadCustomServerSettings() {
-  chrome.storage.sync.get(['customServerUrl', 'customServerEnabled'], function(result) {
+  chrome.storage.sync.get(['customServerUrl', 'customServerEnabled'], function (result) {
     const urlInput = document.getElementById('custom-server-url');
     const enableCheckbox = document.getElementById('enable-custom-server');
     const statusDiv = document.getElementById('custom-server-status');
@@ -688,7 +733,7 @@ function toggleCustomServer() {
     chrome.storage.sync.set({
       customServerEnabled: true,
       customServerUrl: url
-    }, function() {
+    }, function () {
       updateCustomServerStatus(true, url);
       showCustomServerStatus(`已启用自定义服务器: ${url}`, 'success');
     });
@@ -696,7 +741,7 @@ function toggleCustomServer() {
     // 禁用自定义服务器
     chrome.storage.sync.set({
       customServerEnabled: false
-    }, function() {
+    }, function () {
       updateCustomServerStatus(false);
       showCustomServerStatus('已关闭自定义服务器，使用默认官方服务器', 'info');
     });
@@ -706,7 +751,7 @@ function toggleCustomServer() {
 // 重置自定义服务器设置
 function resetCustomServer() {
   if (confirm('确定要重置自定义服务器设置吗？这将清除保存的服务器地址并关闭自定义服务器功能。')) {
-    chrome.storage.sync.remove(['customServerUrl', 'customServerEnabled'], function() {
+    chrome.storage.sync.remove(['customServerUrl', 'customServerEnabled'], function () {
       document.getElementById('custom-server-url').value = '';
       document.getElementById('enable-custom-server').checked = false;
       updateCustomServerStatus(false);
@@ -744,8 +789,344 @@ function showCustomServerStatus(message, type = 'info') {
 
   // 3秒后恢复到默认状态显示
   setTimeout(() => {
-    chrome.storage.sync.get(['customServerEnabled', 'customServerUrl'], function(result) {
+    chrome.storage.sync.get(['customServerEnabled', 'customServerUrl'], function (result) {
       updateCustomServerStatus(result.customServerEnabled, result.customServerUrl);
     });
   }, 3000);
 }
+
+// ==================== 跳过开头/结尾设置相关函数 ====================
+
+// 全局变量：跳过开头/结尾UP主列表数据
+let skipIntroOutroUploaderData = [];
+// 全局变量：默认跳过时长（用于显示列表时的 fallback）
+let globalDefaultIntroDuration = 5;
+let globalDefaultOutroDuration = 5;
+
+/**
+ * 初始化跳过开头/结尾设置
+ */
+async function initSkipIntroOutroSettings() {
+  const skipIntroEnabled = document.getElementById('skip-intro-enabled');
+  const skipIntroDuration = document.getElementById('skip-intro-duration-option');
+  const skipOutroEnabled = document.getElementById('skip-outro-enabled');
+  const skipOutroDuration = document.getElementById('skip-outro-duration-option');
+
+  if (!skipIntroEnabled) return; // 元素不存在则退出
+
+  // 加载当前设置
+  const [introEnabled, introDuration, outroEnabled, outroDuration] = await Promise.all([
+    adskipStorage.getSkipIntroEnabled(),
+    adskipStorage.getSkipIntroDuration(),
+    adskipStorage.getSkipOutroEnabled(),
+    adskipStorage.getSkipOutroDuration()
+  ]);
+
+  // 更新全局变量
+  globalDefaultIntroDuration = introDuration;
+  globalDefaultOutroDuration = outroDuration;
+
+  skipIntroEnabled.checked = introEnabled;
+  skipIntroDuration.value = introDuration;
+  skipOutroEnabled.checked = outroEnabled;
+  skipOutroDuration.value = outroDuration;
+
+  // 绑定事件 - 跳过开头开关
+  skipIntroEnabled.addEventListener('change', async function () {
+    await adskipStorage.setSkipIntroEnabled(this.checked);
+    showStatus(this.checked ? '已启用跳过开头功能' : '已禁用跳过开头功能');
+  });
+
+  // 绑定事件 - 跳过开头时长
+  skipIntroDuration.addEventListener('change', async function () {
+    const value = parseInt(this.value, 10) || 0;
+    await adskipStorage.setSkipIntroDuration(value);
+    showStatus(`跳过开头时长设置为 ${value} 秒`);
+  });
+
+  // 绑定事件 - 跳过结尾开关
+  skipOutroEnabled.addEventListener('change', async function () {
+    await adskipStorage.setSkipOutroEnabled(this.checked);
+    showStatus(this.checked ? '已启用跳过结尾功能' : '已禁用跳过结尾功能');
+  });
+
+  // 绑定事件 - 跳过结尾时长
+  skipOutroDuration.addEventListener('change', async function () {
+    const value = parseInt(this.value, 10) || 0;
+    await adskipStorage.setSkipOutroDuration(value);
+    showStatus(`跳过结尾时长设置为 ${value} 秒`);
+  });
+
+  // 导入按钮
+  document.getElementById('skipintro-import').addEventListener('click', async function () {
+    const textarea = document.getElementById('skipintro-uploader-textarea');
+    const text = textarea.value.trim();
+
+    if (!text) {
+      showStatus('请输入要导入的UP主名称', 'error');
+      return;
+    }
+
+    const uploaderNames = text.split(/[,\n]/).map(name => name.trim()).filter(name => name.length > 0);
+
+    if (uploaderNames.length === 0) {
+      showStatus('未找到有效的UP主名称', 'error');
+      return;
+    }
+
+    const currentList = await adskipStorage.getSkipIntroOutroUploaderList();
+
+    for (const name of uploaderNames) {
+      const existingIndex = currentList.findIndex(item => item.name === name);
+      if (existingIndex >= 0) {
+        currentList[existingIndex].enabled = true;
+      } else {
+        currentList.push({
+          name: name,
+          addedAt: Date.now(),
+          enabled: true
+        });
+      }
+    }
+
+    await adskipStorage.saveSkipIntroOutroUploaderList(currentList);
+    skipIntroOutroUploaderData = currentList;
+    renderSkipIntroOutroUploaderList();
+    showStatus(`已导入 ${uploaderNames.length} 个UP主到列表`);
+    textarea.value = '';
+  });
+
+  // 导出按钮
+  document.getElementById('skipintro-export').addEventListener('click', async function () {
+    const textarea = document.getElementById('skipintro-uploader-textarea');
+    const list = await adskipStorage.getSkipIntroOutroUploaderList();
+
+    const exportText = list
+      .filter(item => item.enabled !== false)
+      .map(item => item.name)
+      .join('\n');
+
+    textarea.value = exportText;
+    showStatus(`已导出 ${list.filter(item => item.enabled !== false).length} 个UP主到文本框`);
+  });
+
+  // 复制到剪贴板按钮
+  document.getElementById('skipintro-copy').addEventListener('click', function () {
+    const textarea = document.getElementById('skipintro-uploader-textarea');
+    const text = textarea.value.trim();
+
+    if (!text) {
+      showStatus('文本框为空，请先导出列表', 'error');
+      return;
+    }
+
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        showStatus('已复制到剪贴板');
+      })
+      .catch(err => {
+        console.error('复制失败:', err);
+        showStatus('复制失败，请手动复制', 'error');
+      });
+  });
+}
+
+/**
+ * 加载跳过开头/结尾UP主列表数据
+ */
+async function loadSkipIntroOutroUploaderList() {
+  try {
+    skipIntroOutroUploaderData = await adskipStorage.getSkipIntroOutroUploaderList();
+    renderSkipIntroOutroUploaderList();
+  } catch (error) {
+    console.error('加载跳过开头/结尾UP主列表失败', error);
+    skipIntroOutroUploaderData = [];
+    renderSkipIntroOutroUploaderList();
+  }
+}
+
+/**
+ * 渲染跳过开头/结尾UP主列表
+ */
+function renderSkipIntroOutroUploaderList() {
+  const container = document.getElementById('skipintro-uploader-list');
+  const countElement = document.getElementById('skipintro-uploader-count');
+
+  // 更新计数
+  const enabledCount = skipIntroOutroUploaderData.filter(item => item.enabled !== false).length;
+
+  if (countElement) {
+    countElement.textContent = enabledCount;
+  }
+
+  // 清空容器
+  if (!container) return;
+  container.innerHTML = '';
+
+  // 如果列表为空，显示提示
+  if (skipIntroOutroUploaderData.length === 0) {
+    container.innerHTML = '<div class="whitelist-empty">列表为空，您可以在视频页面的插件弹窗中将UP主添加到此列表</div>';
+    return;
+  }
+
+  // 创建列表项
+  skipIntroOutroUploaderData.forEach(function (item, index) {
+    const itemName = item.name;
+    const isEnabled = item.enabled !== false;
+    const addedAt = item.addedAt;
+
+    // 获取特定设置或默认值
+    // 注意：这里仅作展示，实际逻辑由backend处理
+    const introDuration = item.introDuration !== undefined ? item.introDuration : globalDefaultIntroDuration;
+    const outroDuration = item.outroDuration !== undefined ? item.outroDuration : globalDefaultOutroDuration;
+    const skipIntro = item.skipIntro !== false; // 默认true
+    const skipOutro = item.skipOutro !== false; // 默认true
+
+    const configText = `
+      <span class="whitelist-config-tag" title="跳过开头设置">
+        ${skipIntro ? `开头: ${introDuration}s` : '开头: 关'}
+      </span>
+      <span class="whitelist-config-tag" title="跳过结尾设置">
+        ${skipOutro ? `结尾: ${outroDuration}s` : '结尾: 关'}
+      </span>
+    `;
+
+    const itemElement = document.createElement('div');
+    itemElement.className = 'whitelist-item';
+
+    // 格式化日期
+    let dateString = '';
+    if (addedAt) {
+      const date = new Date(addedAt);
+      dateString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+    }
+
+    itemElement.innerHTML = `
+      <div class="whitelist-item-content">
+        <div class="whitelist-item-name">${itemName}</div>
+        <div class="whitelist-item-details">
+          ${configText}
+          ${dateString ? `<span class="whitelist-item-date">${dateString}</span>` : ''}
+        </div>
+      </div>
+      <div class="whitelist-item-actions">
+        ${isEnabled
+        ? `<button class="whitelist-btn whitelist-btn-disable" data-index="${index}">禁用</button>`
+        : `<button class="whitelist-btn whitelist-btn-enable" data-index="${index}">启用</button>`}
+        <button class="whitelist-btn whitelist-btn-delete" data-index="${index}">删除</button>
+      </div>
+    `;
+
+    container.appendChild(itemElement);
+  });
+
+  // 添加事件监听
+  container.querySelectorAll('.whitelist-btn-enable').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const index = parseInt(this.getAttribute('data-index'));
+      await toggleSkipIntroOutroUploaderItem(index, true);
+    });
+  });
+
+  container.querySelectorAll('.whitelist-btn-disable').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const index = parseInt(this.getAttribute('data-index'));
+      await toggleSkipIntroOutroUploaderItem(index, false);
+    });
+  });
+
+  container.querySelectorAll('.whitelist-btn-delete').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const index = parseInt(this.getAttribute('data-index'));
+      await deleteSkipIntroOutroUploaderItem(index);
+    });
+  });
+}
+
+/**
+ * 切换跳过开头/结尾UP主列表项的启用状态
+ */
+async function toggleSkipIntroOutroUploaderItem(index, enabled) {
+  if (index < 0 || index >= skipIntroOutroUploaderData.length) return;
+
+  const item = skipIntroOutroUploaderData[index];
+
+  if (enabled) {
+    await adskipStorage.enableUploaderInSkipIntroOutroList(item.name);
+  } else {
+    await adskipStorage.disableUploaderInSkipIntroOutroList(item.name);
+  }
+
+  await loadSkipIntroOutroUploaderList();
+}
+
+/**
+ * 删除跳过开头/结尾UP主列表项
+ */
+async function deleteSkipIntroOutroUploaderItem(index) {
+  if (index < 0 || index >= skipIntroOutroUploaderData.length) return;
+
+  const item = skipIntroOutroUploaderData[index];
+
+  if (confirm(`确定要从列表中删除"${item.name}"吗？`)) {
+    await adskipStorage.removeUploaderFromSkipIntroOutroList(item.name);
+    await loadSkipIntroOutroUploaderList();
+    showStatus('已从列表中删除');
+  }
+}
+
+// 监听存储变化，更新跳过开头/结尾相关UI
+chrome.storage.onChanged.addListener(function (changes, namespace) {
+  if (namespace !== 'local') return;
+
+  // 监听跳过开头开关变化
+  if (changes[adskipStorage.KEYS.SKIP_INTRO_ENABLED] !== undefined) {
+    const skipIntroEnabled = document.getElementById('skip-intro-enabled');
+    if (skipIntroEnabled) {
+      skipIntroEnabled.checked = changes[adskipStorage.KEYS.SKIP_INTRO_ENABLED].newValue === true;
+    }
+  }
+
+  // 监听跳过开头时长变化
+  if (changes[adskipStorage.KEYS.SKIP_INTRO_DURATION] !== undefined) {
+    const newVal = changes[adskipStorage.KEYS.SKIP_INTRO_DURATION].newValue || 0;
+    const skipIntroDuration = document.getElementById('skip-intro-duration-option');
+    if (skipIntroDuration) {
+      skipIntroDuration.value = newVal;
+    }
+    // 更新全局默认值并重绘列表
+    globalDefaultIntroDuration = newVal;
+    if (window.location.hash === '#skipintro') {
+      renderSkipIntroOutroUploaderList();
+    }
+  }
+
+  // 监听跳过结尾开关变化
+  if (changes[adskipStorage.KEYS.SKIP_OUTRO_ENABLED] !== undefined) {
+    const skipOutroEnabled = document.getElementById('skip-outro-enabled');
+    if (skipOutroEnabled) {
+      skipOutroEnabled.checked = changes[adskipStorage.KEYS.SKIP_OUTRO_ENABLED].newValue === true;
+    }
+  }
+
+  // 监听跳过结尾时长变化
+  if (changes[adskipStorage.KEYS.SKIP_OUTRO_DURATION] !== undefined) {
+    const newVal = changes[adskipStorage.KEYS.SKIP_OUTRO_DURATION].newValue || 0;
+    const skipOutroDuration = document.getElementById('skip-outro-duration-option');
+    if (skipOutroDuration) {
+      skipOutroDuration.value = newVal;
+    }
+    // 更新全局默认值并重绘列表
+    globalDefaultOutroDuration = newVal;
+    if (window.location.hash === '#skipintro') {
+      renderSkipIntroOutroUploaderList();
+    }
+  }
+
+  // 监听UP主列表变化
+  if (changes[adskipStorage.KEYS.SKIP_INTRO_OUTRO_UPLOADER_LIST] !== undefined) {
+    if (window.location.hash === '#skipintro') {
+      loadSkipIntroOutroUploaderList();
+    }
+  }
+});

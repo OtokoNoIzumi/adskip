@@ -12,6 +12,11 @@ const processedBVs = new Set();
 const CACHE_TTL = 60 * 60 * 1000; // 1小时缓存（修正：之前写的是60分钟实际是60秒）
 const CACHE_KEY = 'adskip_search_subtitle_cache';
 
+// 已读BV缓存（白名单 + 广告数据）- 用于快速匹配
+let readBVs = new Set();
+// 已读标记开关状态（默认开启）
+let readMarkEnabled = true;
+
 // 并发控制（全局调度器）
 const MAX_CONCURRENT = 4;
 let runningCount = 0;
@@ -143,6 +148,11 @@ async function runTask(bv, taskId) {
  * 将 BV 调度到全局队列
  */
 async function scheduleBV(bv, card) {
+    // 如果已读，不进行字幕检测
+    if (readBVs.has(bv)) {
+        return;
+    }
+
     // 绑定卡片
     if (card) {
         if (!bvToCards.has(bv)) bvToCards.set(bv, new Set());
@@ -153,7 +163,7 @@ async function scheduleBV(bv, card) {
     if (processedBVs.has(bv) || runningBVs.has(bv) || enqueuedBVs.has(bv)) {
         const cached = await getCachedResult(bv);
         if (cached && cached.hasSubtitle === false) {
-            // 立即标记
+            // 立即标记无字幕（已读标记优先级更高，但不在此处处理，因为已读检查在更上层）
             const cards = bvToCards.get(bv) || [];
             cards.forEach(c => addNoSubtitleBadge(c));
         }
@@ -216,8 +226,8 @@ function pumpQueue() {
  * @param {HTMLElement} card 视频卡片元素
  */
 function addNoSubtitleBadge(card) {
-    // 检查是否已添加标记
-    if (card.querySelector('.adskip-no-subtitle-badge')) {
+    // 检查是否已添加标记（优先检查高优先级标记）
+    if (card.querySelector('.adskip-ad-label') || card.querySelector('.adskip-read-badge') || card.querySelector('.adskip-no-subtitle-badge')) {
         return;
     }
 
@@ -234,6 +244,42 @@ function addNoSubtitleBadge(card) {
     badge.title = '检测到无字幕';
 
     coverContainer.appendChild(badge);
+}
+
+/**
+ * 为视频卡片添加已读标记
+ * @param {HTMLElement} card 视频卡片元素
+ */
+function addReadBadge(card) {
+    // 检查开关状态
+    if (!readMarkEnabled) {
+        return;
+    }
+
+    // 检查是否已添加标记（广告标记优先级更高）
+    if (card.querySelector('.adskip-ad-label') || card.querySelector('.adskip-read-badge') || card.querySelector('.adskip-read-label')) {
+        return;
+    }
+
+    // 轻度淡化：为wrap添加已读类（避免与广告类冲突）
+    const wrap = card.querySelector('.bili-video-card__wrap');
+    if (wrap && !wrap.classList.contains('adskip-identified-ad')) {
+        wrap.classList.add('adskip-read-card');
+    }
+
+    // 确保外层card是相对定位（与广告标签一致）
+    if (!card.style.position) {
+        card.style.position = 'relative';
+    }
+
+    // 创建"已读"角标（与广告角标同层、同规格，仅颜色不同）
+    const readLabel = document.createElement('div');
+    readLabel.className = 'adskip-read-label';
+    readLabel.textContent = '已读';
+    readLabel.title = '已在白名单或有广告数据';
+
+    // 添加到外层card（不受wrap的opacity影响）
+    card.appendChild(readLabel);
 }
 
 /**
@@ -283,7 +329,7 @@ function markAdCard(card) {
  * @param {HTMLElement} card 视频卡片元素
  */
 async function processVideoCard(card) {
-    // 先检查并标记广告（如果是广告，直接返回，不进行字幕检测）
+    // 1. 先检查并标记广告（优先级最高，如果是广告，直接返回）
     if (markAdCard(card)) {
         return;
     }
@@ -295,6 +341,13 @@ async function processVideoCard(card) {
     const bv = extractBV(link.href);
     if (!bv) return;
 
+    // 2. 检查是否已读（优先级：广告 > 已读 > 无字幕）- 仅在开关开启时标记
+    if (readMarkEnabled && readBVs.has(bv)) {
+        addReadBadge(card);
+        return;
+    }
+
+    // 3. 调度字幕检测（优先级最低）
     scheduleBV(bv, card);
 }
 
@@ -321,9 +374,10 @@ function observePageChanges() {
     if (newAnchors.size > 0) {
         const uniqueBV = new Set();
         let adCount = 0;
+        let readCount = 0;
         newAnchors.forEach(a => {
             const card = a.closest('.bili-video-card') || a;
-            // 检测并标记广告
+            // 1. 检测并标记广告（优先级最高）
             if (markAdCard(card)) {
                 adCount++;
                 return;
@@ -331,11 +385,20 @@ function observePageChanges() {
 
             const bv = extractBV(a.href);
             if (!bv) return;
+
+            // 2. 检查是否已读（仅在开关开启时）
+            if (readMarkEnabled && readBVs.has(bv)) {
+                addReadBadge(card);
+                readCount++;
+                return;
+            }
+
+            // 3. 调度字幕检测
             uniqueBV.add(bv);
             scheduleBV(bv, card);
         });
-        if (adCount > 0) {
-            console.log(`[SearchPrecheck] 监听到新增锚点，广告卡片: ${adCount}，有效视频: ${uniqueBV.size}`);
+        if (adCount > 0 || readCount > 0) {
+            console.log(`[SearchPrecheck] 监听到新增锚点，广告: ${adCount}，已读: ${readCount}，待检测: ${uniqueBV.size}`);
         } else {
             console.log(`[SearchPrecheck] 监听到新增锚点，共 ${newAnchors.size}，唯一BV ${uniqueBV.size}`);
         }
@@ -356,26 +419,37 @@ async function processExistingCards() {
     const anchors = document.querySelectorAll('a[href*="/video/BV"]');
     const uniqueBV = new Set();
     let adCount = 0;
+    let readCount = 0;
 
     anchors.forEach(a => {
         const card = a.closest('.bili-video-card') || a;
-        // 检测并标记广告
+        // 1. 检测并标记广告（优先级最高）
         if (markAdCard(card)) {
             adCount++;
             return;
         }
 
         const bv = extractBV(a.href);
-        if (bv) uniqueBV.add(bv);
+        if (!bv) return;
+
+        // 2. 检查是否已读（仅在开关开启时）
+        if (readMarkEnabled && readBVs.has(bv)) {
+            addReadBadge(card);
+            readCount++;
+            return;
+        }
+
+        // 3. 需要检测字幕的BV
+        uniqueBV.add(bv);
     });
 
-    if (adCount > 0) {
-        console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，广告卡片: ${adCount}，有效视频: ${uniqueBV.size}`);
+    if (adCount > 0 || readCount > 0) {
+        console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，广告: ${adCount}，已读: ${readCount}，待检测: ${uniqueBV.size}`);
     } else {
         console.log(`[SearchPrecheck] 开始处理页面上 ${anchors.length} 个锚点，唯一BV ${uniqueBV.size}`);
     }
 
-    // 为每个BV找到对应的卡片并调度
+    // 为每个BV找到对应的卡片并调度字幕检测
     uniqueBV.forEach(bv => {
         const a = Array.from(anchors).find(x => extractBV(x.href) === bv);
         const card = a ? (a.closest('.bili-video-card') || a) : document.body;
@@ -400,7 +474,14 @@ function setupHoverPrecheck() {
         const bv = extractBV(link.href);
         if (!bv || processedBVs.has(bv)) return;
 
-        // 检查缓存
+        // 1. 检查是否已读（优先级高于字幕检测，仅在开关开启时）
+        if (readMarkEnabled && readBVs.has(bv)) {
+            addReadBadge(card);
+            processedBVs.add(bv);
+            return;
+        }
+
+        // 2. 检查字幕缓存
         const cached = await getCachedResult(bv);
         if (cached !== null) {
             processedBVs.add(bv);
@@ -410,7 +491,7 @@ function setupHoverPrecheck() {
             return;
         }
 
-        // 延迟检测（0.7秒）
+        // 3. 延迟检测字幕（0.7秒）
         const timer = setTimeout(() => {
             scheduleBV(bv, card);
         }, 700);
@@ -425,10 +506,51 @@ function setupHoverPrecheck() {
 }
 
 /**
+ * 加载已读BV数据（白名单 + 广告数据）
+ * 高效一次性加载，使用Set进行O(1)查找
+ */
+async function loadReadBVs() {
+    try {
+        const newReadBVs = new Set();
+
+        // 1. 加载白名单
+        const whitelist = await window.adskipStorage.loadVideoWhitelist();
+        whitelist.forEach(item => {
+            const bv = typeof item === 'string' ? item : item.bvid;
+            if (bv) {
+                newReadBVs.add(bv);
+            }
+        });
+
+        // 2. 加载所有广告数据键
+        const videoDataKeys = await window.adskipStorage.getVideoDataKeys();
+        videoDataKeys.forEach(key => {
+            // 从键名提取BV号：adskip_BVxxx -> BVxxx
+            const bv = key.replace(window.adskipStorage.KEYS.VIDEO_PREFIX, '');
+            if (bv && bv.startsWith('BV')) {
+                newReadBVs.add(bv);
+            }
+        });
+
+        readBVs = newReadBVs;
+        console.log(`[SearchPrecheck] 已加载 ${readBVs.size} 个已读BV（白名单: ${whitelist.length}, 广告数据: ${videoDataKeys.length}）`);
+    } catch (error) {
+        console.error('[SearchPrecheck] 加载已读BV数据失败:', error);
+        readBVs = new Set();
+    }
+}
+
+/**
  * 初始化搜索页预检功能（全局自动模式）
  */
 async function initSearchPrecheck() {
     console.log('[SearchPrecheck] 初始化搜索页预检功能（全局自动模式）');
+
+    // 先加载已读标记开关状态
+    await loadReadMarkSetting();
+
+    // 加载已读BV数据
+    await loadReadBVs();
 
     // 处理已有卡片
     processExistingCards();
@@ -438,26 +560,96 @@ async function initSearchPrecheck() {
 }
 
 /**
+ * 移除已读标记
+ * @param {HTMLElement} card 视频卡片元素
+ */
+function removeReadBadge(card) {
+    // 移除已读角标
+    const readLabel = card.querySelector('.adskip-read-label');
+    if (readLabel) {
+        readLabel.remove();
+    }
+
+    // 移除已读淡化类
+    const wrap = card.querySelector('.bili-video-card__wrap');
+    if (wrap) {
+        wrap.classList.remove('adskip-read-card');
+    }
+}
+
+/**
+ * 清理所有已读标记（当开关关闭时）
+ */
+function clearAllReadBadges() {
+    const cards = document.querySelectorAll('.bili-video-card');
+    cards.forEach(card => {
+        removeReadBadge(card);
+    });
+}
+
+/**
+ * 加载已读标记开关状态
+ */
+async function loadReadMarkSetting() {
+    try {
+        const newState = await window.adskipStorage.getReadMark();
+        const oldState = readMarkEnabled;
+        readMarkEnabled = newState;
+        console.log(`[AdSkip] 已读标记开关状态: ${readMarkEnabled ? '开启' : '关闭'}`);
+
+        // 如果从开启变为关闭，清理所有已读标记
+        if (oldState === true && newState === false) {
+            clearAllReadBadges();
+        }
+    } catch (error) {
+        console.error('[AdSkip] 加载已读标记开关状态失败:', error);
+        readMarkEnabled = true; // 默认开启
+    }
+}
+
+/**
  * 初始化广告标记功能（独立于字幕预检）
  */
-function initAdMarking() {
+async function initAdMarking() {
     console.log('[AdSkip] 初始化搜索页广告标记功能');
+
+    // 先加载已读标记开关状态
+    await loadReadMarkSetting();
+
+    // 加载已读BV数据（用于已读标记）
+    await loadReadBVs();
 
     // 处理已有卡片
     const cards = document.querySelectorAll('.bili-video-card');
     let adCount = 0;
+    let readCount = 0;
     cards.forEach(card => {
+        // 1. 标记广告（优先级最高）
         if (markAdCard(card)) {
             adCount++;
+            return;
+        }
+
+        // 2. 检查并标记已读（仅在开关开启时）
+        if (readMarkEnabled) {
+            const link = card.querySelector('a[href*="/video/BV"]');
+            if (link) {
+                const bv = extractBV(link.href);
+                if (bv && readBVs.has(bv)) {
+                    addReadBadge(card);
+                    readCount++;
+                }
+            }
         }
     });
-    if (adCount > 0) {
-        console.log(`[AdSkip] 标记了 ${adCount} 个广告卡片`);
+    if (adCount > 0 || readCount > 0) {
+        console.log(`[AdSkip] 标记了 ${adCount} 个广告卡片，${readCount} 个已读卡片`);
     }
 
     // 监听页面变化
     const observer = new MutationObserver(mutations => {
         let newAdCount = 0;
+        let newReadCount = 0;
         for (const mutation of mutations) {
             if (mutation.type === 'childList' && mutation.addedNodes.length) {
                 for (const node of mutation.addedNodes) {
@@ -466,8 +658,21 @@ function initAdMarking() {
                             ? node
                             : node.querySelector?.('.bili-video-card');
                         if (card) {
+                            // 1. 标记广告
                             if (markAdCard(card)) {
                                 newAdCount++;
+                                continue;
+                            }
+                            // 2. 检查已读（仅在开关开启时）
+                            if (readMarkEnabled) {
+                                const link = card.querySelector('a[href*="/video/BV"]');
+                                if (link) {
+                                    const bv = extractBV(link.href);
+                                    if (bv && readBVs.has(bv)) {
+                                        addReadBadge(card);
+                                        newReadCount++;
+                                    }
+                                }
                             }
                         } else {
                             // 检查新增节点内的所有卡片
@@ -475,6 +680,17 @@ function initAdMarking() {
                             cardsInNode?.forEach(c => {
                                 if (markAdCard(c)) {
                                     newAdCount++;
+                                    return;
+                                }
+                                if (readMarkEnabled) {
+                                    const link = c.querySelector('a[href*="/video/BV"]');
+                                    if (link) {
+                                        const bv = extractBV(link.href);
+                                        if (bv && readBVs.has(bv)) {
+                                            addReadBadge(c);
+                                            newReadCount++;
+                                        }
+                                    }
                                 }
                             });
                         }
@@ -482,8 +698,8 @@ function initAdMarking() {
                 }
             }
         }
-        if (newAdCount > 0) {
-            console.log(`[AdSkip] 新标记了 ${newAdCount} 个广告卡片`);
+        if (newAdCount > 0 || newReadCount > 0) {
+            console.log(`[AdSkip] 新标记了 ${newAdCount} 个广告卡片，${newReadCount} 个已读卡片`);
         }
     });
 
@@ -505,6 +721,12 @@ if (window.location.hostname === 'search.bilibili.com') {
 
     async function checkAndInit() {
         const enabled = await window.adskipStorage.getSearchPrecheck();
+
+        // 先加载已读标记开关状态
+        await loadReadMarkSetting();
+
+        // 加载已读BV数据（两种模式都需要）
+        await loadReadBVs();
 
         if (enabled && !isInitialized) {
             console.log('[SearchPrecheck] 全局自动模式已启用');
@@ -534,6 +756,18 @@ if (window.location.hostname === 'search.bilibili.com') {
     chrome.storage.local.onChanged.addListener((changes) => {
         if (changes.adskip_search_precheck) {
             checkAndInit();
+        } else if (changes.adskip_read_mark) {
+            // 已读标记开关变化时重新加载状态并刷新页面
+            loadReadMarkSetting().then(() => {
+                // 重新处理当前页面卡片
+                processExistingCards();
+            });
+        } else if (changes.adskip_video_whitelist || Object.keys(changes).some(key => key.startsWith('adskip_BV'))) {
+            // 白名单或广告数据变化时重新加载已读BV
+            loadReadBVs().then(() => {
+                // 重新处理当前页面卡片
+                processExistingCards();
+            });
         }
     });
 }

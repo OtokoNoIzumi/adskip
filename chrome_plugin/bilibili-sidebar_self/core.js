@@ -53,6 +53,11 @@ async function init() {
     // 设置广告标记监控 - 无论任何情况都需要
     adskipVideoMonitor.setupAdMarkerMonitor();
 
+    // 设置跳过开头/结尾监控 - 无论任何情况都需要且立即生效
+    if (adskipVideoMonitor.setupSkipIntroOutroMonitor) {
+        adskipVideoMonitor.setupSkipIntroOutroMonitor();
+    }
+
     // 解析URL参数
     const urlAdSkipResult = adskipUtils.parseAdSkipParam(); // 返回 { type: "...", timestamps: [] }
 
@@ -97,7 +102,7 @@ async function initializeSettings() {
  */
 function setupStorageListeners() {
     // 监听器函数
-    let storageListener = function(changes, namespace) {
+    let storageListener = function (changes, namespace) {
         if (namespace === 'local') {
             // 检查广告跳过百分比是否变化
             if (changes[adskipStorage.KEYS.PERCENTAGE]) {
@@ -202,9 +207,9 @@ async function applyNewAdTimestamps(newTimestamps) {
     // 0. 获取当前视频ID（重要）
     const videoId = adskipUtils.getCurrentVideoId().id;
     if (!videoId) {
-         adskipUtils.logDebug('[AdSkip Core] 未找到要应用的视频ID');
-         // 当没有videoId时，不更新core.js的全局变量更安全
-         return;
+        adskipUtils.logDebug('[AdSkip Core] 未找到要应用的视频ID');
+        // 当没有videoId时，不更新core.js的全局变量更安全
+        return;
     }
     // 更新core.js中的currentVideoId全局变量
     currentVideoId = videoId;
@@ -215,7 +220,7 @@ async function applyNewAdTimestamps(newTimestamps) {
 
     // 2. 设置/更新监控器
     if (typeof adskipVideoMonitor !== 'undefined' && adskipVideoMonitor.setupAdSkipMonitor) {
-         adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
+        adskipVideoMonitor.setupAdSkipMonitor(currentAdTimestamps);
     } else {
         adskipUtils.logDebug('[AdSkip Core] 未找到adskipVideoMonitor或setupAdSkipMonitor');
     }
@@ -235,3 +240,44 @@ window.adskipCore.applyNewAdTimestamps = applyNewAdTimestamps;
 
 // 在页面加载后初始化
 window.addEventListener('load', init);
+
+// 消息监听器 - 响应popup的请求
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // 只处理发送给content script的消息
+    if (message.target !== 'content') return false;
+
+    if (message.action === 'getCurrentUploader') {
+        // 异步获取UP主信息
+        adskipStorage.getCurrentVideoUploader().then(info => {
+            sendResponse({
+                uploader: info.uploader || '未知UP主',
+                title: info.title || ''
+            });
+        }).catch(error => {
+            console.error('获取UP主信息失败:', error);
+            sendResponse({
+                uploader: '未知UP主',
+                title: ''
+            });
+        });
+        return true; // 表示将异步发送响应
+    }
+
+    if (message.action === 'getBilibiliUser') {
+        // 这个消息在popup.js中已有处理逻辑，此处保持兼容
+        adskipStorage.getCurrentVideoUploader().then(info => {
+            sendResponse({
+                isLoggedIn: true,
+                uploader: info.uploader || '未知UP主'
+            });
+        }).catch(() => {
+            sendResponse({
+                isLoggedIn: false,
+                uploader: '未知UP主'
+            });
+        });
+        return true;
+    }
+
+    return false;
+});

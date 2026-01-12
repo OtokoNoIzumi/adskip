@@ -20,6 +20,23 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
+/* ========== 搜索页已读徽标 ========== */
+.adskip-read-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background-color: #23ADE5;
+  color: #ffffff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 1000;
+  pointer-events: none;
+  font-weight: bold;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 .bili-video-card__image--wrap {
   position: relative;
 }
@@ -29,6 +46,15 @@
 .bili-video-card__wrap.adskip-identified-ad {
   opacity: 0.1;
   transition: opacity 0.3s ease;
+}
+
+/* 已读卡片淡化（轻度）：默认0.8，悬停恢复1 */
+.bili-video-card__wrap.adskip-read-card {
+  opacity: 0.4;
+  transition: opacity 0.2s ease;
+}
+.bili-video-card__wrap.adskip-read-card:hover {
+  opacity: 1;
 }
 
 /* 独立的广告标签（不受wrap的opacity影响） */
@@ -47,6 +73,23 @@
   letter-spacing: 0.5px;
   pointer-events: none;
   opacity: 0.5 !important;
+}
+
+/* 独立的已读标签（与广告同规格，仅配色不同） */
+.adskip-read-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: linear-gradient(135deg, #20C6FF, #23ADE5);
+  color: #ffffff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(35, 173, 229, 0.4);
+  letter-spacing: 0.5px;
+  pointer-events: none;
 }
 
 /* 鼠标悬停时稍微明显一点 */
