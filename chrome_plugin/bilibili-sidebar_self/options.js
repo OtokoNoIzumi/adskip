@@ -232,6 +232,18 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  const adminUpdateAdsSecretInput = document.getElementById('admin-update-ads-secret');
+  const saveAdminUpdateAdsSecretButton = document.getElementById('save-admin-update-ads-secret');
+  if (adminUpdateAdsSecretInput && saveAdminUpdateAdsSecretButton) {
+    adskipStorage.getAdminUpdateAdsSecret().then(secret => {
+      adminUpdateAdsSecretInput.value = secret || '';
+    });
+    saveAdminUpdateAdsSecretButton.addEventListener('click', async function () {
+      await adskipStorage.setAdminUpdateAdsSecret(adminUpdateAdsSecretInput.value.trim());
+      showStatus('广告修正接口密钥已保存', 'success');
+    });
+  }
+
 
   // 功能开关监听
   const adskipToggle = document.getElementById('enable-adskip');
@@ -305,6 +317,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       }
     });
+  });
+
+  const subtitleTimelineDefaultCollapsedToggle = document.getElementById('subtitle-timeline-default-collapsed');
+  subtitleTimelineDefaultCollapsedToggle.addEventListener('change', function () {
+    adskipStorage.setSubtitleTimelineDefaultCollapsed(this.checked).then(function () {
+      showStatus(this.checked ? '已设置字幕动态轴默认收起' : '已设置字幕动态轴默认展开');
+    }.bind(this));
   });
 
   // 广告跳过百分比滑块监听
@@ -548,8 +567,9 @@ function loadSettings() {
     adskipStorage.loadAdSkipPercentage(),
     adskipStorage.getSkipOwnVideos(),
     adskipStorage.getSearchPrecheck(),
-    adskipStorage.getReadMark()
-  ]).then(function ([enabled, percentage, skipOwnVideos, searchPrecheck, readMark]) {
+    adskipStorage.getReadMark(),
+    adskipStorage.getSubtitleTimelineDefaultCollapsed()
+  ]).then(function ([enabled, percentage, skipOwnVideos, searchPrecheck, readMark, subtitleTimelineCollapsed]) {
     // 加载功能启用状态
     const adskipToggle = document.getElementById('enable-adskip');
     if (adskipToggle) {
@@ -583,6 +603,11 @@ function loadSettings() {
     const readMarkToggle = document.getElementById('read-mark');
     if (readMarkToggle) {
       readMarkToggle.checked = readMark;
+    }
+
+    const subtitleTimelineDefaultCollapsedToggle = document.getElementById('subtitle-timeline-default-collapsed');
+    if (subtitleTimelineDefaultCollapsedToggle) {
+      subtitleTimelineDefaultCollapsedToggle.checked = subtitleTimelineCollapsed;
     }
   });
 }
@@ -642,6 +667,13 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
     const searchPrecheckToggle = document.getElementById('search-precheck');
     if (searchPrecheckToggle) {
       searchPrecheckToggle.checked = changes[adskipStorage.KEYS.SEARCH_PRECHECK].newValue === true;
+    }
+  }
+
+  if (changes[adskipStorage.KEYS.SUBTITLE_TIMELINE_DEFAULT_COLLAPSED] !== undefined) {
+    const subtitleTimelineDefaultCollapsedToggle = document.getElementById('subtitle-timeline-default-collapsed');
+    if (subtitleTimelineDefaultCollapsedToggle) {
+      subtitleTimelineDefaultCollapsedToggle.checked = changes[adskipStorage.KEYS.SUBTITLE_TIMELINE_DEFAULT_COLLAPSED].newValue === true;
     }
   }
 

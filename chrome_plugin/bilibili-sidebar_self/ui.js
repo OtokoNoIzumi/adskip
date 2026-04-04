@@ -7,6 +7,715 @@
 
 // 状态消息的全局计时器
 let statusMessageTimerId = null;
+let subtitleTimelineSyncTimerId = null;
+let subtitleTimelineVideoId = '';
+let subtitleTimelineLastSubtitleHash = '';
+let subtitleTimelineLastAdHash = '';
+let subtitleTimelineLastInsightHash = '';
+let subtitleTimelineManualLock = false;
+let subtitleTimelineProgrammaticScroll = false;
+let subtitleTimelineLockedRange = null; // { startTime, endTime }
+const AI_CHAT_LOCAL_KEY = 'adskip_ai_subtitle_threads_v1';
+
+function formatSubtitleTime(seconds) {
+    const n = Math.max(0, Math.floor(Number(seconds) || 0));
+    const m = Math.floor(n / 60);
+    const s = n % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function getCurrentAdRanges() {
+    if (!Array.isArray(currentAdTimestamps)) {
+        return [];
+    }
+    return currentAdTimestamps.map(item => ({
+        start: Number(item.start_time ?? item.start ?? 0),
+        end: Number(item.end_time ?? item.end ?? 0)
+    }));
+}
+
+function getTimelineInsightData() {
+    const button = document.getElementById('adskip-button');
+    if (!button) {
+        return { recommendationReason: '', keyPoints: [] };
+    }
+
+    const recommendationReason = String(button.dataset.recommendationReason || '').trim();
+    let keyPoints = [];
+    if (button.dataset.keyPoints) {
+        try {
+            keyPoints = JSON.parse(button.dataset.keyPoints);
+        } catch (e) {
+            keyPoints = [];
+        }
+    }
+    keyPoints = (Array.isArray(keyPoints) ? keyPoints : [])
+        .map(item => ({
+            start_time: Number(item?.start_time ?? 0),
+            point: String(item?.point ?? '').trim()
+        }))
+        .filter(item => !Number.isNaN(item.start_time) && item.start_time >= 0 && item.point)
+        .slice(0, 3)
+        .sort((a, b) => a.start_time - b.start_time);
+
+    return { recommendationReason, keyPoints };
+}
+
+function buildInsightHash(insightData) {
+    const recommendationReason = insightData?.recommendationReason || '';
+    const keyPointsHash = (insightData?.keyPoints || [])
+        .map(item => `${item.start_time}:${item.point}`)
+        .join('|');
+    return `${recommendationReason}__${keyPointsHash}`;
+}
+
+function jumpToPlayerTime(targetTime) {
+    const player = adskipUtils.findVideoPlayer();
+    if (player) {
+        player.currentTime = Number(targetTime || 0);
+        subtitleTimelineManualLock = false;
+        subtitleTimelineLockedRange = null;
+    }
+}
+
+function renderSubtitleInsightPanel(insightData) {
+    const panel = document.getElementById('adskip-subtitle-insight');
+    if (!panel) return;
+
+    const recommendationReason = insightData?.recommendationReason || '';
+    const keyPoints = insightData?.keyPoints || [];
+    const hasRecommendation = !!recommendationReason;
+    const hasKeyPoints = keyPoints.length > 0;
+
+    // 记住上次折叠状态
+    const wasCollapsed = panel.dataset.collapsed === '1';
+
+    panel.innerHTML = '';
+    if (!hasRecommendation && !hasKeyPoints) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    // 标题栏（含折叠按钮）
+    const headerBar = document.createElement('div');
+    headerBar.className = 'adskip-subtitle-insight-header';
+
+    const headerLabel = document.createElement('span');
+    headerLabel.textContent = '内容要点';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'adskip-subtitle-insight-toggle';
+
+    const bodyWrap = document.createElement('div');
+    bodyWrap.className = 'adskip-subtitle-insight-body';
+
+    const applyCollapsed = (collapsed) => {
+        bodyWrap.style.display = collapsed ? 'none' : 'block';
+        toggleBtn.textContent = collapsed ? '▸' : '▾';
+        panel.dataset.collapsed = collapsed ? '1' : '0';
+    };
+
+    toggleBtn.addEventListener('click', () => {
+        const nextCollapsed = panel.dataset.collapsed !== '1';
+        applyCollapsed(nextCollapsed);
+    });
+
+    headerBar.appendChild(headerLabel);
+    headerBar.appendChild(toggleBtn);
+    panel.appendChild(headerBar);
+
+    if (hasRecommendation) {
+        const reasonSection = document.createElement('div');
+        reasonSection.className = 'adskip-subtitle-insight-section';
+
+        const reasonTitle = document.createElement('div');
+        reasonTitle.className = 'adskip-subtitle-insight-title';
+        reasonTitle.textContent = '核心观点';
+
+        const reasonText = document.createElement('div');
+        reasonText.className = 'adskip-subtitle-insight-reason';
+        reasonText.textContent = recommendationReason;
+
+        reasonSection.appendChild(reasonTitle);
+        reasonSection.appendChild(reasonText);
+        bodyWrap.appendChild(reasonSection);
+    }
+
+    if (hasKeyPoints) {
+        const navSection = document.createElement('div');
+        navSection.className = 'adskip-subtitle-insight-section';
+
+        const navTitle = document.createElement('div');
+        navTitle.className = 'adskip-subtitle-insight-title';
+        navTitle.textContent = '快速导航';
+        navSection.appendChild(navTitle);
+
+        const navList = document.createElement('div');
+        navList.className = 'adskip-subtitle-keypoint-list';
+        keyPoints.forEach(item => {
+            const navBtn = document.createElement('button');
+            navBtn.type = 'button';
+            navBtn.className = 'adskip-subtitle-keypoint-btn';
+            navBtn.innerHTML = `<span class="time">${formatSubtitleTime(item.start_time)}</span><span class="point">${item.point}</span>`;
+            navBtn.addEventListener('click', () => jumpToPlayerTime(item.start_time));
+            navList.appendChild(navBtn);
+        });
+        navSection.appendChild(navList);
+        bodyWrap.appendChild(navSection);
+    }
+
+    panel.appendChild(bodyWrap);
+    applyCollapsed(wasCollapsed);
+}
+
+function isSubtitleInAdRange(timeSec, adRanges) {
+    return adRanges.some(range => timeSec >= range.start && timeSec <= range.end);
+}
+
+function isRowVisibleInList(row, list) {
+    if (!row || !list) return false;
+    const rowTop = row.offsetTop - list.offsetTop;
+    const rowBottom = rowTop + row.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    return rowTop >= viewTop && rowBottom <= viewBottom;
+}
+
+function getVisibleTimeRange(list) {
+    if (!list) return null;
+    const rows = Array.from(list.querySelectorAll('.adskip-subtitle-item'));
+    if (!rows.length) return null;
+
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    const visible = rows.filter(row => {
+        const top = row.offsetTop - list.offsetTop;
+        const bottom = top + row.offsetHeight;
+        return bottom >= viewTop && top <= viewBottom;
+    });
+    if (!visible.length) return null;
+    const times = visible.map(row => Number(row.dataset.time || 0)).filter(v => !Number.isNaN(v));
+    if (!times.length) return null;
+    return {
+        startTime: Math.min(...times),
+        endTime: Math.max(...times)
+    };
+}
+
+function loadAiThreadStore() {
+    try {
+        return JSON.parse(localStorage.getItem(AI_CHAT_LOCAL_KEY) || '{}') || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveAiThreadStore(store) {
+    localStorage.setItem(AI_CHAT_LOCAL_KEY, JSON.stringify(store || {}));
+}
+
+async function readCurrentUserForAi() {
+    if (typeof adskipCredentialService === 'undefined') {
+        return { uid: 0, username: 'guest' };
+    }
+    const userInfo = await adskipCredentialService.getBilibiliLoginStatus().catch(() => null);
+    return {
+        uid: userInfo?.uid || 0,
+        username: userInfo?.username || 'guest'
+    };
+}
+
+async function checkAiChatAccessAndConsumeIfNeeded() {
+    const entitlement = await adskipStorage.getFeatureEntitlement(false);
+    if (entitlement.isPro) {
+        return { allowed: true, isPro: true };
+    }
+    const trialUsed = await adskipStorage.getAiChatTrialUsedCount();
+    if (trialUsed >= 1) {
+        return { allowed: false, message: 'AI对话体验次数已用完，需升级到Pro及以上账号' };
+    }
+    await adskipStorage.consumeAiChatTrialCount();
+    return { allowed: true, isPro: false };
+}
+
+async function submitAiChatStream(endpoint, payload, handlers) {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload || {})
+    });
+    if (!response.ok) {
+        throw new Error(`AI接口错误: HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+        const json = await response.json().catch(() => ({}));
+        handlers.onDone?.(json || {});
+        return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            handlers.onEnd?.();
+            break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const line of parts) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            let data = null;
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                continue;
+            }
+            if (data?.text) {
+                handlers.onText?.(data.text);
+            }
+            if (data?.done) {
+                handlers.onDone?.(data.turn || {});
+                return;
+            }
+            if (data?.error) {
+                throw new Error(data.error);
+            }
+        }
+    }
+}
+
+async function sendSelectedSubtitleToAi() {
+    const selected = String(window.getSelection()?.toString() || '').trim();
+    const outputEl = document.getElementById('adskip-subtitle-chat-output');
+    if (!selected) {
+        if (outputEl) {
+            outputEl.textContent = '请先在字幕轴中选中一段字幕内容';
+        }
+        return;
+    }
+
+    const access = await checkAiChatAccessAndConsumeIfNeeded();
+    if (!access.allowed) {
+        if (outputEl) {
+            outputEl.textContent = access.message;
+        }
+        return;
+    }
+
+    if (!outputEl) return;
+
+    const videoId = adskipUtils.getCurrentVideoId().id || 'unknown';
+    const user = await readCurrentUserForAi();
+    const apiUrls = await adskipStorage.getApiUrls();
+    const threadKey = `${videoId}|${selected.slice(0, 120)}`;
+    const store = loadAiThreadStore();
+    const thread = store[threadKey] || { turns: [] };
+    const history = thread.turns.slice(-10);
+
+    outputEl.textContent = 'AI思考中...';
+    let aiText = '';
+    await submitAiChatStream(apiUrls.commentSubmit, {
+        message: selected,
+        quote: selected,
+        thread_key: threadKey,
+        video_id: videoId,
+        userId: user.uid,
+        username: user.username,
+        fingerprint: btoa(`${navigator.userAgent}|${screen.width}`),
+        history
+    }, {
+        onText: (chunk) => {
+            aiText += chunk;
+            outputEl.textContent = aiText;
+        },
+        onDone: (turn) => {
+            const finalText = aiText || turn?.aiReply || turn?.reply || '';
+            thread.turns.push({
+                userText: selected,
+                aiReply: finalText,
+                time: Date.now()
+            });
+            store[threadKey] = thread;
+            saveAiThreadStore(store);
+            outputEl.textContent = finalText || 'AI未返回内容';
+        },
+        onEnd: () => {
+            if (!aiText) {
+                outputEl.textContent = 'AI响应结束，但没有有效内容';
+            }
+        }
+    });
+}
+
+async function submitProUpdateAds(inputValue) {
+    const entitlement = await adskipStorage.getFeatureEntitlement(false);
+    if (!entitlement.isPro) {
+        updateStatusDisplay('广告片段提交修正仅对Pro及以上账号开放', 'warning');
+        return;
+    }
+    const today = adskipUtils.getTodayInEast8();
+    const usedDate = await adskipStorage.getProUpdateAdsLastDate();
+    if (usedDate === today) {
+        updateStatusDisplay('今日提交更新次数已用完（Pro每日1次）', 'warning');
+        return;
+    }
+
+    const currentVideoId = adskipUtils.getCurrentVideoId().id || '';
+    const bvid = currentVideoId.split('_p')[0];
+    if (!bvid.startsWith('BV')) {
+        updateStatusDisplay('当前视频不是可提交修正的BV视频', 'warning');
+        return;
+    }
+
+    const apiUrls = await adskipStorage.getApiUrls();
+    const adminSecret = await adskipStorage.getAdminUpdateAdsSecret();
+    const response = await fetch(apiUrls.updateAds, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            bvid,
+            ad_timestamps: inputValue || '',
+            admin_secret_key: adminSecret || ''
+        })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (result?.success) {
+        await adskipStorage.setProUpdateAdsLastDate(today);
+        updateStatusDisplay('已提交广告片段修正，今日权益已消耗', 'success');
+    } else {
+        updateStatusDisplay(result?.message || '提交失败，请稍后重试', 'error');
+    }
+}
+
+async function renderSubtitleTimelinePanel(forceRefresh = false) {
+    const panel = document.getElementById('adskip-subtitle-panel');
+    const list = document.getElementById('adskip-subtitle-list');
+    if (!panel || !list) return;
+
+    const currentVideoId = adskipUtils.getCurrentVideoId().id || '';
+    const subtitleData = await adskipAdDetection.getVideoSubtitleData(true).catch(() => null);
+    const subtitles = subtitleData?.subtitle_contents?.[0] || [];
+    const adRanges = getCurrentAdRanges();
+    const insightData = getTimelineInsightData();
+    const subtitleHash = subtitles.length
+        ? `${subtitles.length}_${subtitles[0]?.from || 0}_${subtitles[subtitles.length - 1]?.from || 0}`
+        : '0';
+    const adHash = adRanges.map(item => `${item.start}-${item.end}`).join('|');
+    const insightHash = buildInsightHash(insightData);
+
+    if (
+        !forceRefresh &&
+        subtitleTimelineVideoId === currentVideoId &&
+        subtitleTimelineLastSubtitleHash === subtitleHash &&
+        subtitleTimelineLastAdHash === adHash &&
+        subtitleTimelineLastInsightHash === insightHash
+    ) {
+        return;
+    }
+
+    subtitleTimelineVideoId = currentVideoId;
+    subtitleTimelineLastSubtitleHash = subtitleHash;
+    subtitleTimelineLastAdHash = adHash;
+    subtitleTimelineLastInsightHash = insightHash;
+    list.innerHTML = '';
+    // 数据更新导致的重渲染，重置手动滚动锁
+    subtitleTimelineManualLock = false;
+    subtitleTimelineLockedRange = null;
+    renderSubtitleInsightPanel(insightData);
+
+    if (!subtitles.length) {
+        list.innerHTML = '<div class="adskip-subtitle-item"><div class="adskip-subtitle-text">暂无可展示字幕</div></div>';
+        return;
+    }
+
+    const maskGroupByIndex = [];
+    let groupId = 0;
+    for (let i = 0; i < subtitles.length; i++) {
+        const isMasked = isSubtitleInAdRange(Number(subtitles[i].from || 0), adRanges);
+        if (!isMasked) continue;
+        const prevMasked = i > 0 && isSubtitleInAdRange(Number(subtitles[i - 1].from || 0), adRanges);
+        if (!prevMasked) {
+            groupId++;
+        }
+        maskGroupByIndex[i] = `ad-group-${groupId}`;
+    }
+
+    const maskGroupEls = new Map();
+    const keyPoints = insightData.keyPoints || [];
+    let keyPointIndex = 0;
+    const appendKeyPointRow = (keyPoint) => {
+        const markerRow = document.createElement('div');
+        markerRow.className = 'adskip-subtitle-item key-point-segment';
+        markerRow.dataset.time = String(keyPoint.start_time || 0);
+
+        const markerTime = document.createElement('div');
+        markerTime.className = 'adskip-subtitle-time';
+        markerTime.textContent = formatSubtitleTime(keyPoint.start_time || 0);
+
+        const markerText = document.createElement('div');
+        markerText.className = 'adskip-subtitle-text';
+        markerText.textContent = keyPoint.point || '';
+
+        markerRow.appendChild(markerTime);
+        markerRow.appendChild(markerText);
+        markerRow.addEventListener('click', () => jumpToPlayerTime(keyPoint.start_time));
+        list.appendChild(markerRow);
+    };
+
+    subtitles.forEach((item, index) => {
+        const subtitleTime = Number(item.from || 0);
+        while (keyPointIndex < keyPoints.length && keyPoints[keyPointIndex].start_time <= subtitleTime) {
+            appendKeyPointRow(keyPoints[keyPointIndex]);
+            keyPointIndex++;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'adskip-subtitle-item';
+        row.dataset.time = String(subtitleTime || 0);
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'adskip-subtitle-time';
+        timeEl.textContent = formatSubtitleTime(subtitleTime || 0);
+
+        const textEl = document.createElement('div');
+        textEl.className = 'adskip-subtitle-text';
+        textEl.textContent = item.content || '';
+        const maskGroup = maskGroupByIndex[index];
+        if (maskGroup) {
+            row.classList.add('ad-segment');
+            row.dataset.maskGroup = maskGroup;
+            textEl.classList.add('ad-mask');
+            textEl.dataset.maskGroup = maskGroup;
+            if (!maskGroupEls.has(maskGroup)) {
+                maskGroupEls.set(maskGroup, { textEls: [], rowEls: [] });
+            }
+            maskGroupEls.get(maskGroup).textEls.push(textEl);
+            maskGroupEls.get(maskGroup).rowEls.push(row);
+        }
+
+        row.appendChild(timeEl);
+        row.appendChild(textEl);
+        row.addEventListener('click', () => jumpToPlayerTime(subtitleTime));
+        list.appendChild(row);
+    });
+
+    while (keyPointIndex < keyPoints.length) {
+        appendKeyPointRow(keyPoints[keyPointIndex]);
+        keyPointIndex++;
+    }
+
+    maskGroupEls.forEach((group, groupKey) => {
+        let isGroupHovered = false;
+        let revealTimer = null;
+        let hideTimer = null;
+        const revealAll = () => group.textEls.forEach(el => el.classList.add('reveal-group'));
+        const hideAll = () => group.textEls.forEach(el => el.classList.remove('reveal-group'));
+        const isRelatedTargetInSameGroup = (relatedTarget) => {
+            if (!relatedTarget || typeof relatedTarget.closest !== 'function') {
+                return false;
+            }
+            const row = relatedTarget.closest('.adskip-subtitle-item');
+            return !!row && row.dataset.maskGroup === groupKey;
+        };
+
+        const scheduleReveal = () => {
+            if (revealTimer) return;
+            clearTimeout(hideTimer);
+            revealTimer = setTimeout(() => {
+                revealTimer = null;
+                if (isGroupHovered) {
+                    revealAll();
+                }
+            }, 1000);
+        };
+
+        const scheduleHide = () => {
+            clearTimeout(revealTimer);
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => {
+                if (!isGroupHovered) {
+                    hideAll();
+                }
+            }, 150);
+        };
+
+        group.rowEls.forEach(row => {
+            row.addEventListener('mouseenter', (event) => {
+                if (isRelatedTargetInSameGroup(event.relatedTarget)) {
+                    return;
+                }
+                isGroupHovered = true;
+                scheduleReveal();
+            });
+            row.addEventListener('mouseleave', (event) => {
+                if (isRelatedTargetInSameGroup(event.relatedTarget)) {
+                    return;
+                }
+                isGroupHovered = false;
+                scheduleHide();
+            });
+        });
+    });
+}
+
+function syncSubtitleTimelineCurrentLine() {
+    const list = document.getElementById('adskip-subtitle-list');
+    if (!list) return;
+    const player = adskipUtils.findVideoPlayer();
+    if (!player) return;
+    const currentTime = player.currentTime || 0;
+    const rows = list.querySelectorAll('.adskip-subtitle-item');
+    let activeRow = null;
+    rows.forEach(row => {
+        const rowTime = Number(row.dataset.time || 0);
+        if (rowTime <= currentTime) {
+            activeRow = row;
+        }
+        row.classList.remove('current');
+    });
+    if (activeRow) {
+        activeRow.classList.add('current');
+        if (subtitleTimelineManualLock) {
+            if (isRowVisibleInList(activeRow, list)) {
+                subtitleTimelineManualLock = false;
+                subtitleTimelineLockedRange = null;
+            } else if (
+                subtitleTimelineLockedRange &&
+                currentTime >= subtitleTimelineLockedRange.startTime &&
+                currentTime <= subtitleTimelineLockedRange.endTime
+            ) {
+                subtitleTimelineManualLock = false;
+                subtitleTimelineLockedRange = null;
+            } else {
+                return;
+            }
+        }
+
+        if (!isRowVisibleInList(activeRow, list)) {
+            subtitleTimelineProgrammaticScroll = true;
+            activeRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            setTimeout(() => {
+                subtitleTimelineProgrammaticScroll = false;
+            }, 450);
+        }
+    }
+}
+
+async function ensureSubtitleTimelineUI() {
+    let toggleBtn = document.getElementById('adskip-subtitle-toggle');
+    let panel = document.getElementById('adskip-subtitle-panel');
+    const defaultCollapsed = await adskipStorage.getSubtitleTimelineDefaultCollapsed();
+
+    if (!toggleBtn) {
+        toggleBtn = document.createElement('button');
+        toggleBtn.id = 'adskip-subtitle-toggle';
+        toggleBtn.className = 'adskip-subtitle-toggle';
+        toggleBtn.textContent = '展开字幕轴';
+        document.body.appendChild(toggleBtn);
+    }
+
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'adskip-subtitle-panel';
+        panel.className = 'adskip-subtitle-panel';
+        panel.innerHTML = `
+            <div class="adskip-subtitle-header">
+                <span>字幕轴</span>
+                <button id="adskip-subtitle-collapse-btn" type="button">收起</button>
+            </div>
+            <div id="adskip-subtitle-insight" class="adskip-subtitle-insight"></div>
+            <div id="adskip-subtitle-list" class="adskip-subtitle-list"></div>
+            <div class="adskip-subtitle-chat">
+                <div class="adskip-subtitle-chat-note">选中字幕后可直接发起AI对话（Pro及以上可长期使用）</div>
+                <div class="adskip-subtitle-chat-actions">
+                    <button id="adskip-subtitle-send-ai">和AI讨论选中内容</button>
+                </div>
+                <div id="adskip-subtitle-chat-output" class="adskip-subtitle-chat-output"></div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+    }
+
+    const setCollapse = (collapsed) => {
+        panel.style.display = collapsed ? 'none' : 'flex';
+        toggleBtn.style.display = collapsed ? 'inline-block' : 'none';
+    };
+
+    setCollapse(defaultCollapsed);
+    toggleBtn.onclick = async () => {
+        const isCollapsed = panel.style.display === 'none';
+        const nextCollapsed = !isCollapsed;
+        setCollapse(nextCollapsed);
+        await adskipStorage.setSubtitleTimelineDefaultCollapsed(nextCollapsed);
+        if (!nextCollapsed) {
+            renderSubtitleTimelinePanel(true);
+        }
+    };
+    const collapseBtn = document.getElementById('adskip-subtitle-collapse-btn');
+    if (collapseBtn && !collapseBtn.dataset.bound) {
+        collapseBtn.dataset.bound = '1';
+        collapseBtn.addEventListener('click', async () => {
+            setCollapse(true);
+            await adskipStorage.setSubtitleTimelineDefaultCollapsed(true);
+        });
+    }
+
+    const sendAiBtn = document.getElementById('adskip-subtitle-send-ai');
+    const chatNote = panel.querySelector('.adskip-subtitle-chat-note');
+    const chatOutput = document.getElementById('adskip-subtitle-chat-output');
+    const entitlement = await adskipStorage.getFeatureEntitlement(false);
+    if (!entitlement.isPro) {
+        const trialUsed = await adskipStorage.getAiChatTrialUsedCount();
+        if (trialUsed >= 1) {
+            if (chatNote) chatNote.textContent = 'AI对话体验次数已用完，升级到Pro可长期使用';
+            if (sendAiBtn) { sendAiBtn.disabled = true; sendAiBtn.textContent = '体验次数已用完'; }
+            if (chatOutput) chatOutput.textContent = '';
+        }
+    }
+    if (sendAiBtn && !sendAiBtn.dataset.bound) {
+        sendAiBtn.dataset.bound = '1';
+        sendAiBtn.addEventListener('click', async () => {
+            await sendSelectedSubtitleToAi().catch(e => {
+                updateStatusDisplay(`AI对话失败: ${e.message}`, 'error');
+            });
+        });
+    }
+
+    await renderSubtitleTimelinePanel(true);
+    const list = document.getElementById('adskip-subtitle-list');
+    if (list && !list.dataset.boundScroll) {
+        list.dataset.boundScroll = '1';
+        list.addEventListener('scroll', () => {
+            if (subtitleTimelineProgrammaticScroll) {
+                return;
+            }
+            subtitleTimelineManualLock = true;
+            subtitleTimelineLockedRange = getVisibleTimeRange(list);
+        }, { passive: true });
+        list.addEventListener('wheel', () => {
+            subtitleTimelineManualLock = true;
+            subtitleTimelineLockedRange = getVisibleTimeRange(list);
+        }, { passive: true });
+    }
+    if (subtitleTimelineSyncTimerId) {
+        clearInterval(subtitleTimelineSyncTimerId);
+    }
+    subtitleTimelineSyncTimerId = setInterval(async () => {
+        await renderSubtitleTimelinePanel(false);
+        syncSubtitleTimelineCurrentLine();
+    }, 700);
+}
 
 /**
  * 更新状态显示
@@ -182,6 +891,10 @@ function createLinkGenerator() {
                 <div class="adskip-button-row">
                     <button id="adskip-restore" class="adskip-btn">↩️ 还原原始设置</button>
                     <button id="adskip-reset" class="adskip-btn">🗑️ 清空记录</button>
+                </div>
+                <div class="adskip-button-row">
+                    <button id="adskip-reanalyze" class="adskip-btn">🔁 重新分析</button>
+                    <button id="adskip-submit-update" class="adskip-btn">🛠️ 提交修正</button>
                 </div>
                 <div id="adskip-status" class="adskip-status"></div>
                 <div id="adskip-result" class="adskip-result"></div>
@@ -566,6 +1279,26 @@ function createLinkGenerator() {
                 }
             });
 
+            document.getElementById('adskip-reanalyze').addEventListener('click', async function() {
+                try {
+                    const result = await adskipAdDetection.reanalyzeCurrentVideo();
+                    updateStatusDisplay(result.message || '已触发重新分析', result.success ? 'success' : 'warning');
+                } catch (e) {
+                    updateStatusDisplay(`重新分析失败: ${e.message}`, 'error');
+                }
+            });
+
+            document.getElementById('adskip-submit-update').addEventListener('click', async function() {
+                const input = document.getElementById('adskip-input').value.trim();
+                if (!input) {
+                    updateStatusDisplay('请先填写要提交的广告时间段', 'warning');
+                    return;
+                }
+                await submitProUpdateAds(input).catch(e => {
+                    updateStatusDisplay(`提交修正失败: ${e.message}`, 'error');
+                });
+            });
+
             // 管理员设置按钮
             if (isAdmin) {
                 document.getElementById('adskip-admin').addEventListener('click', function() {
@@ -607,6 +1340,9 @@ function createLinkGenerator() {
     });
 
     document.body.appendChild(button);
+    ensureSubtitleTimelineUI().catch(error => {
+        adskipUtils.logDebug(`[AdSkip] 初始化字幕动态轴失败: ${error.message}`);
+    });
 }
 
 /**

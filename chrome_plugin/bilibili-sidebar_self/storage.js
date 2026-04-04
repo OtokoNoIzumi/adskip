@@ -203,6 +203,11 @@ const STORAGE_KEYS = {
     SKIP_OUTRO_ENABLED: 'adskip_skip_outro_enabled',        // 跳过结尾功能开关
     SKIP_OUTRO_DURATION: 'adskip_skip_outro_duration',      // 跳过结尾时长（秒）
     SKIP_INTRO_OUTRO_UPLOADER_LIST: 'adskip_skip_intro_outro_uploader_list', // UP主跳过设置清单
+    SUBTITLE_TIMELINE_DEFAULT_COLLAPSED: 'adskip_subtitle_timeline_default_collapsed',
+    FEATURE_ENTITLEMENT_CACHE: 'adskip_feature_entitlement_cache',
+    AI_CHAT_TRIAL_USED_COUNT: 'adskip_ai_chat_trial_used_count',
+    PRO_UPDATE_ADS_LAST_DATE: 'adskip_pro_update_ads_last_date',
+    ADMIN_UPDATE_ADS_SECRET: 'adskip_admin_update_ads_secret',
 
     // 分类集合，用于过滤操作
     CONFIG_KEYS: [
@@ -215,7 +220,8 @@ const STORAGE_KEYS = {
         'adskip_skip_intro_duration',
         'adskip_skip_outro_enabled',
         'adskip_skip_outro_duration',
-        'adskip_skip_intro_outro_uploader_list'
+        'adskip_skip_intro_outro_uploader_list',
+        'adskip_subtitle_timeline_default_collapsed'
     ],
     WHITELIST_KEYS: [
         'adskip_uploader_whitelist'
@@ -236,7 +242,11 @@ const STORAGE_KEYS = {
             this.QUOTA_EXHAUSTED_DATE,
             this.QUOTA_FAILED_VIDEOS,
             this.POPUP_OPEN_COUNT,
-            this.SHARE_CLICK_COUNT
+            this.SHARE_CLICK_COUNT,
+            this.FEATURE_ENTITLEMENT_CACHE,
+            this.AI_CHAT_TRIAL_USED_COUNT,
+            this.PRO_UPDATE_ADS_LAST_DATE,
+            this.ADMIN_UPDATE_ADS_SECRET
         ];
     }
 };
@@ -585,6 +595,84 @@ function saveAdTimestampsForVideo(videoId, timestamps) {
             console.error('保存广告时间段时发生异常:', e);
             resolve(false);
         }
+    });
+}
+
+/**
+ * 保存视频的 AI 洞察数据（核心观点 + 关键段落）
+ * 使用独立的存储 key，与广告时间戳和白名单解耦
+ * @param {string} videoId 视频ID
+ * @param {Object} insightData 洞察数据
+ * @param {string} [insightData.recommendationReason] 核心观点
+ * @param {Array}  [insightData.keyPoints] 关键段落数组
+ * @returns {Promise<boolean>} 保存是否成功
+ */
+function saveVideoInsightData(videoId, insightData) {
+    if (!videoId || !insightData) {
+        return Promise.resolve(false);
+    }
+
+    const reason = typeof insightData.recommendationReason === 'string'
+        ? insightData.recommendationReason.trim() : '';
+    const points = Array.isArray(insightData.keyPoints) ? insightData.keyPoints : [];
+
+    // 两个字段都为空时不写入
+    if (!reason && points.length === 0) {
+        return Promise.resolve(false);
+    }
+
+    const key = `${STORAGE_KEYS.VIDEO_PREFIX}insight_${videoId}`;
+    const data = JSON.stringify({
+        recommendationReason: reason,
+        keyPoints: points,
+        savedAt: new Date().toISOString()
+    });
+
+    return new Promise(resolve => {
+        const saveObj = {};
+        saveObj[key] = data;
+        chrome.storage.local.set(saveObj, () => {
+            const success = !chrome.runtime.lastError;
+            if (success) {
+                adskipUtils.logDebug(`[AdSkip存储] 已保存视频 ${videoId} 的洞察数据`);
+            } else {
+                adskipUtils.logDebug(`[AdSkip存储] 保存洞察数据失败: ${chrome.runtime.lastError?.message}`);
+            }
+            resolve(success);
+        });
+    });
+}
+
+/**
+ * 加载视频的 AI 洞察数据
+ * @param {string} videoId 视频ID
+ * @returns {Promise<Object>} { recommendationReason: string, keyPoints: Array }
+ */
+function loadVideoInsightData(videoId) {
+    if (!videoId) {
+        return Promise.resolve({ recommendationReason: '', keyPoints: [] });
+    }
+
+    const key = `${STORAGE_KEYS.VIDEO_PREFIX}insight_${videoId}`;
+
+    return new Promise(resolve => {
+        chrome.storage.local.get(key, result => {
+            const raw = result[key];
+            if (!raw) {
+                resolve({ recommendationReason: '', keyPoints: [] });
+                return;
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                resolve({
+                    recommendationReason: parsed.recommendationReason || '',
+                    keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : []
+                });
+            } catch (e) {
+                adskipUtils.logDebug(`[AdSkip存储] 解析视频 ${videoId} 洞察数据失败: ${e.message}`);
+                resolve({ recommendationReason: '', keyPoints: [] });
+            }
+        });
     });
 }
 
@@ -2497,6 +2585,201 @@ async function getUsageStats() {
     });
 }
 
+async function getSubtitleTimelineDefaultCollapsed() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.SUBTITLE_TIMELINE_DEFAULT_COLLAPSED, (result) => {
+            if (chrome.runtime.lastError) {
+                resolve(false);
+                return;
+            }
+            resolve(result[STORAGE_KEYS.SUBTITLE_TIMELINE_DEFAULT_COLLAPSED] === true);
+        });
+    });
+}
+
+async function setSubtitleTimelineDefaultCollapsed(collapsed) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.SUBTITLE_TIMELINE_DEFAULT_COLLAPSED]: collapsed === true
+        }, () => {
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+async function getAiChatTrialUsedCount() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.AI_CHAT_TRIAL_USED_COUNT, (result) => {
+            if (chrome.runtime.lastError) {
+                resolve(0);
+                return;
+            }
+            resolve(result[STORAGE_KEYS.AI_CHAT_TRIAL_USED_COUNT] || 0);
+        });
+    });
+}
+
+async function consumeAiChatTrialCount() {
+    const current = await getAiChatTrialUsedCount();
+    const nextValue = current + 1;
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.AI_CHAT_TRIAL_USED_COUNT]: nextValue
+        }, () => {
+            resolve(nextValue);
+        });
+    });
+}
+
+async function getProUpdateAdsLastDate() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.PRO_UPDATE_ADS_LAST_DATE, (result) => {
+            if (chrome.runtime.lastError) {
+                resolve('');
+                return;
+            }
+            resolve(result[STORAGE_KEYS.PRO_UPDATE_ADS_LAST_DATE] || '');
+        });
+    });
+}
+
+async function setProUpdateAdsLastDate(date) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.PRO_UPDATE_ADS_LAST_DATE]: date || ''
+        }, () => {
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+async function setAdminUpdateAdsSecret(secret) {
+    return new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.ADMIN_UPDATE_ADS_SECRET]: secret || ''
+        }, () => {
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+async function getAdminUpdateAdsSecret() {
+    return new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.ADMIN_UPDATE_ADS_SECRET, (result) => {
+            if (chrome.runtime.lastError) {
+                resolve('');
+                return;
+            }
+            resolve(result[STORAGE_KEYS.ADMIN_UPDATE_ADS_SECRET] || '');
+        });
+    });
+}
+
+function normalizeAccountTypeString(value) {
+    return String(value || '').toLowerCase();
+}
+
+function parseIsProFromStats(data) {
+    const accountType = normalizeAccountTypeString(data?.account_type);
+    const accountTypeDisplay = normalizeAccountTypeString(data?.account_type_display);
+    if (data?.is_pro === true || data?.isPro === true) {
+        return true;
+    }
+    if (accountType.includes('pro') || accountType.includes('premium')) {
+        return true;
+    }
+    if (
+        accountTypeDisplay.includes('pro') ||
+        accountTypeDisplay.includes('premium') ||
+        accountTypeDisplay.includes('年度大会员') ||
+        accountTypeDisplay.includes('大会员')
+    ) {
+        return true;
+    }
+    return false;
+}
+
+async function refreshFeatureEntitlement() {
+    const usageStats = await getUsageStats();
+    const apiUrls = await getApiUrls();
+    let userInfo = null;
+
+    if (typeof adskipCredentialService !== 'undefined' && adskipCredentialService.getBilibiliLoginStatus) {
+        userInfo = await adskipCredentialService.getBilibiliLoginStatus().catch(() => null);
+    }
+
+    const payload = {
+        uid: userInfo?.uid || 0,
+        username: userInfo?.username || '',
+        blevel: userInfo?.level || 0,
+        local_videos_processed: await getLocalVideosProcessedCount(),
+        local_popup_opens: usageStats.popupOpens,
+        local_share_clicks: usageStats.shareClicks
+    };
+
+    const response = await fetch(apiUrls.userStats, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000)
+    });
+
+    if (!response.ok) {
+        throw new Error(`权益接口请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const entitlement = {
+        date: adskipUtils.getTodayInEast8(),
+        isPro: parseIsProFromStats(data),
+        accountType: data?.account_type || '',
+        accountTypeDisplay: data?.account_type_display || '',
+        raw: data || {}
+    };
+
+    await new Promise(resolve => {
+        chrome.storage.local.set({
+            [STORAGE_KEYS.FEATURE_ENTITLEMENT_CACHE]: entitlement
+        }, resolve);
+    });
+
+    return entitlement;
+}
+
+async function getFeatureEntitlement(forceRefresh = false) {
+    const today = adskipUtils.getTodayInEast8();
+    const cached = await new Promise(resolve => {
+        chrome.storage.local.get(STORAGE_KEYS.FEATURE_ENTITLEMENT_CACHE, (result) => {
+            if (chrome.runtime.lastError) {
+                resolve(null);
+                return;
+            }
+            resolve(result[STORAGE_KEYS.FEATURE_ENTITLEMENT_CACHE] || null);
+        });
+    });
+
+    if (!forceRefresh && cached && cached.date === today) {
+        return cached;
+    }
+
+    try {
+        return await refreshFeatureEntitlement();
+    } catch (e) {
+        if (cached) {
+            return cached;
+        }
+        return {
+            date: today,
+            isPro: false,
+            accountType: 'basic',
+            accountTypeDisplay: '基础账号',
+            raw: {}
+        };
+    }
+}
+
 
 
 // ==================== 统一配置管理 ====================
@@ -2647,7 +2930,11 @@ function buildApiUrls(config) {
     return {
         detect: `${baseURL}/api/detect`,
         supportInfo: `${baseURL}/api/getSupportPicUrl`,
-        userStats: `${baseURL}/api/user/stats`
+        userStats: `${baseURL}/api/user/stats`,
+        transcribe: `${baseURL}/api/transcribe`,
+        commentSubmit: `${baseURL}/api/sharing/comment/submit`,
+        commentList: `${baseURL}/api/sharing/messages`,
+        updateAds: `${baseURL}/api/admin/update_ads`
     };
 }
 
@@ -2802,6 +3089,10 @@ window.adskipStorage = {
     checkVideoInNoAdsWhitelist,
     addVideoToNoAdsWhitelist,
 
+    // 视频 AI 洞察数据管理
+    saveVideoInsightData,
+    loadVideoInsightData,
+
     // 新添加的函数
     clearUploaderCache,
 
@@ -2836,6 +3127,16 @@ window.adskipStorage = {
     incrementPopupOpenCount,
     incrementShareClickCount,
     getUsageStats,
+    getSubtitleTimelineDefaultCollapsed,
+    setSubtitleTimelineDefaultCollapsed,
+    getAiChatTrialUsedCount,
+    consumeAiChatTrialCount,
+    getFeatureEntitlement,
+    refreshFeatureEntitlement,
+    getProUpdateAdsLastDate,
+    setProUpdateAdsLastDate,
+    setAdminUpdateAdsSecret,
+    getAdminUpdateAdsSecret,
 
     // 新增: 统一配置管理
     loadExternalConfig,

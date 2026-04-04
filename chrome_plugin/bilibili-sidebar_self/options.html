@@ -528,6 +528,15 @@
         </label>
         <p>在搜索页显示已读标记：对已在白名单或有本地广告数据的视频显示蓝色"已读"标记并轻度淡化，帮助快速查看未读视频。</p>
       </div>
+
+      <div class="form-group">
+        <label for="subtitle-timeline-default-collapsed">字幕动态轴默认收起</label>
+        <label class="switch">
+          <input type="checkbox" id="subtitle-timeline-default-collapsed">
+          <span class="slider"></span>
+        </label>
+        <p>默认关闭时，视频页仍会显示折叠按钮，可随时展开字幕动态轴。</p>
+      </div>
     </div>
 
     <div class="section">
@@ -686,6 +695,15 @@
         <button id="admin-login-btn" class="admin-btn">🔑 管理员登录</button>
         <div id="admin-status" class="status"></div>
         <p>登录后可以在视频页面使用管理员设置功能</p>
+      </div>
+
+      <div class="form-group">
+        <h3>广告修正接口密钥（临时）</h3>
+        <input id="admin-update-ads-secret" type="password" placeholder="用于 /api/admin/update_ads 的 admin_secret_key">
+        <div>
+          <button id="save-admin-update-ads-secret">保存密钥</button>
+        </div>
+        <p>仅在你后端仍使用管理员接口时需要填写，后续接入正式订阅鉴权后可移除。</p>
       </div>
 
       <div class="form-group" id="custom-server-section">

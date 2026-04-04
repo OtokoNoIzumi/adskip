@@ -19,6 +19,7 @@ const VIDEO_STATUS = {
 // 全局变量
 window.adskipAdDetection = window.adskipAdDetection || {};
 let autoDetectTimerId = null; // 用于存储自动检测的setTimeout ID
+const forcedSubtitleCache = new Map(); // 强制转录结果缓存，按视频ID存储
 
 /**
  * 获取视频字幕数据
@@ -41,9 +42,17 @@ async function getVideoSubtitleData(forceRefresh = false) {
         const subtitleInfo = await adskipSubtitleService.getVideoSubtitles();
         const subtitlePreview = await adskipSubtitleService.getSubtitlePreview();
 
+        const previewSubtitles = Array.isArray(subtitlePreview.rawSubtitleOriginal)
+            ? subtitlePreview.rawSubtitleOriginal
+            : (Array.isArray(subtitlePreview.rawFullSubtitle?.subtitles)
+                ? subtitlePreview.rawFullSubtitle.subtitles
+                : []);
+
         // 准备重要参数信息对象 - 使用与adminPanel兼容的字段名
         const keyParams = {
             bvid: videoData.bvid || '',
+            aid: videoData.aid || '',
+            cid: videoData.cid || '',
             title: videoData.title || '',
             owner: videoData.owner || { name: '', mid: '' },
             mid: videoData.owner?.mid || '',
@@ -54,7 +63,7 @@ async function getVideoSubtitleData(forceRefresh = false) {
             pubdate: videoData.pubdate || 0,
             dimension: videoData.dimension,
             subtitle: videoData.subtitle || {},
-            hasSubtitle: subtitleInfo.hasSubtitleFeature && subtitleInfo.subtitles.length > 0,
+            hasSubtitle: (subtitleInfo.hasSubtitleFeature && subtitleInfo.subtitles.length > 0) || previewSubtitles.length > 0,
             epid: videoData.epid ? 'ep' + videoData.epid : ''
         };
 
@@ -94,10 +103,23 @@ async function getVideoSubtitleData(forceRefresh = false) {
                         keyParams.hasSubtitle = false;
                         adskipUtils.logDebug('[AdSkip广告检测] 未获取到字幕内容');
                     }
+                } else if (previewSubtitles.length > 0) {
+                    keyParams.subtitle_contents = [previewSubtitles];
+                    adskipUtils.logDebug(`[AdSkip广告检测] 使用预览字幕兜底: ${previewSubtitles.length}条`);
                 }
             } catch (e) {
                 keyParams.hasSubtitle = false;
                 adskipUtils.logDebug('[AdSkip广告检测] 获取字幕内容失败:', e);
+            }
+        }
+
+        if (!keyParams.hasSubtitle) {
+            const cacheKey = keyParams.bvid || keyParams.epid || '';
+            const forcedSubtitles = forcedSubtitleCache.get(cacheKey);
+            if (forcedSubtitles && forcedSubtitles.length > 0) {
+                keyParams.hasSubtitle = true;
+                keyParams.subtitle_contents = [forcedSubtitles];
+                adskipUtils.logDebug(`[AdSkip广告检测] 使用强制转录缓存字幕: ${forcedSubtitles.length}条`);
             }
         }
 
@@ -159,6 +181,22 @@ function updateVideoStatus(status, data = {}, reason = "未知原因") {
 
     adskipUtils.logDebug(`[AdSkip广告检测] 更新按钮状态 -> ${Object.keys(VIDEO_STATUS).find(key => VIDEO_STATUS[key] === status)}(${status}), 原因: ${reason}, 数据:`, data);
 
+    const recommendationReason = typeof data.recommendationReason === 'string'
+        ? data.recommendationReason.trim()
+        : '';
+    if (recommendationReason) {
+        button.dataset.recommendationReason = recommendationReason;
+    } else {
+        delete button.dataset.recommendationReason;
+    }
+
+    const keyPoints = Array.isArray(data.keyPoints) ? data.keyPoints : [];
+    if (keyPoints.length > 0) {
+        button.dataset.keyPoints = JSON.stringify(keyPoints);
+    } else {
+        delete button.dataset.keyPoints;
+    }
+
 
     // 移除所有状态类
     button.classList.remove('no-subtitle', 'no-ads', 'has-ads', 'undetected', 'detecting', 'prepare');
@@ -170,7 +208,7 @@ function updateVideoStatus(status, data = {}, reason = "未知原因") {
     switch(status) {
         case VIDEO_STATUS.NO_SUBTITLE:
             button.classList.add('no-subtitle');
-            button.innerHTML = '无字幕';
+            button.innerHTML = '无字幕（点我转录）';
             break;
 
         case VIDEO_STATUS.NO_ADS:
@@ -369,6 +407,12 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             statusResult.source = 'storage';
             statusResult.currentAdTimestamps = storedTimestamps;
             statusResult.statusData.adTimestamps = storedTimestamps;
+            // 同时加载缓存的 insight 数据
+            const cachedInsight = await adskipStorage.loadVideoInsightData(videoId);
+            if (cachedInsight.recommendationReason || cachedInsight.keyPoints.length > 0) {
+                statusResult.statusData.recommendationReason = cachedInsight.recommendationReason;
+                statusResult.statusData.keyPoints = cachedInsight.keyPoints;
+            }
             updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
             return statusResult;
         }
@@ -379,7 +423,12 @@ async function processVideoAdStatus(videoId, urlAdSkipResult, isInitialLoad = fa
             adskipUtils.logDebug('[AdSkip广告检测] 视频在无广告白名单中.');
             statusResult.status = VIDEO_STATUS.NO_ADS;
             statusResult.source = 'whitelist';
-            // skipDataProcessing 保持 true
+            // 同时加载缓存的 insight 数据
+            const cachedInsight = await adskipStorage.loadVideoInsightData(videoId);
+            if (cachedInsight.recommendationReason || cachedInsight.keyPoints.length > 0) {
+                statusResult.statusData.recommendationReason = cachedInsight.recommendationReason;
+                statusResult.statusData.keyPoints = cachedInsight.keyPoints;
+            }
             updateVideoStatus(statusResult.status, statusResult.statusData, `Source: ${statusResult.source}`);
             return statusResult;
         }
@@ -649,6 +698,7 @@ async function sendDetectionRequest(subtitleData) {
             duration: subtitleData.duration || 0,
             // subtitles: subtitleData.subtitle_contents[0] || [],
             autoDetect: true, // 非付费用户
+            forceReanalyze: subtitleData.forceReanalyze === true,
             clientVersion: chrome.runtime.getManifest().version, // 从manifest获取客户端版本
             videoData: subtitleData, // 保留完整原始数据，对服务器端处理很重要
             user: userInfo ? {
@@ -765,11 +815,25 @@ async function sendDetectionRequest(subtitleData) {
 
         // --- 检测成功 ---
         const adTimestamps = result.adTimestamps || [];
+        const recommendationReason = typeof result.recommendation_reason === 'string'
+            ? result.recommendation_reason.trim()
+            : '';
+        const keyPoints = (Array.isArray(result.key_points) ? result.key_points : [])
+            .map(item => ({
+                start_time: Number(item?.start_time ?? 0),
+                point: String(item?.point ?? '').trim()
+            }))
+            .filter(item => !Number.isNaN(item.start_time) && item.start_time >= 0 && item.point)
+            .slice(0, 3);
         // 基于实际时间戳数量判断是否有广告，而不是依赖后端的hasAds字段
         const newStatus = (adTimestamps.length > 0) ? VIDEO_STATUS.HAS_ADS : VIDEO_STATUS.NO_ADS;
 
         // 更新按钮状态和数据
-        updateVideoStatus(newStatus, { adTimestamps: adTimestamps }, "检测成功");
+        updateVideoStatus(newStatus, {
+            adTimestamps: adTimestamps,
+            recommendationReason: recommendationReason,
+            keyPoints: keyPoints
+        }, "检测成功");
 
         // 保存时间戳或白名单到本地存储（使用包含分P信息的完整videoId）
         if (newStatus === VIDEO_STATUS.HAS_ADS) {
@@ -780,6 +844,12 @@ async function sendDetectionRequest(subtitleData) {
             await adskipStorage.addVideoToNoAdsWhitelist(videoId);
             adskipUtils.logDebug('[AdSkip广告检测] - 已加入无广告白名单');
         }
+
+        // 持久化 insight 数据（核心观点 + 关键段落），有广告和无广告的视频都保存
+        await adskipStorage.saveVideoInsightData(videoId, {
+            recommendationReason: recommendationReason,
+            keyPoints: keyPoints
+        });
 
         // 无论检测到广告与否，都增加处理视频计数
         try {
@@ -813,6 +883,119 @@ async function sendDetectionRequest(subtitleData) {
         // 重新抛出错误以便API测试按钮能捕获
         throw error;
     }
+}
+
+function normalizeTranscribedSubtitles(items) {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+    return items
+        .map(item => {
+            const from = Number(item.from ?? item.start ?? item.start_time ?? 0);
+            const content = String(item.content ?? item.text ?? '').trim();
+            if (!content || Number.isNaN(from) || from < 0) {
+                return null;
+            }
+            return { from, content };
+        })
+        .filter(Boolean);
+}
+
+async function forceTranscribeForCurrentVideo() {
+    const subtitleData = await getVideoSubtitleData(true);
+    const currentVideoId = adskipUtils.getCurrentVideoId().id;
+    const entitlement = await adskipStorage.getFeatureEntitlement(false);
+    if (!entitlement.isPro) {
+        return { success: false, message: '强制转录仅对Pro及以上账号开放' };
+    }
+
+    const videoData = await adskipSubtitleService.getVideoData(true);
+    if (!videoData?.bvid || !videoData?.cid) {
+        return { success: false, message: '无法获取当前视频的音频信息' };
+    }
+
+    const playUrl = `https://api.bilibili.com/x/player/playurl?bvid=${videoData.bvid}&cid=${videoData.cid}&fnval=16&qn=64&fourk=1`;
+    const playResp = await fetch(playUrl, { credentials: 'include' });
+    if (!playResp.ok) {
+        return { success: false, message: `获取音频地址失败: HTTP ${playResp.status}` };
+    }
+    const playData = await playResp.json();
+    const audioTrack = playData?.data?.dash?.audio?.[0];
+    if (!audioTrack?.baseUrl) {
+        return { success: false, message: '当前视频未返回可用音轨' };
+    }
+
+    const apiUrls = await adskipStorage.getApiUrls();
+    const userInfo = typeof adskipCredentialService !== 'undefined'
+        ? await adskipCredentialService.getBilibiliLoginStatus().catch(() => null)
+        : null;
+    const transcribePayload = signRequest({
+        videoId: currentVideoId,
+        bvid: videoData.bvid,
+        aid: videoData.aid || subtitleData.aid || '',
+        cid: videoData.cid || subtitleData.cid || '',
+        title: subtitleData.title || videoData.title || '',
+        duration: subtitleData.duration || videoData.duration || 0,
+        audioUrl: audioTrack.baseUrl,
+        backupAudioUrl: audioTrack.backupUrl?.[0] || '',
+        forceTranscribe: true,
+        clientVersion: chrome.runtime.getManifest().version,
+        user: userInfo ? {
+            username: userInfo.username || '',
+            uid: userInfo.uid || '',
+            level: userInfo.level || 0,
+            vipType: userInfo.vipType || 0
+        } : null
+    });
+
+    updateVideoStatus(VIDEO_STATUS.DETECTING, {}, "强制转录处理中");
+    const transcribeResp = await fetch(apiUrls.transcribe, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transcribePayload)
+    });
+
+    if (!transcribeResp.ok) {
+        return { success: false, message: `转录接口请求失败: HTTP ${transcribeResp.status}` };
+    }
+    const transcribeResult = await transcribeResp.json();
+    if (!transcribeResult?.success) {
+        return { success: false, message: transcribeResult?.message || '转录失败' };
+    }
+
+    const normalized = normalizeTranscribedSubtitles(
+        transcribeResult.subtitles || transcribeResult.subtitle_contents || []
+    );
+    if (!normalized.length) {
+        return { success: false, message: '转录完成，但未返回有效字幕' };
+    }
+
+    forcedSubtitleCache.set(videoData.bvid || currentVideoId, normalized);
+
+    const mergedSubtitleData = {
+        ...subtitleData,
+        bvid: videoData.bvid || subtitleData.bvid,
+        hasSubtitle: true,
+        subtitle_contents: [normalized]
+    };
+    await sendDetectionRequest(mergedSubtitleData);
+    return { success: true, message: '已完成强制转录并重新分析' };
+}
+
+async function reanalyzeCurrentVideo() {
+    const entitlement = await adskipStorage.getFeatureEntitlement(false);
+    if (!entitlement.isPro) {
+        return { success: false, message: '重新分析仅对Pro及以上账号开放' };
+    }
+    const subtitleData = await getVideoSubtitleData(true);
+    if (!subtitleData?.hasSubtitle) {
+        return { success: false, message: '当前没有可用于重新分析的字幕' };
+    }
+    await sendDetectionRequest({
+        ...subtitleData,
+        forceReanalyze: true
+    });
+    return { success: true, message: '已触发重新分析' };
 }
 
 /**
@@ -868,6 +1051,23 @@ function setupManualDetectionTrigger(button) {
                 adskipUtils.logDebug('[AdSkip广告检测] - 手动检测过程中发生错误 (已被sendDetectionRequest处理):', error.message);
             }
 
+        } else if (currentStatus === VIDEO_STATUS.NO_SUBTITLE) {
+            try {
+                const transcribeResult = await forceTranscribeForCurrentVideo();
+                if (!transcribeResult.success) {
+                    if (window.adskipUI?.updateStatusDisplay) {
+                        window.adskipUI.updateStatusDisplay(transcribeResult.message, 'warning');
+                    } else {
+                        alert(transcribeResult.message);
+                    }
+                } else if (window.adskipUI?.updateStatusDisplay) {
+                    window.adskipUI.updateStatusDisplay(transcribeResult.message, 'success');
+                }
+            } catch (error) {
+                if (window.adskipUI?.updateStatusDisplay) {
+                    window.adskipUI.updateStatusDisplay(`强制转录失败: ${error.message}`, 'error');
+                }
+            }
         } else {
              adskipUtils.logDebug(`[AdSkip广告检测] - 当前状态 (${currentStatus}) 非 UNDETECTED，不执行特殊操作`);
              // 其他状态 (NO_SUBTITLE, NO_ADS, DETECTING) 点击无特殊效果
@@ -887,7 +1087,9 @@ window.adskipAdDetection = {
     processVideoAdStatus, // 核心状态处理函数
     sendDetectionRequest, // API请求函数
     signRequest, // 签名函数
-    setupManualDetectionTrigger // 手动触发设置函数
+    setupManualDetectionTrigger, // 手动触发设置函数
+    forceTranscribeForCurrentVideo,
+    reanalyzeCurrentVideo
     // 移除了 checkAutoDetectionEligibility, startAutoDetectionProcess, initAutoDetection, onVideoUrlChange
 };
 
