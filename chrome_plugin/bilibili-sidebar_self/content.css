@@ -3,13 +3,57 @@
   top: 100px;
   right: 20px;
   padding: 8px 12px;
-  background-color: #FB7299;
+  background-color: #fb7299;
   color: white;
   border-radius: 4px;
   z-index: 10000;
   cursor: pointer;
   font-size: 14px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  position: fixed;
+}
+
+/* 浮窗按钮顶部“页签耳朵”状态徽标 */
+.adskip-button:has(.adskip-badge) {
+  border-top-left-radius: 0 !important;
+}
+
+.adskip-badge-container {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  pointer-events: none;
+  height: 25px;
+}
+
+.adskip-badge {
+  background-color: #fff8e1;
+  padding: 0 8px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  border: 1px solid #ffb300;
+  border-bottom: none;
+  pointer-events: auto;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.adskip-badge:hover {
+  background-color: #ffe0b2;
+}
+
+.badge-global {
+  color: #d84315;
+}
+.badge-whitelist {
+  color: #1565c0;
 }
 
 .adskip-panel {
@@ -21,7 +65,7 @@
   background-color: white;
   border-radius: 8px;
   z-index: 10000;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   font-size: 14px;
   max-height: 80vh;
   overflow-y: auto;
@@ -37,7 +81,7 @@
 .adskip-title {
   margin-top: 0;
   margin-bottom: 0;
-  color: #FB7299;
+  color: #fb7299;
 }
 
 /* 开关样式 */
@@ -62,7 +106,7 @@
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  transition: .4s;
+  transition: 0.4s;
   border-radius: 20px;
 }
 
@@ -74,16 +118,16 @@
   left: 2px;
   bottom: 2px;
   background-color: white;
-  transition: .4s;
+  transition: 0.4s;
   border-radius: 50%;
 }
 
 input:checked + .adskip-slider {
-  background-color: #FB7299;
+  background-color: #fb7299;
 }
 
 input:focus + .adskip-slider {
-  box-shadow: 0 0 1px #FB7299;
+  box-shadow: 0 0 1px #fb7299;
 }
 
 input:checked + .adskip-slider:before {
@@ -117,7 +161,7 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-btn {
-  background: #FB7299;
+  background: #fb7299;
   color: white;
   border: none;
   padding: 10px 12px;
@@ -125,7 +169,7 @@ input:checked + .adskip-slider:before {
   cursor: pointer;
   width: 48%;
   font-size: 14px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .adskip-btn:hover {
@@ -134,7 +178,7 @@ input:checked + .adskip-slider:before {
 
 .adskip-status {
   margin-top: 10px;
-  color: #4CAF50;
+  color: #4caf50;
   display: none;
   transition: opacity 0.5s ease;
   border-radius: 4px;
@@ -176,7 +220,7 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-result a {
-  color: #FB7299;
+  color: #fb7299;
   word-break: break-all;
 }
 
@@ -195,7 +239,7 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-percentage-value {
-  color: #FB7299;
+  color: #fb7299;
   font-weight: bold;
 }
 
@@ -215,7 +259,7 @@ input:checked + .adskip-slider:before {
   appearance: none;
   width: 18px;
   height: 18px;
-  background: #FB7299;
+  background: #fb7299;
   border-radius: 50%;
   cursor: pointer;
 }
@@ -223,7 +267,7 @@ input:checked + .adskip-slider:before {
 .adskip-percentage-slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  background: #FB7299;
+  background: #fb7299;
   border-radius: 50%;
   cursor: pointer;
   border: none;
@@ -246,7 +290,7 @@ input:checked + .adskip-slider:before {
 
 .adskip-percentage-preset:hover {
   background-color: #f0f0f0;
-  color: #FB7299;
+  color: #fb7299;
 }
 
 .adskip-admin-container {
@@ -277,7 +321,7 @@ input:checked + .adskip-slider:before {
   background-color: white;
   border-radius: 8px;
   z-index: 10001;
-  box-shadow: 0 4px 25px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.25);
   font-size: 14px;
   overflow-y: auto;
 }
@@ -416,81 +460,81 @@ input:checked + .adskip-slider:before {
 
 /* 视频列表区域样式改进 */
 .adskip-video-list-section {
-    margin-bottom: 15px;
+  margin-bottom: 15px;
 }
 
 #adskip-video-list {
-    max-height: 300px; /* 限制高度 */
-    overflow-y: auto;  /* 添加垂直滚动条 */
-    padding-right: 5px;
-    margin-top: 10px;
-    border-radius: 6px;
+  max-height: 300px; /* 限制高度 */
+  overflow-y: auto; /* 添加垂直滚动条 */
+  padding-right: 5px;
+  margin-top: 10px;
+  border-radius: 6px;
 }
 
 /* 当视频超过3个时应用滚动设计 */
 #adskip-video-list.scrollable {
-    border: 1px solid rgba(251, 114, 153, 0.1);
-    background-color: rgba(251, 251, 251, 0.5);
-    padding: 5px;
+  border: 1px solid rgba(251, 114, 153, 0.1);
+  background-color: rgba(251, 251, 251, 0.5);
+  padding: 5px;
 }
 
 /* 美化滚动条 */
 #adskip-video-list::-webkit-scrollbar {
-    width: 6px;
+  width: 6px;
 }
 
 #adskip-video-list::-webkit-scrollbar-track {
-    background: rgba(251, 114, 153, 0.05);
-    border-radius: 6px;
+  background: rgba(251, 114, 153, 0.05);
+  border-radius: 6px;
 }
 
 #adskip-video-list::-webkit-scrollbar-thumb {
-    background: rgba(251, 114, 153, 0.3);
-    border-radius: 6px;
+  background: rgba(251, 114, 153, 0.3);
+  border-radius: 6px;
 }
 
 #adskip-video-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(251, 114, 153, 0.5);
+  background: rgba(251, 114, 153, 0.5);
 }
 
 /* 按钮容器样式 */
 .adskip-action-buttons {
-    display: flex;
-    gap: 5px;
-    align-items: center;
+  display: flex;
+  gap: 5px;
+  align-items: center;
 }
 
 /* 跳转按钮样式 */
 .adskip-goto-btn {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 3px;
-    padding: 2px 8px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: background-color 0.2s;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
 .adskip-goto-btn:hover {
-    background-color: #2980b9;
+  background-color: #2980b9;
 }
 
 /* 警告按钮样式 */
 .adskip-warn-btn {
-    background-color: #f39c12;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 16px;
-    margin: 0 5px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s;
+  background-color: #f39c12;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  margin: 0 5px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
 }
 
 .adskip-warn-btn:hover {
-    background-color: #d35400;
+  background-color: #d35400;
 }
 
 /* 广告标记样式 */
@@ -569,12 +613,12 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-tab:hover {
-  color: #FB7299;
+  color: #fb7299;
 }
 
 .adskip-tab.active {
-  color: #FB7299;
-  border-bottom: 2px solid #FB7299;
+  color: #fb7299;
+  border-bottom: 2px solid #fb7299;
   font-weight: bold;
 }
 
@@ -693,7 +737,7 @@ input:checked + .adskip-slider:before {
   padding: 8px;
   background-color: rgba(255, 255, 255, 0.5);
   border-radius: 4px;
-  border-left: 3px solid #FB7299;
+  border-left: 3px solid #fb7299;
 }
 
 .subtitle-item.active {
@@ -732,7 +776,8 @@ input:checked + .adskip-slider:before {
 }
 
 /* 提示信息 */
-.subtitle-note, .credential-note {
+.subtitle-note,
+.credential-note {
   padding: 8px;
   border-radius: 4px;
   background-color: #f8f8f8;
@@ -740,7 +785,8 @@ input:checked + .adskip-slider:before {
   color: #666;
 }
 
-.subtitle-note.info, .credential-note.info {
+.subtitle-note.info,
+.credential-note.info {
   background-color: rgba(0, 161, 214, 0.1);
   color: #0c5460;
   border-left: 3px solid #00a1d6;
@@ -757,7 +803,7 @@ input:checked + .adskip-slider:before {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  border: 3px solid #FB7299;
+  border: 3px solid #fb7299;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -849,72 +895,72 @@ input:checked + .adskip-slider:before {
 
 /* 服务未加载错误信息样式 */
 .error-message {
-    background-color: #fff2f2;
-    border-left: 4px solid #ff5252;
-    padding: 10px;
-    margin: 10px 0;
-    border-radius: 4px;
-    color: #e53935;
-    font-size: 13px;
-    line-height: 1.5;
+  background-color: #fff2f2;
+  border-left: 4px solid #ff5252;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+  color: #e53935;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* 重试按钮样式 */
 .retry-button {
-    background-color: #2196f3;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    margin-top: 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: background-color 0.3s;
-    display: block;
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  margin-top: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.3s;
+  display: block;
 }
 
 .retry-button:hover {
-    background-color: #1976d2;
+  background-color: #1976d2;
 }
 
 /* API数据展示区域 */
 .credential-api-data-container {
-    margin-top: 15px;
-    border-top: 1px solid rgba(251, 114, 153, 0.2);
-    padding-top: 10px;
+  margin-top: 15px;
+  border-top: 1px solid rgba(251, 114, 153, 0.2);
+  padding-top: 10px;
 }
 
 .credential-api-data-container summary {
-    cursor: pointer;
-    color: #666;
-    font-size: 12px;
-    padding: 5px;
-    background-color: #f5f5f5;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+  cursor: pointer;
+  color: #666;
+  font-size: 12px;
+  padding: 5px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  transition: background-color 0.2s;
 }
 
 .credential-api-data-container summary:hover {
-    background-color: #ececec;
-    color: #333;
+  background-color: #ececec;
+  color: #333;
 }
 
 .credential-api-data {
-    margin-top: 10px;
-    background-color: #f8f8f8;
-    border-radius: 4px;
-    padding: 8px;
-    overflow: auto;
-    max-height: 300px;
+  margin-top: 10px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 300px;
 }
 
 .credential-api-data pre {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-size: 12px;
-    font-family: monospace;
-    color: #333;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  font-family: monospace;
+  color: #333;
 }
 
 .adskip-subtitle-toggle {
@@ -955,7 +1001,7 @@ input:checked + .adskip-slider:before {
   padding: 8px 10px;
   border-bottom: 1px solid #eee;
   background: #fff7fa;
-  color: #FB7299;
+  color: #fb7299;
   font-size: 13px;
   font-weight: 600;
 }
@@ -964,7 +1010,7 @@ input:checked + .adskip-slider:before {
   border: 1px solid #f3bfd0;
   border-radius: 4px;
   background: #fff;
-  color: #FB7299;
+  color: #fb7299;
   padding: 2px 8px;
   font-size: 12px;
   cursor: pointer;
@@ -989,7 +1035,7 @@ input:checked + .adskip-slider:before {
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #FB7299;
+  color: #fb7299;
   background: #fff7fa;
   border-bottom: 1px solid #f5e0e8;
 }
@@ -998,7 +1044,7 @@ input:checked + .adskip-slider:before {
   border: 1px solid #f3bfd0;
   border-radius: 4px;
   background: #fff;
-  color: #FB7299;
+  color: #fb7299;
   padding: 1px 6px;
   font-size: 11px;
   cursor: pointer;
@@ -1019,7 +1065,7 @@ input:checked + .adskip-slider:before {
 
 .adskip-subtitle-insight-title {
   font-size: 11px;
-  color: #FB7299;
+  color: #fb7299;
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -1049,7 +1095,7 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-subtitle-keypoint-btn .time {
-  color: #FB7299;
+  color: #fb7299;
   font-weight: 600;
   margin-right: 6px;
 }
@@ -1073,7 +1119,12 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-subtitle-item.ad-segment {
-  background: linear-gradient(90deg, rgba(255, 85, 85, 0.08) 0%, rgba(255, 85, 85, 0.02) 45%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 85, 85, 0.08) 0%,
+    rgba(255, 85, 85, 0.02) 45%,
+    transparent 100%
+  );
   border-left-color: rgba(255, 85, 85, 0.7);
 }
 
@@ -1090,7 +1141,12 @@ input:checked + .adskip-slider:before {
 }
 
 .adskip-subtitle-item.key-point-segment {
-  background: linear-gradient(90deg, rgba(251, 114, 153, 0.16) 0%, rgba(251, 114, 153, 0.04) 60%, transparent 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(251, 114, 153, 0.16) 0%,
+    rgba(251, 114, 153, 0.04) 60%,
+    transparent 100%
+  );
   border-left-color: rgba(251, 114, 153, 0.8);
 }
 
@@ -1112,7 +1168,7 @@ input:checked + .adskip-slider:before {
 
 .adskip-subtitle-item.current {
   background: #fff1f4;
-  border-left-color: #FB7299;
+  border-left-color: #fb7299;
 }
 
 .adskip-subtitle-time {
@@ -1172,7 +1228,7 @@ input:checked + .adskip-slider:before {
   font-size: 12px;
   cursor: pointer;
   color: #fff;
-  background: #FB7299;
+  background: #fb7299;
 }
 
 .adskip-subtitle-chat-output {

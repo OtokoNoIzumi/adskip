@@ -3,7 +3,7 @@
  * 处理内容脚本与后台服务工作者之间的消息通信
  */
 
-'use strict';
+"use strict";
 
 // 创建全局通信对象
 window.adskipCommunication = window.adskipCommunication || {};
@@ -15,7 +15,7 @@ window.adskipCommunication = window.adskipCommunication || {};
  */
 function sendMessageToBackground(message) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, response => {
+    chrome.runtime.sendMessage(message, (response) => {
       // 检查runtime错误
       const lastError = chrome.runtime.lastError;
       if (lastError) {
@@ -25,13 +25,13 @@ function sendMessageToBackground(message) {
 
       // 检查响应是否存在
       if (!response) {
-        reject(new Error('未收到响应'));
+        reject(new Error("未收到响应"));
         return;
       }
 
       // 检查响应是否成功
       if (!response.success) {
-        reject(new Error(response.error || '请求失败'));
+        reject(new Error(response.error || "请求失败"));
         return;
       }
 
@@ -45,7 +45,7 @@ function sendMessageToBackground(message) {
  * @returns {Promise<Object>} - 全局状态对象
  */
 async function getPluginState() {
-  const response = await sendMessageToBackground({ action: 'getState' });
+  const response = await sendMessageToBackground({ action: "getState" });
   return response.state;
 }
 
@@ -56,8 +56,8 @@ async function getPluginState() {
  */
 async function updatePluginState(state) {
   await sendMessageToBackground({
-    action: 'updateState',
-    state: state
+    action: "updateState",
+    state: state,
   });
   return true;
 }
@@ -70,9 +70,9 @@ async function updatePluginState(state) {
  */
 async function fetchViaBackground(url, options = {}) {
   const response = await sendMessageToBackground({
-    action: 'fetchData',
+    action: "fetchData",
     url: url,
-    options: options
+    options: options,
   });
   return response.data;
 }
@@ -82,5 +82,5 @@ window.adskipCommunication = {
   sendMessageToBackground,
   getPluginState,
   updatePluginState,
-  fetchViaBackground
+  fetchViaBackground,
 };

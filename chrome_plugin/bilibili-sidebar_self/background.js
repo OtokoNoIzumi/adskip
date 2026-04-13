@@ -3,10 +3,10 @@
  * 处理插件后台任务，消息通信，网络请求等
  */
 
-'use strict';
+"use strict";
 
 // 记录Service Worker激活
-console.log('[AdSkip] Service Worker 已启动');
+console.log("[AdSkip] Service Worker 已启动");
 
 // 全局状态对象
 const adskipState = {
@@ -19,7 +19,7 @@ let storageModuleReady = false;
 
 // 初始化服务
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('[AdSkip] 插件已安装/更新');
+  console.log("[AdSkip] 插件已安装/更新");
 
   // 初始化存储模块(如果需要的话)
   await initStorageModule();
@@ -27,7 +27,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   // 加载保存的设置
   await loadSavedSettings();
 
-  console.log('[AdSkip] 初始化设置完成:', adskipState);
+  console.log("[AdSkip] 初始化设置完成:", adskipState);
 });
 
 /**
@@ -37,23 +37,27 @@ async function initStorageModule() {
   // 如果adskipStorage不存在，我们需要直接使用chrome.storage.local
   // 在实际的background脚本中，应该导入storage.js
   // 这里我们检查adskipStorage是否存在
-  if (typeof adskipStorage === 'undefined') {
-    console.log('[AdSkip] 存储模块未加载，使用直接存储访问');
+  if (typeof adskipStorage === "undefined") {
+    console.log("[AdSkip] 存储模块未加载，使用直接存储访问");
 
     // 检查enabled设置
-    const result = await chrome.storage.local.get(['adskip_enabled', 'adskip_debug_mode']);
+    const result = await chrome.storage.local.get([
+      "adskip_enabled",
+      "adskip_debug_mode",
+    ]);
 
     // 设置默认值
     if (result.adskip_enabled === undefined) {
-      await chrome.storage.local.set({ 'adskip_enabled': true });
+      await chrome.storage.local.set({ adskip_enabled: true });
     }
 
     // 更新状态对象
-    adskipState.isEnabled = result.adskip_enabled !== undefined ? result.adskip_enabled : true;
+    adskipState.isEnabled =
+      result.adskip_enabled !== undefined ? result.adskip_enabled : true;
     adskipState.debugMode = result.adskip_debug_mode === true;
   } else {
     storageModuleReady = true;
-    console.log('[AdSkip] 存储模块已加载');
+    console.log("[AdSkip] 存储模块已加载");
   }
 }
 
@@ -61,14 +65,18 @@ async function initStorageModule() {
  * 加载已保存的设置
  */
 async function loadSavedSettings() {
-  if (storageModuleReady && typeof adskipStorage !== 'undefined') {
+  if (storageModuleReady && typeof adskipStorage !== "undefined") {
     // 使用存储模块API加载设置
     adskipState.isEnabled = await adskipStorage.getEnabled();
     adskipState.debugMode = await adskipStorage.getDebugMode();
   } else {
     // 直接使用chrome.storage.local (回退方案)
-    const result = await chrome.storage.local.get(['adskip_enabled', 'adskip_debug_mode']);
-    adskipState.isEnabled = result.adskip_enabled !== undefined ? result.adskip_enabled : true;
+    const result = await chrome.storage.local.get([
+      "adskip_enabled",
+      "adskip_debug_mode",
+    ]);
+    adskipState.isEnabled =
+      result.adskip_enabled !== undefined ? result.adskip_enabled : true;
     adskipState.debugMode = result.adskip_debug_mode === true;
   }
 }
@@ -77,66 +85,64 @@ async function loadSavedSettings() {
  * 保存插件状态
  */
 async function saveState() {
-  if (storageModuleReady && typeof adskipStorage !== 'undefined') {
+  if (storageModuleReady && typeof adskipStorage !== "undefined") {
     // 使用存储模块API保存设置
     await adskipStorage.setEnabled(adskipState.isEnabled);
     await adskipStorage.setDebugMode(adskipState.debugMode);
   } else {
     // 直接使用chrome.storage.local (回退方案)
     await chrome.storage.local.set({
-      'adskip_enabled': adskipState.isEnabled,
-      'adskip_debug_mode': adskipState.debugMode
+      adskip_enabled: adskipState.isEnabled,
+      adskip_debug_mode: adskipState.debugMode,
     });
   }
 }
 
 // 处理来自内容脚本的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[AdSkip] 接收到消息:', message);
+  console.log("[AdSkip] 接收到消息:", message);
 
-  if (message.action === 'getState') {
+  if (message.action === "getState") {
     // 返回全局状态
     sendResponse({ success: true, state: adskipState });
-  }
-  else if (message.action === 'fetchData') {
+  } else if (message.action === "fetchData") {
     // 处理网络请求
     handleFetch(message.url, message.options)
-      .then(data => sendResponse({ success: true, data }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
 
     // 异步响应需要返回true
     return true;
-  }
-  else if (message.action === 'updateState') {
+  } else if (message.action === "updateState") {
     // 更新插件状态
-    if (message.state && typeof message.state === 'object') {
+    if (message.state && typeof message.state === "object") {
       Object.assign(adskipState, message.state);
 
       // 同步到存储
       saveState().then(() => {
-        console.log('[AdSkip] 状态已更新并保存:', adskipState);
+        console.log("[AdSkip] 状态已更新并保存:", adskipState);
       });
     }
     sendResponse({ success: true });
-  }
-  else if (message.action === 'getBilibiliUser') {
+  } else if (message.action === "getBilibiliUser") {
     // 获取B站用户信息（从API直接获取）
     getBilibiliUserInfo()
-      .then(userInfo => sendResponse({ success: true, ...userInfo }))
-      .catch(error => sendResponse({
-        success: false,
-        error: error.message,
-        isLoggedIn: false,
-        username: "guest",
-        uid: 0,
-        level: 0
-      }));
+      .then((userInfo) => sendResponse({ success: true, ...userInfo }))
+      .catch((error) =>
+        sendResponse({
+          success: false,
+          error: error.message,
+          isLoggedIn: false,
+          username: "guest",
+          uid: 0,
+          level: 0,
+        }),
+      );
 
     // 异步响应需要返回true
     return true;
-  }
-  else {
-    sendResponse({ success: false, error: 'Unknown action' });
+  } else {
+    sendResponse({ success: false, error: "Unknown action" });
   }
 });
 
@@ -152,7 +158,7 @@ async function handleFetch(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     // 确保包含凭据
-    credentials: options.credentials || 'include'
+    credentials: options.credentials || "include",
   });
 
   if (!response.ok) {
@@ -167,19 +173,22 @@ async function handleFetch(url, options = {}) {
  * @returns {Promise<Object>} - 用户信息对象
  */
 async function getBilibiliUserInfo() {
-  const url = 'https://api.bilibili.com/x/web-interface/nav';
+  const url = "https://api.bilibili.com/x/web-interface/nav";
 
   try {
     const response = await fetch(url, {
-      method: 'GET',
-      credentials: 'include',
+      method: "GET",
+      credentials: "include",
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
     });
 
     if (!response.ok) {
-      throw new Error(`获取用户信息失败: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `获取用户信息失败: ${response.status} ${response.statusText}`,
+      );
     }
 
     const data = await response.json();
@@ -193,14 +202,14 @@ async function getBilibiliUserInfo() {
     // 返回标准格式的用户信息
     return {
       isLoggedIn: userInfo.isLogin,
-      username: userInfo.uname || '未知用户',
+      username: userInfo.uname || "未知用户",
       uid: userInfo.mid,
       level: userInfo.level_info?.current_level || 0,
       vipType: userInfo.vipType || 0,
-      vipDueDate: userInfo.vipDueDate || 0
+      vipDueDate: userInfo.vipDueDate || 0,
     };
   } catch (error) {
-    console.error('[AdSkip] 获取B站用户信息失败:', error);
+    console.error("[AdSkip] 获取B站用户信息失败:", error);
     throw error;
   }
 }

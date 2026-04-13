@@ -1,760 +1,918 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-
-<head>
-  <meta charset="UTF-8">
-  <title>Bilibili 切片广告之友 - 选项</title>
-  <style>
-    body {
-      font-family: 'Microsoft YaHei', sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: #f9f9f9;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 25px;
-      padding-bottom: 15px;
-      border-bottom: 1px solid #eee;
-    }
-
-    .logo {
-      width: 48px;
-      height: 48px;
-      margin-right: 15px;
-    }
-
-    h1 {
-      color: #FB7299;
-      margin: 0;
-      font-size: 24px;
-    }
-
-    .section {
-      background-color: #fff;
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    }
-
-    h2 {
-      margin-top: 0;
-      color: #333;
-      font-size: 18px;
-      margin-bottom: 15px;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: bold;
-    }
-
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 50px;
-      height: 24px;
-    }
-
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-      border-radius: 24px;
-    }
-
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 16px;
-      width: 16px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-
-    input:checked+.slider {
-      background-color: #FB7299;
-    }
-
-    input:checked+.slider:before {
-      transform: translateX(26px);
-    }
-
-    input[type="range"] {
-      width: 100%;
-      max-width: 400px;
-    }
-
-    .range-value {
-      display: inline-block;
-      margin-left: 10px;
-      min-width: 30px;
-    }
-
-    button {
-      background-color: #FB7299;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 8px 15px;
-      cursor: pointer;
-      font-size: 14px;
-      margin-right: 10px;
-      margin-bottom: 10px;
-    }
-
-    button:hover {
-      background-color: #e05c83;
-    }
-
-    .status {
-      margin-top: 20px;
-      padding: 10px;
-      border-radius: 4px;
-      background-color: #f0f0f0;
-      display: none;
-    }
-
-    .status.success {
-      display: block;
-      background-color: #e8f4e8;
-      color: #2c7d2c;
-    }
-
-    .status.error {
-      display: block;
-      background-color: #fde8e8;
-      color: #c53030;
-    }
-
-    .preset-buttons {
-      margin-top: 10px;
-      display: flex;
-      gap: 10px;
-    }
-
-    .preset-button {
-      background-color: #f0f0f0;
-      color: #333;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 5px 10px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .preset-button:hover {
-      background-color: #e6e6e6;
-    }
-
-    .tab-buttons {
-      display: flex;
-      margin-bottom: 20px;
-      border-bottom: 1px solid #ddd;
-    }
-
-    .tab-button {
-      padding: 10px 20px;
-      background-color: transparent;
-      color: #555;
-      border: none;
-      border-bottom: 3px solid transparent;
-      cursor: pointer;
-      font-size: 16px;
-      margin-right: 0;
-      margin-bottom: 0;
-    }
-
-    .tab-button.active {
-      color: #FB7299;
-      border-bottom: 3px solid #FB7299;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    .whitelist-container {
-      margin-top: 20px;
-    }
-
-    .whitelist-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-    }
-
-    .whitelist-item:last-child {
-      border-bottom: none;
-    }
-
-    .whitelist-item-name {
-      flex-grow: 1;
-      font-size: 14px;
-    }
-
-    .whitelist-item-date {
-      color: #999;
-      font-size: 12px;
-      margin-right: 15px;
-    }
-
-    .whitelist-item-actions {
-      display: flex;
-      gap: 5px;
-    }
-
-    .whitelist-btn {
-      background-color: #f0f0f0;
-      color: #555;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 5px 10px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .whitelist-btn:hover {
-      background-color: #e6e6e6;
-    }
-
-    .whitelist-btn-enable {
-      background-color: #4caf50;
-      color: white;
-      border: none;
-    }
-
-    .whitelist-btn-enable:hover {
-      background-color: #43a047;
-    }
-
-    .whitelist-btn-disable {
-      background-color: #ff9800;
-      color: white;
-      border: none;
-    }
-
-    .whitelist-btn-disable:hover {
-      background-color: #fb8c00;
-    }
-
-    .whitelist-btn-delete {
-      background-color: #f44336;
-      color: white;
-      border: none;
-    }
-
-    .whitelist-btn-delete:hover {
-      background-color: #e53935;
-    }
-
-    .whitelist-empty {
-      text-align: center;
-      padding: 20px;
-      color: #7f8c8d;
-      font-style: italic;
-    }
-
-    .whitelist-item-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .whitelist-item-details {
-      font-size: 12px;
-      color: #95a5a6;
-      margin-top: 4px;
-      display: flex;
-      gap: 10px;
-    }
-
-    .whitelist-config-tag {
-      background: #f0f0f0;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #34495e;
-    }
-
-    .whitelist-item-date {
-      margin-left: auto;
-    }
-
-    .whitelist-import-export {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px dashed #ddd;
-    }
-
-    .whitelist-textarea {
-      width: 100%;
-      min-height: 100px;
-      margin-bottom: 10px;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      resize: vertical;
-    }
-
-    .whitelist-help {
-      font-size: 12px;
-      color: #666;
-      margin-top: 5px;
-    }
-
-    .whitelist-summary {
-      margin-bottom: 15px;
-      font-size: 14px;
-      color: #555;
-    }
-
-    .whitelist-count {
-      font-weight: bold;
-      color: #FB7299;
-    }
-
-    .skip-explanation {
-      background-color: #f5f5f5;
-      border-radius: 6px;
-      padding: 15px;
-      margin-top: 15px;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .skip-explanation h3 {
-      margin-top: 0;
-      margin-bottom: 10px;
-      font-size: 16px;
-      color: #333;
-    }
-
-    .skip-explanation p {
-      margin: 8px 0;
-    }
-
-    .skip-modes {
-      display: flex;
-      gap: 15px;
-      margin-top: 10px;
-    }
-
-    .skip-mode {
-      background-color: white;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      padding: 12px;
-      flex: 1;
-    }
-
-    .skip-mode h4 {
-      margin-top: 0;
-      margin-bottom: 8px;
-      font-size: 14px;
-      color: #FB7299;
-    }
-
-    .skip-mode p {
-      margin: 5px 0;
-      font-size: 13px;
-      color: #666;
-    }
-
-    /* 管理员按钮样式 */
-    .admin-btn {
-      background-color: #FB7299;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      padding: 8px 15px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-      margin-right: 10px;
-    }
-
-    .admin-btn:hover {
-      background-color: #e45c84;
-    }
-
-    .admin-btn.admin-logout {
-      background-color: #666;
-    }
-
-    .admin-btn.admin-logout:hover {
-      background-color: #555;
-    }
-
-    /* 使用说明样式 */
-    .usage-instructions {
-      background-color: #fff;
-      border-radius: 8px;
-      padding: 20px;
-      margin-top: 20px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      border-left: 4px solid #FB7299;
-    }
-
-    .usage-instructions h2 {
-      color: #FB7299;
-      margin-top: 0;
-      margin-bottom: 15px;
-    }
-
-    .usage-instructions p {
-      margin: 8px 0;
-      line-height: 1.6;
-    }
-
-    .usage-instructions strong {
-      color: #FB7299;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="header">
-    <img src="icons/icon48.png" alt="Logo" class="logo">
-    <h1>Bilibili 切片广告之友 - 全局设置</h1>
-  </div>
-
-  <div class="tab-buttons">
-    <button class="tab-button active" data-tab="general">基本设置</button>
-    <button class="tab-button" data-tab="whitelist">广告跳过白名单</button>
-    <button class="tab-button" data-tab="skipintro">跳过开头/结尾</button>
-    <button class="tab-button" data-tab="data">数据管理</button>
-  </div>
-
-  <div id="general-tab" class="tab-content active">
-    <div class="section">
-      <h2>功能设置</h2>
-
-      <div class="form-group">
-        <label for="enable-adskip">启用广告跳过功能</label>
-        <label class="switch">
-          <input type="checkbox" id="enable-adskip" checked>
-          <span class="slider"></span>
-        </label>
-        <p>关闭后插件将不会自动跳过广告内容</p>
-
-        <div class="skip-explanation">
-          <h3>广告跳过模式说明</h3>
-          <p>本插件支持以下跳过模式，您可以根据需要选择：</p>
-
-          <div class="skip-modes">
-            <div class="skip-mode">
-              <h4>✅ 自动跳过模式</h4>
-              <p>默认模式：当启用广告跳过功能且UP主不在白名单中时，系统会自动跳过广告片段。</p>
-              <p>应用场景：希望所有视频都自动跳过广告时使用此模式。</p>
-            </div>
-
-            <div class="skip-mode">
-              <h4>🔹 白名单模式</h4>
-              <p>即使启用广告跳过功能，白名单中UP主的视频也不会自动跳过广告。</p>
-              <p>应用场景：希望支持特定UP主时使用此模式，仍可通过点击广告区间标记手动跳过。</p>
-            </div>
-
-            <div class="skip-mode">
-              <h4>⏸️ 手动模式</h4>
-              <p>关闭自动跳过功能后，所有视频都不会自动跳过广告，但仍可点击标记手动跳过。</p>
-              <p>应用场景：希望自行决定是否跳过每个广告片段时使用此模式。</p>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bilibili 切片广告之友 - 选项</title>
+    <style>
+      body {
+        font-family: "Microsoft YaHei", sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .logo {
+        width: 48px;
+        height: 48px;
+        margin-right: 15px;
+      }
+
+      h1 {
+        color: #fb7299;
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .section {
+        background-color: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      }
+
+      h2 {
+        margin-top: 0;
+        color: #333;
+        font-size: 18px;
+        margin-bottom: 15px;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+      }
+
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 24px;
+      }
+
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+
+      input:checked + .slider {
+        background-color: #fb7299;
+      }
+
+      input:checked + .slider:before {
+        transform: translateX(26px);
+      }
+
+      input[type="range"] {
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .range-value {
+        display: inline-block;
+        margin-left: 10px;
+        min-width: 30px;
+      }
+
+      button {
+        background-color: #fb7299;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 15px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+
+      button:hover {
+        background-color: #e05c83;
+      }
+
+      .status {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 4px;
+        background-color: #f0f0f0;
+        display: none;
+      }
+
+      .status.success {
+        display: block;
+        background-color: #e8f4e8;
+        color: #2c7d2c;
+      }
+
+      .status.error {
+        display: block;
+        background-color: #fde8e8;
+        color: #c53030;
+      }
+
+      .preset-buttons {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .preset-button {
+        background-color: #f0f0f0;
+        color: #333;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .preset-button:hover {
+        background-color: #e6e6e6;
+      }
+
+      .tab-buttons {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .tab-button {
+        padding: 10px 20px;
+        background-color: transparent;
+        color: #555;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 0;
+        margin-bottom: 0;
+      }
+
+      .tab-button.active {
+        color: #fb7299;
+        border-bottom: 3px solid #fb7299;
+      }
+
+      .tab-content {
+        display: none;
+      }
+
+      .tab-content.active {
+        display: block;
+      }
+
+      .whitelist-container {
+        margin-top: 20px;
+      }
+
+      .whitelist-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .whitelist-item:last-child {
+        border-bottom: none;
+      }
+
+      .whitelist-item-name {
+        flex-grow: 1;
+        font-size: 14px;
+      }
+
+      .whitelist-item-date {
+        color: #999;
+        font-size: 12px;
+        margin-right: 15px;
+      }
+
+      .whitelist-item-actions {
+        display: flex;
+        gap: 5px;
+      }
+
+      .whitelist-btn {
+        background-color: #f0f0f0;
+        color: #555;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .whitelist-btn:hover {
+        background-color: #e6e6e6;
+      }
+
+      .whitelist-btn-enable {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+      }
+
+      .whitelist-btn-enable:hover {
+        background-color: #43a047;
+      }
+
+      .whitelist-btn-disable {
+        background-color: #ff9800;
+        color: white;
+        border: none;
+      }
+
+      .whitelist-btn-disable:hover {
+        background-color: #fb8c00;
+      }
+
+      .whitelist-btn-delete {
+        background-color: #f44336;
+        color: white;
+        border: none;
+      }
+
+      .whitelist-btn-delete:hover {
+        background-color: #e53935;
+      }
+
+      .whitelist-empty {
+        text-align: center;
+        padding: 20px;
+        color: #7f8c8d;
+        font-style: italic;
+      }
+
+      .whitelist-item-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .whitelist-item-details {
+        font-size: 12px;
+        color: #95a5a6;
+        margin-top: 4px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .whitelist-config-tag {
+        background: #f0f0f0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #34495e;
+      }
+
+      .whitelist-item-date {
+        margin-left: auto;
+      }
+
+      .whitelist-import-export {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px dashed #ddd;
+      }
+
+      .whitelist-textarea {
+        width: 100%;
+        min-height: 100px;
+        margin-bottom: 10px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        resize: vertical;
+      }
+
+      .whitelist-help {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+      }
+
+      .whitelist-summary {
+        margin-bottom: 15px;
+        font-size: 14px;
+        color: #555;
+      }
+
+      .whitelist-count {
+        font-weight: bold;
+        color: #fb7299;
+      }
+
+      .skip-explanation {
+        background-color: #f5f5f5;
+        border-radius: 6px;
+        padding: 15px;
+        margin-top: 15px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .skip-explanation h3 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 16px;
+        color: #333;
+      }
+
+      .skip-explanation p {
+        margin: 8px 0;
+      }
+
+      .skip-modes {
+        display: flex;
+        gap: 15px;
+        margin-top: 10px;
+      }
+
+      .skip-mode {
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 12px;
+        flex: 1;
+      }
+
+      .skip-mode h4 {
+        margin-top: 0;
+        margin-bottom: 8px;
+        font-size: 14px;
+        color: #fb7299;
+      }
+
+      .skip-mode p {
+        margin: 5px 0;
+        font-size: 13px;
+        color: #666;
+      }
+
+      /* 管理员按钮样式 */
+      .admin-btn {
+        background-color: #fb7299;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 15px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        margin-right: 10px;
+      }
+
+      .admin-btn:hover {
+        background-color: #e45c84;
+      }
+
+      .admin-btn.admin-logout {
+        background-color: #666;
+      }
+
+      .admin-btn.admin-logout:hover {
+        background-color: #555;
+      }
+
+      /* 使用说明样式 */
+      .usage-instructions {
+        background-color: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        border-left: 4px solid #fb7299;
+      }
+
+      .usage-instructions h2 {
+        color: #fb7299;
+        margin-top: 0;
+        margin-bottom: 15px;
+      }
+
+      .usage-instructions p {
+        margin: 8px 0;
+        line-height: 1.6;
+      }
+
+      .usage-instructions strong {
+        color: #fb7299;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="header">
+      <img src="icons/icon48.png" alt="Logo" class="logo" />
+      <h1>Bilibili 切片广告之友 - 全局设置</h1>
+    </div>
+
+    <div class="tab-buttons">
+      <button class="tab-button active" data-tab="general">基本设置</button>
+      <button class="tab-button" data-tab="whitelist">广告跳过白名单</button>
+      <button class="tab-button" data-tab="skipintro">跳过开头/结尾</button>
+      <button class="tab-button" data-tab="data">数据管理</button>
+    </div>
+
+    <div id="general-tab" class="tab-content active">
+      <div class="section">
+        <h2>功能设置</h2>
+
+        <div class="form-group">
+          <label for="enable-adskip">启用广告跳过功能</label>
+          <label class="switch">
+            <input type="checkbox" id="enable-adskip" checked />
+            <span class="slider"></span>
+          </label>
+          <p>关闭后插件将不会自动跳过广告内容</p>
+
+          <div class="skip-explanation">
+            <h3>广告跳过模式说明</h3>
+            <p>本插件支持以下跳过模式，您可以根据需要选择：</p>
+
+            <div class="skip-modes">
+              <div class="skip-mode">
+                <h4>✅ 自动跳过模式</h4>
+                <p>
+                  默认模式：当启用广告跳过功能且UP主不在白名单中时，系统会自动跳过广告片段。
+                </p>
+                <p>应用场景：希望所有视频都自动跳过广告时使用此模式。</p>
+              </div>
+
+              <div class="skip-mode">
+                <h4>🔹 白名单模式</h4>
+                <p>
+                  即使启用广告跳过功能，白名单中UP主的视频也不会自动跳过广告。
+                </p>
+                <p>
+                  应用场景：希望支持特定UP主时使用此模式，仍可通过点击广告区间标记手动跳过。
+                </p>
+              </div>
+
+              <div class="skip-mode">
+                <h4>⏸️ 手动模式</h4>
+                <p>
+                  关闭自动跳过功能后，所有视频都不会自动跳过广告，但仍可点击标记手动跳过。
+                </p>
+                <p>应用场景：希望自行决定是否跳过每个广告片段时使用此模式。</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="form-group">
-        <label for="debug-mode">调试模式</label>
-        <label class="switch">
-          <input type="checkbox" id="debug-mode">
-          <span class="slider"></span>
-        </label>
-        <p>启用后将在控制台输出详细日志信息</p>
-      </div>
-
-      <div class="form-group">
-        <label for="skip-own-videos">不检测自己的视频</label>
-        <label class="switch">
-          <input type="checkbox" id="skip-own-videos" checked>
-          <span class="slider"></span>
-        </label>
-        <p>启用后，当您观看自己上传的视频时，如果网址中没有提供广告时间，将直接显示为无广告状态，不进行AI识别。</p>
-      </div>
-
-      <div class="form-group">
-        <label for="search-precheck">搜索页字幕预检</label>
-        <label class="switch">
-          <input type="checkbox" id="search-precheck">
-          <span class="slider"></span>
-        </label>
-        <p>搜索页自动检测视频字幕：<strong>开启</strong>时全量自动检测；<strong>关闭</strong>时仅在鼠标悬停≥0.7秒后检测该卡片。<br>⚠️
-          推荐使用关闭模式（悬停检测），避免触发B站风控，一段时间内无法正常加载字幕信息。</p>
-      </div>
-
-      <div class="form-group">
-        <label for="read-mark">搜索页已读标记</label>
-        <label class="switch">
-          <input type="checkbox" id="read-mark" checked>
-          <span class="slider"></span>
-        </label>
-        <p>在搜索页显示已读标记：对已在白名单或有本地广告数据的视频显示蓝色"已读"标记并轻度淡化，帮助快速查看未读视频。</p>
-      </div>
-
-      <div class="form-group">
-        <label for="subtitle-timeline-default-collapsed">字幕动态轴默认收起</label>
-        <label class="switch">
-          <input type="checkbox" id="subtitle-timeline-default-collapsed">
-          <span class="slider"></span>
-        </label>
-        <p>默认关闭时，视频页仍会显示折叠按钮，可随时展开字幕动态轴。</p>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>广告跳过策略</h2>
-
-      <div class="form-group">
-        <label for="skip-percentage">触发窗口：前 <span id="percentage-value" class="range-value">5</span>%</label>
-        <input type="range" id="skip-percentage" min="1" max="100" value="5">
-        <div class="preset-buttons">
-          <button class="preset-button" data-value="1">仅起始时跳过(1%)</button>
-          <button class="preset-button" data-value="50">前半段跳过(50%)</button>
-          <button class="preset-button" data-value="100">全程都跳过(100%)</button>
+        <div class="form-group">
+          <label for="debug-mode">调试模式</label>
+          <label class="switch">
+            <input type="checkbox" id="debug-mode" />
+            <span class="slider"></span>
+          </label>
+          <p>启用后将在控制台输出详细日志信息</p>
         </div>
-        <p>设置在广告时段的哪个阶段会触发自动跳过：
-          <br>• 播放进度进入<strong>前[X]%</strong> 时间段时，将自动跳至广告结尾
-          <br>• 如果想回看广告，就要把值设置低一些
+
+        <div class="form-group">
+          <label for="skip-own-videos">不检测自己的视频</label>
+          <label class="switch">
+            <input type="checkbox" id="skip-own-videos" checked />
+            <span class="slider"></span>
+          </label>
+          <p>
+            启用后，当您观看自己上传的视频时，如果网址中没有提供广告时间，将直接显示为无广告状态，不进行AI识别。
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="search-precheck">搜索页字幕预检</label>
+          <label class="switch">
+            <input type="checkbox" id="search-precheck" />
+            <span class="slider"></span>
+          </label>
+          <p>
+            搜索页自动检测视频字幕：<strong>开启</strong>时全量自动检测；<strong>关闭</strong>时仅在鼠标悬停≥0.7秒后检测该卡片。<br />⚠️
+            推荐使用关闭模式（悬停检测），避免触发B站风控，一段时间内无法正常加载字幕信息。
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="read-mark">搜索页已读标记</label>
+          <label class="switch">
+            <input type="checkbox" id="read-mark" checked />
+            <span class="slider"></span>
+          </label>
+          <p>
+            在搜索页显示已读标记：对已在白名单或有本地广告数据的视频显示蓝色"已读"标记并轻度淡化，帮助快速查看未读视频。
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="subtitle-timeline-default-collapsed"
+            >字幕动态轴默认收起</label
+          >
+          <label class="switch">
+            <input type="checkbox" id="subtitle-timeline-default-collapsed" />
+            <span class="slider"></span>
+          </label>
+          <p>默认关闭时，视频页仍会显示折叠按钮，可随时展开字幕动态轴。</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>广告跳过策略</h2>
+
+        <div class="form-group">
+          <label for="skip-percentage"
+            >触发窗口：前
+            <span id="percentage-value" class="range-value">5</span>%</label
+          >
+          <input
+            type="range"
+            id="skip-percentage"
+            min="1"
+            max="100"
+            value="5"
+          />
+          <div class="preset-buttons">
+            <button class="preset-button" data-value="1">
+              仅起始时跳过(1%)
+            </button>
+            <button class="preset-button" data-value="50">
+              前半段跳过(50%)
+            </button>
+            <button class="preset-button" data-value="100">
+              全程都跳过(100%)
+            </button>
+          </div>
+          <p>
+            设置在广告时段的哪个阶段会触发自动跳过： <br />• 播放进度进入<strong
+              >前[X]%</strong
+            >
+            时间段时，将自动跳至广告结尾 <br />•
+            如果想回看广告，就要把值设置低一些
+          </p>
+        </div>
+      </div>
+      <!-- 使用说明区域（条件显示） -->
+      <div
+        class="usage-instructions"
+        id="options-usage-instructions"
+        style="display: none"
+      >
+        <h2>使用说明</h2>
+        <p style="color: #666">
+          AI智能识别并自动跳过哔哩哔哩视频中的广告内容。
+        </p>
+        <p>
+          1.
+          <strong>功能入口：</strong
+          >在B站视频页面右上角会显示一个悬浮按钮，包含了当前视频的设置和基础功能
+        </p>
+        <p>
+          2.
+          <strong>灵活设置：</strong
+          >如果AI错误识别了广告区间，您可以采取下列措施：
+        </p>
+        <ul style="margin-left: 20px; margin-top: 5px">
+          <li>手动拖拽进度条跳回正确位置</li>
+          <li>在悬浮按钮菜单里临时切换手动跳过模式</li>
+          <li>修改错误的区间并重新应用设置</li>
+        </ul>
+        <p>
+          3.
+          <strong>识别次数：</strong
+          >处理视频时可能不会消耗AI识别次数，这是因为该视频已在数据库中有识别记录
+        </p>
+        <p>
+          4.
+          <strong>处理条件：</strong
+          >仅对总时长30秒以上的视频进行AI识别处理，短视频会被自动跳过
+        </p>
+        <p>
+          5.
+          <strong>本地缓存：</strong
+          >重复观看同一个视频不会消耗识别次数，识别结果会保存在本地浏览器中
         </p>
       </div>
     </div>
-    <!-- 使用说明区域（条件显示） -->
-    <div class="usage-instructions" id="options-usage-instructions" style="display: none;">
-      <h2>使用说明</h2>
-      <p style="color:#666;">AI智能识别并自动跳过哔哩哔哩视频中的广告内容。</p>
-      <p>1. <strong>功能入口：</strong>在B站视频页面右上角会显示一个悬浮按钮，包含了当前视频的设置和基础功能</p>
-      <p>2. <strong>灵活设置：</strong>如果AI错误识别了广告区间，您可以采取下列措施：</p>
-      <ul style="margin-left: 20px; margin-top: 5px;">
-        <li>手动拖拽进度条跳回正确位置</li>
-        <li>在悬浮按钮菜单里临时切换手动跳过模式</li>
-        <li>修改错误的区间并重新应用设置</li>
-      </ul>
-      <p>3. <strong>识别次数：</strong>处理视频时可能不会消耗AI识别次数，这是因为该视频已在数据库中有识别记录</p>
-      <p>4. <strong>处理条件：</strong>仅对总时长30秒以上的视频进行AI识别处理，短视频会被自动跳过</p>
-      <p>5. <strong>本地缓存：</strong>重复观看同一个视频不会消耗识别次数，识别结果会保存在本地浏览器中</p>
-    </div>
-  </div>
 
-  <div id="whitelist-tab" class="tab-content">
-    <div class="section">
-      <h2>UP主白名单管理</h2>
-      <p>白名单中UP主的视频不会自动跳过广告，但您仍然可以通过点击广告标记手动跳过</p>
+    <div id="whitelist-tab" class="tab-content">
+      <div class="section">
+        <h2>UP主白名单管理</h2>
+        <p>
+          白名单中UP主的视频不会自动跳过广告，但您仍然可以通过点击广告标记手动跳过
+        </p>
 
-      <div class="whitelist-summary">
-        当前共有 <span id="whitelist-count" class="whitelist-count">0</span> 个UP主在白名单中
-      </div>
-
-      <div id="whitelist-list" class="whitelist-container">
-        <div class="whitelist-empty">白名单为空，您可以在视频页面将UP主添加到白名单</div>
-      </div>
-
-      <div class="whitelist-import-export">
-        <h3>批量导入/导出</h3>
-        <p>您可以批量导入或导出白名单数据，每行一个UP主名称</p>
-
-        <textarea id="whitelist-textarea" class="whitelist-textarea" placeholder="每行输入一个UP主名称，例如：
-某UP主1
-某UP主2
-某UP主3"></textarea>
-
-        <div>
-          <button id="whitelist-import" class="whitelist-btn">导入白名单</button>
-          <button id="whitelist-export" class="whitelist-btn">导出到文本框</button>
-          <button id="whitelist-copy" class="whitelist-btn">复制到剪贴板</button>
+        <div class="whitelist-summary">
+          当前共有
+          <span id="whitelist-count" class="whitelist-count">0</span>
+          个UP主在白名单中
         </div>
 
-        <div class="whitelist-help">
-          提示：导入将与现有白名单合并，已存在的UP主会被保留
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="skipintro-tab" class="tab-content">
-    <div class="section">
-      <h2>跳过开头/结尾设置</h2>
-      <p>针对特定UP主的视频，自动跳过固定的开头或结尾时长</p>
-
-      <div class="form-group">
-        <label for="skip-intro-enabled">启用跳过开头</label>
-        <div style="display: flex; align-items: center; gap: 15px;">
-          <label class="switch">
-            <input type="checkbox" id="skip-intro-enabled">
-            <span class="slider"></span>
-          </label>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>跳过前</span>
-            <input type="number" id="skip-intro-duration-option" min="0" max="3600" value="0"
-              style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px;">
-            <span>秒</span>
+        <div id="whitelist-list" class="whitelist-container">
+          <div class="whitelist-empty">
+            白名单为空，您可以在视频页面将UP主添加到白名单
           </div>
         </div>
-        <p>启用后，列表中UP主的视频将自动跳过开头指定时长</p>
-      </div>
 
-      <div class="form-group">
-        <label for="skip-outro-enabled">启用跳过结尾</label>
-        <div style="display: flex; align-items: center; gap: 15px;">
-          <label class="switch">
-            <input type="checkbox" id="skip-outro-enabled">
-            <span class="slider"></span>
-          </label>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>跳过后</span>
-            <input type="number" id="skip-outro-duration-option" min="0" max="3600" value="0"
-              style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px;">
-            <span>秒</span>
-          </div>
-        </div>
-        <p>启用后，列表中UP主的视频将自动跳过结尾指定时长（从视频结束时间向前计算）</p>
-      </div>
-    </div>
+        <div class="whitelist-import-export">
+          <h3>批量导入/导出</h3>
+          <p>您可以批量导入或导出白名单数据，每行一个UP主名称</p>
 
-    <div class="section">
-      <h2>UP主列表管理</h2>
-      <p>只有在此列表中的UP主，其视频才会应用跳过开头/结尾设置</p>
-
-      <div class="whitelist-summary">
-        当前共有 <span id="skipintro-uploader-count" class="whitelist-count">0</span> 个UP主在列表中
-      </div>
-
-      <div id="skipintro-uploader-list" class="whitelist-container">
-        <div class="whitelist-empty">列表为空，您可以在视频页面的插件弹窗中将UP主添加到此列表</div>
-      </div>
-
-      <div class="whitelist-import-export">
-        <h3>批量导入/导出</h3>
-        <p>您可以批量导入或导出UP主列表，每行一个UP主名称</p>
-
-        <textarea id="skipintro-uploader-textarea" class="whitelist-textarea" placeholder="每行输入一个UP主名称，例如：
+          <textarea
+            id="whitelist-textarea"
+            class="whitelist-textarea"
+            placeholder="每行输入一个UP主名称，例如：
 某UP主1
 某UP主2
-某UP主3"></textarea>
+某UP主3"
+          ></textarea>
 
-        <div>
-          <button id="skipintro-import" class="whitelist-btn">导入列表</button>
-          <button id="skipintro-export" class="whitelist-btn">导出到文本框</button>
-          <button id="skipintro-copy" class="whitelist-btn">复制到剪贴板</button>
-        </div>
+          <div>
+            <button id="whitelist-import" class="whitelist-btn">
+              导入白名单
+            </button>
+            <button id="whitelist-export" class="whitelist-btn">
+              导出到文本框
+            </button>
+            <button id="whitelist-copy" class="whitelist-btn">
+              复制到剪贴板
+            </button>
+          </div>
 
-        <div class="whitelist-help">
-          提示：导入将与现有列表合并，已存在的UP主会被保留
+          <div class="whitelist-help">
+            提示：导入将与现有白名单合并，已存在的UP主会被保留
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div id="data-tab" class="tab-content">
-    <div class="section">
-      <h2>数据管理</h2>
-      <div class="form-group">
-        <button id="reset-data">重置所有数据</button>
-        <p>清空所有保存的广告跳过时间段和设置</p>
-      </div>
+    <div id="skipintro-tab" class="tab-content">
+      <div class="section">
+        <h2>跳过开头/结尾设置</h2>
+        <p>针对特定UP主的视频，自动跳过固定的开头或结尾时长</p>
 
-      <div class="form-group" id="admin-login-section">
-        <h3>管理员功能</h3>
-        <button id="admin-login-btn" class="admin-btn">🔑 管理员登录</button>
-        <div id="admin-status" class="status"></div>
-        <p>登录后可以在视频页面使用管理员设置功能</p>
-      </div>
-
-      <div class="form-group">
-        <h3>广告修正接口密钥（临时）</h3>
-        <input id="admin-update-ads-secret" type="password" placeholder="用于 /api/admin/update_ads 的 admin_secret_key">
-        <div>
-          <button id="save-admin-update-ads-secret">保存密钥</button>
-        </div>
-        <p>仅在你后端仍使用管理员接口时需要填写，后续接入正式订阅鉴权后可移除。</p>
-      </div>
-
-      <div class="form-group" id="custom-server-section">
-        <h3>⚠️ 高级功能：自定义服务器</h3>
-        <div class="warning-box"
-          style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-          <h4 style="margin-top: 0; color: #856404;">⚠️ 重要声明</h4>
-          <ul style="margin: 8px 0; padding-left: 20px; color: #856404;">
-            <li><strong>仅供开发者和高级用户使用</strong>，错误配置可能导致功能异常</li>
-            <li><strong>不提供额外技术支持</strong>，使用风险自负</li>
-            <li><strong>不对其他服务器的安全性、功能或数据使用提供任何保证</strong></li>
-            <li><strong>服务器开设者需根据客户端开源内容自行准备对应服务端业务</strong></li>
-            <li>项目仓库：<a href="https://github.com/OtokoNoIzumi/adskip"
-                target="_blank">https://github.com/OtokoNoIzumi/adskip</a></li>
-          </ul>
-        </div>
-
-        <div class="custom-server-controls">
-          <div class="form-group">
-            <label for="enable-custom-server">启用自定义服务器</label>
+        <div class="form-group">
+          <label for="skip-intro-enabled">启用跳过开头</label>
+          <div style="display: flex; align-items: center; gap: 15px">
             <label class="switch">
-              <input type="checkbox" id="enable-custom-server">
+              <input type="checkbox" id="skip-intro-enabled" />
               <span class="slider"></span>
             </label>
-            <p>启用后将使用下方指定的服务器地址，关闭后使用默认官方服务器</p>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span>跳过前</span>
+              <input
+                type="number"
+                id="skip-intro-duration-option"
+                min="0"
+                max="3600"
+                value="0"
+                style="
+                  width: 80px;
+                  padding: 6px 8px;
+                  border: 1px solid #ddd;
+                  border-radius: 4px;
+                "
+              />
+              <span>秒</span>
+            </div>
+          </div>
+          <p>启用后，列表中UP主的视频将自动跳过开头指定时长</p>
+        </div>
+
+        <div class="form-group">
+          <label for="skip-outro-enabled">启用跳过结尾</label>
+          <div style="display: flex; align-items: center; gap: 15px">
+            <label class="switch">
+              <input type="checkbox" id="skip-outro-enabled" />
+              <span class="slider"></span>
+            </label>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span>跳过后</span>
+              <input
+                type="number"
+                id="skip-outro-duration-option"
+                min="0"
+                max="3600"
+                value="0"
+                style="
+                  width: 80px;
+                  padding: 6px 8px;
+                  border: 1px solid #ddd;
+                  border-radius: 4px;
+                "
+              />
+              <span>秒</span>
+            </div>
+          </div>
+          <p>
+            启用后，列表中UP主的视频将自动跳过结尾指定时长（从视频结束时间向前计算）
+          </p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>UP主列表管理</h2>
+        <p>只有在此列表中的UP主，其视频才会应用跳过开头/结尾设置</p>
+
+        <div class="whitelist-summary">
+          当前共有
+          <span id="skipintro-uploader-count" class="whitelist-count">0</span>
+          个UP主在列表中
+        </div>
+
+        <div id="skipintro-uploader-list" class="whitelist-container">
+          <div class="whitelist-empty">
+            列表为空，您可以在视频页面的插件弹窗中将UP主添加到此列表
+          </div>
+        </div>
+
+        <div class="whitelist-import-export">
+          <h3>批量导入/导出</h3>
+          <p>您可以批量导入或导出UP主列表，每行一个UP主名称</p>
+
+          <textarea
+            id="skipintro-uploader-textarea"
+            class="whitelist-textarea"
+            placeholder="每行输入一个UP主名称，例如：
+某UP主1
+某UP主2
+某UP主3"
+          ></textarea>
+
+          <div>
+            <button id="skipintro-import" class="whitelist-btn">
+              导入列表
+            </button>
+            <button id="skipintro-export" class="whitelist-btn">
+              导出到文本框
+            </button>
+            <button id="skipintro-copy" class="whitelist-btn">
+              复制到剪贴板
+            </button>
           </div>
 
-          <div class="form-group">
-            <label for="custom-server-url">服务器地址：</label>
-            <input type="text" id="custom-server-url" placeholder="https://localhost:3000">
-            <p>支持 https:// 协议或 http://localhost:3000（仅限开发环境）</p>
+          <div class="whitelist-help">
+            提示：导入将与现有列表合并，已存在的UP主会被保留
           </div>
-
-          <div class="form-group">
-            <button id="reset-custom-server"
-              style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重置为默认</button>
-            <p>清除所有自定义服务器设置并恢复默认配置</p>
-          </div>
-
-          <div id="custom-server-status" class="status"></div>
         </div>
       </div>
     </div>
-  </div>
 
-  <div id="status" class="status"></div>
+    <div id="data-tab" class="tab-content">
+      <div class="section">
+        <h2>数据管理</h2>
+        <div class="form-group">
+          <button id="reset-data">重置所有数据</button>
+          <p>清空所有保存的广告跳过时间段和设置</p>
+        </div>
 
-  <!-- 按顺序加载依赖的脚本 -->
-  <script src="utils.js"></script>
-  <script src="storage.js"></script>
-  <script src="options.js"></script>
-</body>
+        <div class="form-group" id="admin-login-section">
+          <h3>管理员功能</h3>
+          <button id="admin-login-btn" class="admin-btn">🔑 管理员登录</button>
+          <div id="admin-status" class="status"></div>
+          <p>登录后可以在视频页面使用管理员设置功能</p>
+        </div>
 
+        <div class="form-group">
+          <h3>广告修正接口管理密钥</h3>
+          <input
+            id="admin-update-ads-secret"
+            type="password"
+            placeholder="将通过 X-Admin-Secret-Key Header 传递"
+          />
+          <div>
+            <button id="save-admin-update-ads-secret">保存密钥</button>
+          </div>
+          <p>
+            填写后调用 /api/admin/update_ads 时将以管理员身份鉴权（通过 HTTP
+            Header 传递密钥），普通用户无需填写。
+          </p>
+        </div>
+
+        <div class="form-group" id="custom-server-section">
+          <h3>⚠️ 高级功能：自定义服务器</h3>
+          <div
+            class="warning-box"
+            style="
+              background: #fff3cd;
+              border: 1px solid #ffeaa7;
+              padding: 12px;
+              border-radius: 6px;
+              margin-bottom: 15px;
+            "
+          >
+            <h4 style="margin-top: 0; color: #856404">⚠️ 重要声明</h4>
+            <ul style="margin: 8px 0; padding-left: 20px; color: #856404">
+              <li>
+                <strong>仅供开发者和高级用户使用</strong
+                >，错误配置可能导致功能异常
+              </li>
+              <li><strong>不提供额外技术支持</strong>，使用风险自负</li>
+              <li>
+                <strong
+                  >不对其他服务器的安全性、功能或数据使用提供任何保证</strong
+                >
+              </li>
+              <li>
+                <strong
+                  >服务器开设者需根据客户端开源内容自行准备对应服务端业务</strong
+                >
+              </li>
+              <li>
+                项目仓库：<a
+                  href="https://github.com/OtokoNoIzumi/adskip"
+                  target="_blank"
+                  >https://github.com/OtokoNoIzumi/adskip</a
+                >
+              </li>
+            </ul>
+          </div>
+
+          <div class="custom-server-controls">
+            <div class="form-group">
+              <label for="enable-custom-server">启用自定义服务器</label>
+              <label class="switch">
+                <input type="checkbox" id="enable-custom-server" />
+                <span class="slider"></span>
+              </label>
+              <p>启用后将使用下方指定的服务器地址，关闭后使用默认官方服务器</p>
+            </div>
+
+            <div class="form-group">
+              <label for="custom-server-url">服务器地址：</label>
+              <input
+                type="text"
+                id="custom-server-url"
+                placeholder="https://localhost:3000"
+              />
+              <p>支持 https:// 协议或 http://localhost:3000（仅限开发环境）</p>
+            </div>
+
+            <div class="form-group">
+              <button
+                id="reset-custom-server"
+                style="
+                  background-color: #6c757d;
+                  color: white;
+                  border: none;
+                  padding: 8px 16px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                "
+              >
+                重置为默认
+              </button>
+              <p>清除所有自定义服务器设置并恢复默认配置</p>
+            </div>
+
+            <div id="custom-server-status" class="status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <!-- 按顺序加载依赖的脚本 -->
+    <script src="utils.js"></script>
+    <script src="storage.js"></script>
+    <script src="options.js"></script>
+  </body>
 </html>

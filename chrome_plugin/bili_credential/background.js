@@ -258,14 +258,14 @@ async function syncDataToAPI() {
       console.log(`[BiliCredential] 尝试同步数据到API (第${attempt}次)...`);
 
       const requestData = {
-        ...currentData,
-        admin_secret_key: adminSecretKey
+        ...currentData
       };
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Admin-Secret-Key': adminSecretKey
         },
         body: JSON.stringify(requestData)
       });
