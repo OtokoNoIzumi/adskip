@@ -449,17 +449,27 @@ async function renderSubtitleTimelinePanel(forceRefresh = false) {
   if (!panel || !list) return;
 
   const currentVideoId = adskipUtils.getCurrentVideoId().id || "";
+  const adRanges = getCurrentAdRanges();
+  const insightData = getTimelineInsightData();
+  const adHash = adRanges.map((item) => `${item.start}-${item.end}`).join("|");
+  const insightHash = buildInsightHash(insightData);
+
+  if (
+    !forceRefresh &&
+    subtitleTimelineVideoId === currentVideoId &&
+    subtitleTimelineLastAdHash === adHash &&
+    subtitleTimelineLastInsightHash === insightHash
+  ) {
+    return;
+  }
+
   const subtitleData = await adskipAdDetection
     .getVideoSubtitleData(forceRefresh)
     .catch(() => null);
   const subtitles = subtitleData?.subtitle_contents?.[0] || [];
-  const adRanges = getCurrentAdRanges();
-  const insightData = getTimelineInsightData();
   const subtitleHash = subtitles.length
     ? `${subtitles.length}_${subtitles[0]?.from || 0}_${subtitles[subtitles.length - 1]?.from || 0}`
     : "0";
-  const adHash = adRanges.map((item) => `${item.start}-${item.end}`).join("|");
-  const insightHash = buildInsightHash(insightData);
 
   if (
     !forceRefresh &&

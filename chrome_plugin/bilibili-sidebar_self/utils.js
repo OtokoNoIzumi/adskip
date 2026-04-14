@@ -12,6 +12,13 @@ const LOG_THROTTLE_DEFAULT = 1000; // 默认节流时间（毫秒）
 // 添加日志过滤控制
 const logFilterMap = new Map(); // 用于记录已过滤的日志
 
+// 日志状态记忆，实现“仅在变化时记录”逻辑，避免心跳式刷屏
+let lastLoggedVideoId = null;
+let lastLoggedPlayer = null;
+let lastLoggedProgressBar = null;
+let isFirstPlayerSearch = true;
+let isFirstProgressBarSearch = true;
+
 /**
  * 检查某条日志是否应该被过滤
  * @param {string} message 日志消息
@@ -147,13 +154,12 @@ function getCurrentVideoId() {
   // 检查是否是播放列表模式
   const isPlaylist = fullUrl.includes("/list/");
 
-  // 记录日志的函数，避免代码重复
+  // 记录日志的函数，实现“仅在ID变化时记录”
   const logSuccess = (idType, idValue, source) => {
-    logDebug(
-      `✅ 成功从${source}中提取到${idType}: ${idValue}`,
-      {},
-      { throttle: 5000 },
-    );
+    if (idValue !== lastLoggedVideoId) {
+      logDebug(`✅ 成功从${source}中提取到${idType}: ${idValue}`);
+      lastLoggedVideoId = idValue;
+    }
   };
 
   // 1. 播放列表模式处理 - 优先级最高
@@ -363,10 +369,7 @@ function findVideoPlayer() {
     document.contains(cachedVideoPlayer) &&
     now - lastPlayerCheck < 5000
   ) {
-    logDebug(
-      `使用缓存的视频播放器元素，缓存时间：${new Date(lastPlayerCheck).toLocaleTimeString()}，有效期内`,
-      { throttle: 5000 },
-    );
+    // 命中缓存时不输出任何日志
     return cachedVideoPlayer;
   }
 
@@ -377,22 +380,36 @@ function findVideoPlayer() {
     "video", // 最后尝试所有视频元素
   ];
 
-  logDebug(`开始查找视频播放器元素，将尝试 ${selectors.length} 个选择器`);
+  // 只有在没有缓存或缓存失效时才尝试查找并记录
+  if (isFirstPlayerSearch || !cachedVideoPlayer) {
+    logDebug(`开始查找视频播放器元素，将尝试 ${selectors.length} 个选择器`);
+    isFirstPlayerSearch = false;
+  }
 
   for (let i = 0; i < selectors.length; i++) {
     const player = document.querySelector(selectors[i]);
     if (player) {
-      logDebug(`✅ 查找视频播放器成功，使用选择器 #${i + 1}: ${selectors[i]}`);
-      // 添加播放器信息到日志中
-      try {
+      // 只有在找到新对象或状态确实变化时才记录成功
+      const isNewPlayer = player !== lastLoggedPlayer;
+      const isPlaying = !player.paused;
+      const playerStatusKey = `${player.duration}_${isPlaying}_${player.volume}`;
+      const statusChanged = player.dataset.lastStatusKey !== playerStatusKey;
+
+      if (isNewPlayer || statusChanged) {
+        if (isNewPlayer) {
+          logDebug(
+            `✅ 查找视频播放器成功，使用选择器 #${i + 1}: ${selectors[i]}`,
+          );
+          lastLoggedPlayer = player;
+        }
+
         const duration = player.duration || 0;
-        const isPlaying = !player.paused;
         const volume = player.volume || 0;
         logDebug(
           `播放器信息：时长=${duration.toFixed(1)}秒，状态=${isPlaying ? "播放中" : "已暂停"}，音量=${Math.round(volume * 100)}%`,
         );
-      } catch (e) {
-        logDebug(`获取播放器详情失败: ${e.message}`);
+
+        player.dataset.lastStatusKey = playerStatusKey;
       }
 
       // 更新缓存和时间戳
@@ -400,11 +417,15 @@ function findVideoPlayer() {
       lastPlayerCheck = now;
       return player;
     } else {
-      logDebug(`❌ 选择器 #${i + 1} 未找到匹配元素: ${selectors[i]}`);
+      logDebug(`❌ 选择器 #${i + 1} 未找到匹配元素: ${selectors[i]}`, {
+        throttle: 5000,
+      });
     }
   }
 
-  logDebug(`⚠️ 未找到视频播放器，已尝试所有 ${selectors.length} 个选择器`);
+  logDebug(`⚠️ 未找到视频播放器，已尝试所有 ${selectors.length} 个选择器`, {
+    throttle: 5000,
+  });
   cachedVideoPlayer = null;
   lastPlayerCheck = now;
   return null;
@@ -422,10 +443,7 @@ function findProgressBar() {
     document.contains(cachedProgressBar) &&
     now - lastProgressBarCheck < 5000
   ) {
-    logDebug(
-      `使用缓存的进度条容器元素，缓存时间：${new Date(lastProgressBarCheck).toLocaleTimeString()}，有效期内`,
-      { throttle: 5000 },
-    );
+    // 命中缓存时不输出任何日志
     return cachedProgressBar;
   }
 
@@ -437,21 +455,31 @@ function findProgressBar() {
     // '.bpx-player-progress' // 番剧新版进度条-废弃
   ];
 
-  logDebug(`开始查找进度条容器元素，将尝试 ${selectors.length} 个选择器`);
+  // 只有在没有缓存或缓存失效时才尝试查找并记录
+  if (isFirstProgressBarSearch || !cachedProgressBar) {
+    logDebug(`开始查找进度条容器元素，将尝试 ${selectors.length} 个选择器`);
+    isFirstProgressBarSearch = false;
+  }
 
   for (let i = 0; i < selectors.length; i++) {
     const progressBar = document.querySelector(selectors[i]);
     if (progressBar) {
-      logDebug(`✅ 查找进度条容器成功，使用选择器 #${i + 1}: ${selectors[i]}`);
-      // 尝试获取进度条宽度信息
-      try {
-        const width = progressBar.offsetWidth || 0;
-        const rect = progressBar.getBoundingClientRect();
+      // 只有在找到新对象时才记录成功
+      if (progressBar !== lastLoggedProgressBar) {
         logDebug(
-          `进度条信息：宽度=${width}px，位置=左${Math.round(rect.left)}px, 上${Math.round(rect.top)}px`,
+          `✅ 查找进度条容器成功，使用选择器 #${i + 1}: ${selectors[i]}`,
         );
-      } catch (e) {
-        logDebug(`获取进度条详情失败: ${e.message}`);
+        lastLoggedProgressBar = progressBar;
+
+        try {
+          const width = progressBar.offsetWidth || 0;
+          const rect = progressBar.getBoundingClientRect();
+          logDebug(
+            `进度条信息：宽度=${width}px，位置=左${Math.round(rect.left)}px, 上${Math.round(rect.top)}px`,
+          );
+        } catch (e) {
+          // 仅记录静默错误
+        }
       }
 
       // 更新缓存和时间戳
@@ -459,11 +487,15 @@ function findProgressBar() {
       lastProgressBarCheck = now;
       return progressBar;
     } else {
-      logDebug(`❌ 选择器 #${i + 1} 未找到匹配元素: ${selectors[i]}`);
+      logDebug(`❌ 选择器 #${i + 1} 未找到匹配元素: ${selectors[i]}`, {
+        throttle: 5000,
+      });
     }
   }
 
-  logDebug(`⚠️ 未找到进度条容器，已尝试所有 ${selectors.length} 个选择器`);
+  logDebug(`⚠️ 未找到进度条容器，已尝试所有 ${selectors.length} 个选择器`, {
+    throttle: 5000,
+  });
   cachedProgressBar = null;
   lastProgressBarCheck = now;
   return null;
