@@ -352,7 +352,7 @@ async function sendSelectedSubtitleToAi() {
         aiText += chunk;
         outputEl.textContent = aiText;
       },
-      onDone: (turn) => {
+      onDone: async (turn) => {
         const finalText = aiText || turn?.aiReply || turn?.reply || "";
         thread.turns.push({
           userText: selected,
@@ -362,6 +362,14 @@ async function sendSelectedSubtitleToAi() {
         store[threadKey] = thread;
         saveAiThreadStore(store);
         outputEl.textContent = finalText || "AI未返回内容";
+
+        if (turn?.usage_deducted) {
+          await window.adskipStorage
+            .syncQuotaFromAPIResponse(turn.usage_deducted)
+            .catch((e) => {
+              console.log("[AdSkip AI Chat] 同步扣费信息失败:", e);
+            });
+        }
       },
       onEnd: () => {
         if (!aiText) {
@@ -422,6 +430,13 @@ async function submitProUpdateAds(inputValue) {
   });
   const result = await response.json().catch(() => ({}));
   if (result?.success) {
+    if (result.usage_deducted) {
+      await window.adskipStorage
+        .syncQuotaFromAPIResponse(result.usage_deducted)
+        .catch((e) => {
+          adskipUtils.logDebug("[AdSkip广告检测] - 同步修正额度扣减失败:", e);
+        });
+    }
     updateStatusDisplay("已提交广告片段修正", "success");
   } else {
     updateStatusDisplay(result?.message || "提交失败，请稍后重试", "error");

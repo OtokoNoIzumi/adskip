@@ -1046,6 +1046,15 @@ async function sendDetectionRequest(subtitleData) {
       "检测成功",
     );
 
+    // 同步扣减缓存
+    if (result.usage_deducted) {
+      await adskipStorage
+        .syncQuotaFromAPIResponse(result.usage_deducted)
+        .catch((e) => {
+          adskipUtils.logDebug("[AdSkip广告检测] - 同步扣减缓存失败:", e);
+        });
+    }
+
     // 保存时间戳或白名单到本地存储（使用包含分P信息的完整videoId）
     if (newStatus === VIDEO_STATUS.HAS_ADS) {
       await adskipStorage.saveAdTimestampsForVideo(videoId, adTimestamps);
@@ -1121,96 +1130,6 @@ function normalizeTranscribedSubtitles(items) {
       return { from, content };
     })
     .filter(Boolean);
-}
-
-async function forceTranscribeForCurrentVideo() {
-  const subtitleData = await getVideoSubtitleData(true);
-  const currentVideoId = adskipUtils.getCurrentVideoId().id;
-  const quota = await adskipStorage.getQuotaEntitlement("audio_subtitle", true);
-  if (!quota.allowed) {
-    return { success: false, message: quota.message || "今日听译次数已用完" };
-  }
-
-  const videoData = await adskipSubtitleService.getVideoData(true);
-  if (!videoData?.bvid || !videoData?.cid) {
-    return { success: false, message: "无法获取当前视频的音频信息" };
-  }
-
-  const playUrl = `https://api.bilibili.com/x/player/playurl?bvid=${videoData.bvid}&cid=${videoData.cid}&fnval=16&qn=64&fourk=1`;
-  const playResp = await fetch(playUrl, { credentials: "include" });
-  if (!playResp.ok) {
-    return {
-      success: false,
-      message: `获取音频地址失败: HTTP ${playResp.status}`,
-    };
-  }
-  const playData = await playResp.json();
-  const audioTrack = playData?.data?.dash?.audio?.[0];
-  if (!audioTrack?.baseUrl) {
-    return { success: false, message: "当前视频未返回可用音轨" };
-  }
-
-  const apiUrls = await adskipStorage.getApiUrls();
-  const userInfo =
-    typeof adskipCredentialService !== "undefined"
-      ? await adskipCredentialService.getBilibiliLoginStatus().catch(() => null)
-      : null;
-  const transcribePayload = signRequest({
-    videoId: currentVideoId,
-    bvid: videoData.bvid,
-    aid: videoData.aid || subtitleData.aid || "",
-    cid: videoData.cid || subtitleData.cid || "",
-    title: subtitleData.title || videoData.title || "",
-    duration: subtitleData.duration || videoData.duration || 0,
-    audioUrl: audioTrack.baseUrl,
-    backupAudioUrl: audioTrack.backupUrl?.[0] || "",
-    forceTranscribe: true,
-    clientVersion: chrome.runtime.getManifest().version,
-    user: userInfo
-      ? {
-          username: userInfo.username || "",
-          uid: userInfo.uid || "",
-          level: userInfo.level || 0,
-          vipType: userInfo.vipType || 0,
-        }
-      : null,
-  });
-
-  updateVideoStatus(VIDEO_STATUS.DETECTING, {}, "强制转录处理中");
-  const transcribeResp = await fetch(apiUrls.transcribe, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(transcribePayload),
-  });
-
-  if (!transcribeResp.ok) {
-    return {
-      success: false,
-      message: `转录接口请求失败: HTTP ${transcribeResp.status}`,
-    };
-  }
-  const transcribeResult = await transcribeResp.json();
-  if (!transcribeResult?.success) {
-    return { success: false, message: transcribeResult?.message || "转录失败" };
-  }
-
-  const normalized = normalizeTranscribedSubtitles(
-    transcribeResult.subtitles || transcribeResult.subtitle_contents || [],
-  );
-  if (!normalized.length) {
-    return { success: false, message: "转录完成，但未返回有效字幕" };
-  }
-
-  forcedSubtitleCache.set(videoData.bvid || currentVideoId, normalized);
-
-  const mergedSubtitleData = {
-    ...subtitleData,
-    bvid: videoData.bvid || subtitleData.bvid,
-    hasSubtitle: true,
-    subtitle_contents: [normalized],
-  };
-  await sendDetectionRequest(mergedSubtitleData);
-  return { success: true, message: "已完成强制转录并重新分析" };
 }
 
 async function reanalyzeCurrentVideo() {
@@ -1321,6 +1240,15 @@ async function forceTranscribeForCurrentVideo(options = {}) {
 
     if (!transcribeResult.success) {
       throw new Error(transcribeResult.message || "转录过程发生错误");
+    }
+
+    // 同步听译配额扣减
+    if (transcribeResult.usage_deducted) {
+      await adskipStorage
+        .syncQuotaFromAPIResponse(transcribeResult.usage_deducted)
+        .catch((e) => {
+          adskipUtils.logDebug("[AdSkip广告检测] - 同步听译扣减失败:", e);
+        });
     }
 
     const normalizedSubtitles = normalizeTranscribedSubtitles(

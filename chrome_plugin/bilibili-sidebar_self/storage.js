@@ -2878,21 +2878,6 @@ async function getAiChatTrialUsedCount() {
   });
 }
 
-async function consumeAiChatTrialCount() {
-  const current = await getAiChatTrialUsedCount();
-  const nextValue = current + 1;
-  return new Promise((resolve) => {
-    chrome.storage.local.set(
-      {
-        [STORAGE_KEYS.AI_CHAT_TRIAL_USED_COUNT]: nextValue,
-      },
-      () => {
-        resolve(nextValue);
-      },
-    );
-  });
-}
-
 async function getProUpdateAdsLastDate() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
@@ -3084,6 +3069,70 @@ async function getQuotaEntitlement(quotaKey, forceRefresh = false) {
     ...quotaInfo,
     raw: entitlement?.raw || {},
   };
+}
+
+/**
+ * 根据后端返回的扣减信息同步本地配额
+ * @param {Object} usageDeducted - 后端返回的扣减信息 {feature, from_daily, from_bonus}
+ */
+async function syncQuotaFromAPIResponse(usageDeducted) {
+  if (!usageDeducted || typeof usageDeducted !== "object") return;
+  const { feature, from_daily, from_bonus } = usageDeducted;
+  if (!feature) return;
+
+  const currentEntitlement = await getFeatureEntitlement(false);
+  if (
+    !currentEntitlement ||
+    !currentEntitlement.raw ||
+    !currentEntitlement.raw.quotas
+  ) {
+    return;
+  }
+
+  const quota = currentEntitlement.raw.quotas[feature];
+  if (!quota) return;
+
+  let hasChanges = false;
+
+  if (from_daily > 0) {
+    const currentUsed = Number(quota.daily_used || 0);
+    quota.daily_used = currentUsed + from_daily;
+    hasChanges = true;
+    adskipUtils.logDebug(
+      `[AdSkip存储] 扣减每日额度: ${feature} -${from_daily} (当前已用: ${quota.daily_used})`,
+    );
+  }
+
+  if (from_bonus > 0 && quota.bonus_pool_remain !== undefined) {
+    const currentRemain = Number(quota.bonus_pool_remain || 0);
+    quota.bonus_pool_remain = Math.max(0, currentRemain - from_bonus);
+    hasChanges = true;
+    adskipUtils.logDebug(
+      `[AdSkip存储] 扣减体验池额度: ${feature} -${from_bonus} (剩余: ${quota.bonus_pool_remain})`,
+    );
+  }
+
+  if (hasChanges) {
+    await new Promise((resolve) => {
+      chrome.storage.local.set(
+        { [STORAGE_KEYS.FEATURE_ENTITLEMENT_CACHE]: currentEntitlement },
+        resolve,
+      );
+    });
+
+    // 同步更新USER_STATS_CACHE以便popup能即时获取到扣减
+    try {
+      const userStats = await getUserStatsCache(Number.MAX_SAFE_INTEGER);
+      if (userStats && userStats.quotas && userStats.quotas[feature]) {
+        userStats.quotas[feature].daily_used = quota.daily_used;
+        userStats.quotas[feature].bonus_pool_remain = quota.bonus_pool_remain;
+        await saveUserStatsCache(userStats);
+        adskipUtils.logDebug(`[AdSkip存储] 已同步扣费信息至 USER_STATS_CACHE`);
+      }
+    } catch (e) {
+      adskipUtils.logDebug(`[AdSkip存储] 同步 USER_STATS_CACHE 失败:`, e);
+    }
+  }
 }
 
 /**
@@ -3632,7 +3681,6 @@ window.adskipStorage = {
   getSubtitleTimelineDefaultCollapsed,
   setSubtitleTimelineDefaultCollapsed,
   getAiChatTrialUsedCount,
-  consumeAiChatTrialCount,
   getFeatureEntitlement,
   refreshFeatureEntitlement,
   getQuotaEntitlement,
@@ -3642,6 +3690,7 @@ window.adskipStorage = {
   setProUpdateAdsLastDate,
   setAdminUpdateAdsSecret,
   getAdminUpdateAdsSecret,
+  syncQuotaFromAPIResponse,
 
   // 新增: 统一配置管理
   loadExternalConfig,
